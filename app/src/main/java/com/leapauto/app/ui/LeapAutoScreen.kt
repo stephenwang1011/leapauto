@@ -3590,20 +3590,21 @@ fun EnergyHomePagerCard(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            val pageTitle = when (EnergyHomePage.entries[pagerState.currentPage]) {
+                EnergyHomePage.SUMMARY -> "能耗里程"
+                EnergyHomePage.WEEKLY_CONSUMPTION -> "近6周百公里能耗"
+                EnergyHomePage.RECENT_MILEAGE -> "近7天行驶里程"
+                EnergyHomePage.WEEKLY_COMPOSITION -> "周能耗分布"
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = when (EnergyHomePage.entries[pagerState.currentPage]) {
-                        EnergyHomePage.SUMMARY -> "能耗总览"
-                        EnergyHomePage.WEEKLY_CONSUMPTION -> "近6周百公里能耗"
-                        EnergyHomePage.RECENT_MILEAGE -> "近7天行驶里程"
-                        EnergyHomePage.WEEKLY_COMPOSITION -> "上周能耗分布"
-                    },
+                    text = pageTitle,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.Bold
                 )
                 if (pagerState.currentPage == EnergyHomePage.WEEKLY_CONSUMPTION.ordinal) {
                     val rank = (state as? EnergyAnalyticsState.Success)?.data?.rankLabel
@@ -3661,16 +3662,37 @@ fun EnergyHomeSummaryPage(
     data: EnergyAnalyticsData,
     vehicleTotalMileage: String? = null
 ) {
+    val totalMileageDisplay = data.totalMileage?.let { displayEnergyMetric(it, "km") }
+        ?: vehicleTotalMileage?.takeIf { it.isNotBlank() && it != "--" }
+        ?: "—"
+    val daysHasValue = data.ownershipDays?.value != null
+    val mileageHasValue = totalMileageDisplay != "—" && totalMileageDisplay != "--"
+    val energyHasValue = data.cumulativeEnergy != null
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center
     ) {
-        val totalMileage = vehicleTotalMileage?.takeIf { it.isNotBlank() && it != "--" }
-            ?: data.totalMileage?.value?.let { "$it km" }
-            ?: "--"
-        EnergyHomeMetricLine("累计里程", totalMileage)
+        EnergyHomeMetricLine(
+            label = "提车时长",
+            value = data.ownershipDays?.value?.let { "$it 天" } ?: "--",
+            valueColor = if (daysHasValue) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant,
+            valueBold = daysHasValue
+        )
         Spacer(Modifier.height(8.dp))
-        EnergyHomeMetricLine("累计能耗", displayEnergyMetric(data.cumulativeEnergy, "kWh"))
+        EnergyHomeMetricLine(
+            label = "累计里程",
+            value = totalMileageDisplay,
+            valueColor = if (mileageHasValue) MaterialTheme.statusWarn else MaterialTheme.colorScheme.onSurfaceVariant,
+            valueBold = mileageHasValue
+        )
+        Spacer(Modifier.height(8.dp))
+        EnergyHomeMetricLine(
+            label = "累计能耗",
+            value = displayEnergyMetric(data.cumulativeEnergy, "kWh"),
+            valueColor = if (energyHasValue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            valueBold = energyHasValue
+        )
     }
 }
 
@@ -3679,7 +3701,7 @@ fun EnergyHomeWeeklyPage(data: EnergyAnalyticsData) {
     val points = EnergyHomeCardPolicy.recentTrend(data, limit = 6)
     Column(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
             displayEnergyMetric(data.overallConsumption, "kWh/100km"),
@@ -3690,7 +3712,7 @@ fun EnergyHomeWeeklyPage(data: EnergyAnalyticsData) {
         if (points.isEmpty()) {
             EnergyHomeMissingData("暂无近 6 周能耗数据")
         } else {
-            EnergyHomeBars(points)
+            EnergyHomeBars(points, modifier = Modifier.padding(bottom = 2.dp))
         }
     }
 }
@@ -3717,7 +3739,12 @@ fun EnergyHomeMileagePage(data: EnergyAnalyticsData) {
 }
 
 @Composable
-private fun EnergyHomeMetricLine(label: String, value: String) {
+private fun EnergyHomeMetricLine(
+    label: String,
+    value: String,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
+    valueBold: Boolean = false
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -3732,7 +3759,8 @@ private fun EnergyHomeMetricLine(label: String, value: String) {
         Text(
             value,
             style = MaterialTheme.typography.titleMedium.energyStyle(),
-            color = MaterialTheme.colorScheme.onSurface,
+            color = valueColor,
+            fontWeight = if (valueBold) FontWeight.Bold else FontWeight.Medium,
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Ellipsis
@@ -3741,12 +3769,15 @@ private fun EnergyHomeMetricLine(label: String, value: String) {
 }
 
 @Composable
-private fun EnergyHomeBars(points: List<com.leapauto.app.EnergySeriesPoint>) {
+private fun EnergyHomeBars(
+    points: List<com.leapauto.app.EnergySeriesPoint>,
+    modifier: Modifier = Modifier
+) {
     val max = points.maxOfOrNull { it.value }?.takeIf { it > 0.0 } ?: 1.0
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .height(68.dp),
+            .height(72.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.Bottom
     ) {
@@ -3761,7 +3792,7 @@ private fun EnergyHomeBars(points: List<com.leapauto.app.EnergySeriesPoint>) {
                 Box(
                     modifier = Modifier
                         .width(6.dp)
-                        .height((8 + 36 * (point.value / max).toFloat().coerceIn(0f, 1f)).dp)
+                        .height((10 + 38 * (point.value / max).toFloat().coerceIn(0f, 1f)).dp)
                         .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
                         .background(
                             if (index == points.lastIndex) MaterialTheme.statusGood
@@ -3770,7 +3801,7 @@ private fun EnergyHomeBars(points: List<com.leapauto.app.EnergySeriesPoint>) {
                 )
                 Text(
                     point.value.formatEnergyNumber(),
-                    modifier = Modifier.padding(top = 3.dp),
+                    modifier = Modifier.padding(top = 4.dp),
                     style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 9.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -3810,6 +3841,7 @@ fun EnergyHomeCompositionPage(data: EnergyAnalyticsData) {
                         val label = EnergyCompositionPresentation.displayLabel(category.label)
                         val percent = EnergyCompositionPresentation.displayPercent(category.value, total)
                         val energyValue = "${category.value.formatEnergyNumber()}kWh"
+                        val typeColor = energyCompositionColor(category.label, index)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
@@ -3818,7 +3850,7 @@ fun EnergyHomeCompositionPage(data: EnergyAnalyticsData) {
                                 Modifier
                                     .size(7.dp)
                                     .clip(CircleShape)
-                                    .background(energyCompositionColor(category.label, index))
+                                    .background(typeColor)
                             )
                             Spacer(Modifier.width(5.dp))
                             Text(
@@ -3832,7 +3864,7 @@ fun EnergyHomeCompositionPage(data: EnergyAnalyticsData) {
                             Text(
                                 energyValue,
                                 style = MaterialTheme.typography.labelSmall.energyStyle(),
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = typeColor,
                                 maxLines = 1
                             )
                             Spacer(Modifier.width(8.dp))
@@ -3840,7 +3872,7 @@ fun EnergyHomeCompositionPage(data: EnergyAnalyticsData) {
                                 percent,
                                 modifier = Modifier.width(46.dp),
                                 style = MaterialTheme.typography.labelSmall.energyStyle(),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = typeColor,
                                 textAlign = TextAlign.End,
                                 maxLines = 1
                             )
