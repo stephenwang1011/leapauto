@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 车模增加底盘接地微暗影，纯电能量条增加充电呼吸光效\n" +
-        "2. 空调卡片增加运行冷暖微氛围底色，车况卡片高度对齐\n" +
-        "3. 周能耗环形图内部优化为双层表盘排版展示总能耗"
+        "1. 车况动力轮播小格增加微型翻页指示器\n" +
+        "2. 门锁已锁状态增加安心安全绿语义，车况数值半粗体强化\n" +
+        "3. 优化车模接地暗影、空调微氛围底色与周能耗表盘排版"
 }

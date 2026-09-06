@@ -3030,7 +3030,7 @@ fun HomeTireCell(position: String, tire: TireStatus?, modifier: Modifier = Modif
             Text(
                 tire?.pressure ?: "--kPa",
                 style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Normal,
+                fontWeight = if (warning) FontWeight.Bold else FontWeight.SemiBold,
                 color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1
             )
@@ -3063,6 +3063,11 @@ fun VehicleStatusCard(
         true -> "车锁已锁"
         false -> "车锁未锁"
         null -> "--"
+    }
+    val lockColor = when (status?.locked) {
+        true -> MaterialTheme.statusGood
+        false -> MaterialTheme.colorScheme.error
+        null -> null
     }
     val remainTime = status?.chargeRemainTime?.trim().takeUnless { it.isNullOrBlank() } ?: "未充"
     var showWindowDetails by rememberSaveable { mutableStateOf(false) }
@@ -3128,6 +3133,26 @@ fun VehicleStatusCard(
                                 modifier = Modifier.fillMaxWidth(),
                                 contentAlignment = Alignment.Center
                             ) {
+                                Row(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(top = 4.dp, end = 5.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    repeat(powerItems.size) { dotIndex ->
+                                        val isCurrent = powerPagerState.currentPage == dotIndex
+                                        Box(
+                                            modifier = Modifier
+                                                .size(if (isCurrent) 4.5.dp else 2.5.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    if (isCurrent) MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                                                )
+                                        )
+                                    }
+                                }
                                 Column(
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
                                     verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -3142,7 +3167,7 @@ fun VehicleStatusCard(
                                     Text(
                                         text = item.second,
                                         style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Normal,
+                                        fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -3154,7 +3179,7 @@ fun VehicleStatusCard(
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                VehicleStatusCell("门锁", lockLabel, Modifier.weight(1f), warning = status?.locked == false)
+                VehicleStatusCell("门锁", lockLabel, Modifier.weight(1f), warning = status?.locked == false, valueColor = lockColor)
                 VehicleStatusCell(
                     "车窗",
                     windowLabel,
@@ -3186,7 +3211,8 @@ fun VehicleStatusCell(
     modifier: Modifier = Modifier,
     unit: String? = null,
     onClick: (() -> Unit)? = null,
-    warning: Boolean = false
+    warning: Boolean = false,
+    valueColor: Color? = null
 ) {
     Surface(
         modifier = modifier.clickable(enabled = onClick != null, onClick = { onClick?.invoke() }),
@@ -3205,11 +3231,15 @@ fun VehicleStatusCell(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(2.dp))
+            val finalColor = valueColor ?: when {
+                warning -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurface
+            }
             Text(
                 value,
                 style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Normal,
-                color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                color = finalColor,
                 maxLines = 1
             )
             if (unit != null) {
