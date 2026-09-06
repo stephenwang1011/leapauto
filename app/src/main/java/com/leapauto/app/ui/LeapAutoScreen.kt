@@ -1849,16 +1849,11 @@ fun VehicleHero(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    LinearProgressIndicator(
-                                        progress = { chargeProgress(normalizedSoc) },
-                                        modifier = Modifier
-                                            .fillMaxWidth(PureElectricProgressMaxWidthFraction)
-                                            .height(4.5.dp)
-                                            .clip(CircleShape),
+                                    EnergyCapsuleProgressBar(
+                                        progress = chargeProgress(normalizedSoc),
                                         color = rangeColor,
-                                        trackColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
-                                        gapSize = 0.dp,
-                                        drawStopIndicator = {}
+                                        isCharging = status?.chargeState == 1,
+                                        modifier = Modifier.fillMaxWidth(PureElectricProgressMaxWidthFraction)
                                     )
                                     Text(
                                         text = electricSocLabel,
@@ -1942,6 +1937,28 @@ fun VehicleHero(
                         .height(142.dp),
                     contentAlignment = Alignment.Center
                 ) {
+                    // 车轮地面接触微阴影 (Ground Contact Shadow)
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxWidth(0.80f)
+                            .height(14.dp)
+                            .align(Alignment.BottomCenter)
+                            .offset(y = (-2).dp)
+                    ) {
+                        drawOval(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.16f),
+                                    Color.Black.copy(alpha = 0.05f),
+                                    Color.Transparent
+                                ),
+                                center = center,
+                                radius = size.width / 2f
+                            ),
+                            size = size
+                        )
+                    }
+
                     if (remoteBitmap != null) {
                         Image(
                             bitmap = remoteBitmap,
@@ -2935,7 +2952,7 @@ private fun HomeTirePressureCard(status: VehicleStatus?, modifier: Modifier = Mo
     val tireByPosition = status?.tires.orEmpty().associateBy { it.position }
     val outlineVariant = MaterialTheme.colorScheme.outlineVariant
     Surface(
-        modifier = modifier,
+        modifier = modifier.heightIn(min = 120.dp),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -3051,7 +3068,7 @@ fun VehicleStatusCard(
     var showWindowDetails by rememberSaveable { mutableStateOf(false) }
     var powerNextPageRequest by rememberSaveable { mutableStateOf<Int?>(null) }
     Surface(
-        modifier = modifier,
+        modifier = modifier.heightIn(min = 120.dp),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
@@ -3903,7 +3920,6 @@ private fun EnergyHomeCompositionDonut(
         energyCompositionColor(category.label, index)
     }
     val emptyChartColor = MaterialTheme.colorScheme.surfaceContainerHighest
-    val totalText = if (total > 0.0) "${total.formatEnergyNumber()}kWh" else "--"
     Box(
         modifier = modifier.size(72.dp),
         contentAlignment = Alignment.Center
@@ -3933,14 +3949,26 @@ private fun EnergyHomeCompositionDonut(
                 }
             }
         }
-        Text(
-            text = totalText,
-            style = MaterialTheme.typography.labelMedium.energyStyle().copy(fontSize = 11.sp),
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            softWrap = false
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy((-2).dp)
+        ) {
+            val totalNumber = if (total > 0.0) total.formatEnergyNumber() else "--"
+            Text(
+                text = totalNumber,
+                style = MaterialTheme.typography.titleSmall.energyStyle(),
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
+            )
+            Text(
+                text = "kWh",
+                style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 9.sp),
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -4101,20 +4129,52 @@ fun ClimateOverviewCard(
         ?.replace("°", "", ignoreCase = true)
         ?.trim()
 
+    val ambientBrush = if (status?.acSwitch == true) {
+        when (climateTone) {
+            ClimateTemperatureTone.COOLING -> Brush.horizontalGradient(
+                listOf(
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                    Color.Transparent
+                )
+            )
+            ClimateTemperatureTone.HEATING -> Brush.horizontalGradient(
+                listOf(
+                    MaterialTheme.statusWarn.copy(alpha = 0.06f),
+                    Color.Transparent
+                )
+            )
+            ClimateTemperatureTone.DEFAULT -> null
+        }
+    } else {
+        null
+    }
+
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        border = BorderStroke(
+            1.dp,
+            if (status?.acSwitch == true && climateTone != ClimateTemperatureTone.DEFAULT) {
+                temperatureColor.copy(alpha = 0.35f)
+            } else {
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+            }
+        ),
         shadowElevation = 0.dp,
         modifier = modifier.height(56.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 12.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .then(if (ambientBrush != null) Modifier.background(ambientBrush) else Modifier)
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = 12.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
             Row(
                 modifier = Modifier
                     .weight(1f)
@@ -4176,6 +4236,7 @@ fun ClimateOverviewCard(
                 contentDescription = quickToggle.contentDescription,
                 stateDescription = acStateLabel
             )
+        }
         }
     }
 }

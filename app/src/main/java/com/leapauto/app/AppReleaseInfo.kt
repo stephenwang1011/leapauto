@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 周能耗分布卡片圆环中心增加总能耗展示\n" +
-        "2. 优化周能耗分布卡片视觉效果，字体统一加粗展示\n" +
-        "3. 修复登录成功后异常退出及无法保存会话的问题"
+        "1. 车模增加底盘接地微暗影，纯电能量条增加充电呼吸光效\n" +
+        "2. 空调卡片增加运行冷暖微氛围底色，车况卡片高度对齐\n" +
+        "3. 周能耗环形图内部优化为双层表盘排版展示总能耗"
 }
