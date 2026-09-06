@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">零跑智控</string>
+    <string name="widget_compact_name">零跑智控 2×2</string>
+    <string name="widget_compact_description">紧凑显示车辆续航、门锁和空调控制</string>
+    <string name="widget_default_title">零跑</string>
+    <string name="widget_refresh_description">刷新车辆状态</string>
+    <string name="widget_unknown_value">--</string>
+    <string name="widget_percent_symbol">%</string>
+    <string name="widget_unknown_range">-- km</string>
+    <string name="widget_lock_unknown_description">门锁状态未知，打开 App 查看</string>
+    <string name="widget_lock_label">门锁</string>
+    <string name="widget_ac_unknown_description">空调状态未知，打开 App 查看</string>
+    <string name="widget_ac_label">空调</string>
+</resources>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <inset android:insetLeft="4dp" android:insetTop="4dp" android:insetRight="4dp" android:insetBottom="4dp">
+            <shape android:shape="rectangle">
+                <solid android:color="@color/widget_action_pressed" />
+                <corners android:radius="8dp" />
+            </shape>
+        </inset>
+    </item>
+    <item>
+        <inset android:insetLeft="4dp" android:insetTop="4dp" android:insetRight="4dp" android:insetBottom="4dp">
+            <shape android:shape="rectangle">
+                <solid android:color="@color/widget_compact_action_success" />
+                <corners android:radius="8dp" />
+            </shape>
+        </inset>
+    </item>
+</selector>

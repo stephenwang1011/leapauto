@@ -1,0 +1,25 @@
+{
+  "name": "leap-cn-mcp",
+  "version": "0.1.7",
+  "description": "MCP stdio server for Leapmotor China app APIs.",
+  "type": "module",
+  "bin": {
+    "leap-cn-mcp": "bin/leap-cn-mcp.js"
+  },
+  "files": [
+    "README.md",
+    "bin/leap-cn-mcp.js",
+    "src/leapmotor-cn-sdk.js"
+  ],
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "cli": "node bin/leap-cn.js",
+    "mcp": "node bin/leap-cn-mcp.js",
+    "check": "node --check src/leapmotor-cn-sdk.js && node --check bin/leap-cn.js && node --check bin/leap-cn-mcp.js && node --check server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,505 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/widgetHostRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:ignore="UseAppTint">
+
+    <LinearLayout
+        android:id="@+id/widgetRoot"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/widget_card_background"
+        android:orientation="vertical"
+        android:paddingStart="4dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="4dp"
+        android:paddingBottom="4dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="0dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="0dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/txtWTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="零跑"
+            android:textColor="@color/widget_on_surface"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:gravity="start|center_vertical" />
+
+        <TextView
+            android:id="@+id/txtWUpdated"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="等待同步"
+            android:textColor="@color/widget_on_surface_variant"
+            android:textSize="11sp"
+            android:gravity="end|center_vertical"
+            android:layout_marginEnd="4dp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="top"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/widgetRangeColumn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/widgetPureRange"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:baselineAligned="true"
+                android:gravity="bottom"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/txtWRange"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:shadowColor="@color/widget_text_shadow"
+                    android:shadowDx="0"
+                    android:shadowDy="0"
+                    android:shadowRadius="1.5"
+                    android:text="--"
+                    android:textColor="@color/widget_on_surface"
+                    android:textSize="27sp" />
+
+                <TextView
+                    android:id="@+id/txtWRangeUnit"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="2dp"
+                    android:shadowColor="@color/widget_text_shadow"
+                    android:shadowDx="0"
+                    android:shadowDy="0"
+                    android:shadowRadius="1.5"
+                    android:text="km"
+                    android:textColor="@color/widget_on_surface"
+                    android:textSize="23sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="3dp"
+                android:layout_marginTop="2dp"
+                android:orientation="horizontal">
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="0.9">
+
+                    <ProgressBar
+                        android:id="@+id/progressWCharge"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:indeterminate="false"
+                        android:max="100"
+                        android:progress="0"
+                        android:progressDrawable="@drawable/widget_pure_range_progress" />
+
+                    <ProgressBar
+                        android:id="@+id/progressWChargeWarning"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:indeterminate="false"
+                        android:max="100"
+                        android:progress="0"
+                        android:progressDrawable="@drawable/widget_pure_range_warning_progress"
+                        android:visibility="gone" />
+
+                    <ProgressBar
+                        android:id="@+id/progressWChargeCritical"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:indeterminate="false"
+                        android:max="100"
+                        android:progress="0"
+                        android:progressDrawable="@drawable/widget_pure_range_critical_progress"
+                        android:visibility="gone" />
+
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="0.1" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widgetHybridRange"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:contentDescription="增程续航"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:id="@+id/imgWElectricRangeIcon"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_marginEnd="2dp"
+                        android:contentDescription="@null"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_hybrid_electric"
+                        android:tint="@color/energy_green" />
+
+                    <TextView
+                        android:id="@+id/txtWElectricRange"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:ellipsize="none"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:shadowColor="@color/widget_text_shadow"
+                        android:shadowDx="0"
+                        android:shadowDy="0"
+                        android:shadowRadius="1.5"
+                        android:text="-- km"
+                        android:textColor="@color/energy_green"
+                        android:textSize="18sp"
+                        android:autoSizeTextType="uniform"
+                        android:autoSizeMinTextSize="10sp"
+                        android:autoSizeMaxTextSize="18sp"
+                        android:autoSizeStepGranularity="1sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="3dp"
+                    android:layout_marginTop="2dp"
+                    android:orientation="horizontal">
+
+                    <FrameLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.9">
+
+                        <ProgressBar
+                            android:id="@+id/progressWElectric"
+                            style="?android:attr/progressBarStyleHorizontal"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:indeterminate="false"
+                            android:max="100"
+                            android:progress="0"
+                            android:progressDrawable="@drawable/widget_charge_progress" />
+
+                        <ProgressBar
+                            android:id="@+id/progressWElectricWarning"
+                            style="?android:attr/progressBarStyleHorizontal"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:indeterminate="false"
+                            android:max="100"
+                            android:progress="0"
+                            android:progressDrawable="@drawable/widget_pure_range_warning_progress"
+                            android:visibility="gone" />
+
+                        <ProgressBar
+                            android:id="@+id/progressWElectricCritical"
+                            style="?android:attr/progressBarStyleHorizontal"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:indeterminate="false"
+                            android:max="100"
+                            android:progress="0"
+                            android:progressDrawable="@drawable/widget_pure_range_critical_progress"
+                            android:visibility="gone" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.1" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:id="@+id/imgWFuelRangeIcon"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_marginEnd="2dp"
+                        android:contentDescription="@null"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_hybrid_fuel"
+                        android:tint="@color/leap_blue" />
+
+                    <TextView
+                        android:id="@+id/txtWFuelRange"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:ellipsize="none"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:shadowColor="@color/widget_text_shadow"
+                        android:shadowDx="0"
+                        android:shadowDy="0"
+                        android:shadowRadius="1.5"
+                        android:text="-- km"
+                        android:textColor="@color/leap_blue"
+                        android:textSize="18sp"
+                        android:autoSizeTextType="uniform"
+                        android:autoSizeMinTextSize="10sp"
+                        android:autoSizeMaxTextSize="18sp"
+                        android:autoSizeStepGranularity="1sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="3dp"
+                    android:layout_marginTop="2dp"
+                    android:orientation="horizontal">
+
+                    <FrameLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.9">
+
+                        <ProgressBar
+                            android:id="@+id/progressWFuel"
+                            style="?android:attr/progressBarStyleHorizontal"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:indeterminate="false"
+                            android:max="100"
+                            android:progress="0"
+                            android:progressDrawable="@drawable/widget_charge_progress" />
+
+                        <ProgressBar
+                            android:id="@+id/progressWFuelWarning"
+                            style="?android:attr/progressBarStyleHorizontal"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:indeterminate="false"
+                            android:max="100"
+                            android:progress="0"
+                            android:progressDrawable="@drawable/widget_pure_range_warning_progress"
+                            android:visibility="gone" />
+
+                        <ProgressBar
+                            android:id="@+id/progressWFuelCritical"
+                            style="?android:attr/progressBarStyleHorizontal"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:indeterminate="false"
+                            android:max="100"
+                            android:progress="0"
+                            android:progressDrawable="@drawable/widget_pure_range_critical_progress"
+                            android:visibility="gone" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.1" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widgetStatusContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="18dp"
+            android:layout_marginTop="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/imgWChargingStatus"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:contentDescription="充电中"
+                android:src="@drawable/ic_widget_charging_bolt"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/txtWGeneralStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="2dp"
+                android:textColor="@color/widget_on_surface_variant"
+                android:textSize="11sp"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/imgWCar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitCenter"
+            android:src="@drawable/vehicle_lafa5_liquid_silver" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="28dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="12dp"
+        android:clipChildren="false"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/btnWUnlock"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/widget_action_background"
+            android:contentDescription="解锁"
+            android:padding="0dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_phosphor_lock_open"
+            android:tint="@color/widget_action_icon" />
+
+        <ImageView
+            android:id="@+id/btnWLock"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/widget_action_background"
+            android:contentDescription="上锁"
+            android:padding="0dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_phosphor_lock"
+            android:tint="@color/widget_action_icon" />
+
+        <FrameLayout
+            android:id="@+id/btnWSentry"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/widget_action_background"
+            android:clipChildren="false"
+            android:contentDescription="哨兵模式">
+
+            <ImageView
+                android:id="@+id/imgWSentryOff"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:padding="0dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_sentry"
+                android:tint="@color/widget_action_icon" />
+
+            <ImageView
+                android:id="@+id/imgWSentryOn"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:padding="0dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_sentry"
+                android:tint="@color/energy_green"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/btnWAc"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/widget_action_background"
+            android:clipChildren="false"
+            android:contentDescription="空调状态未知，打开 App 查看">
+
+            <ImageView
+                android:id="@+id/imgWAcOff"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:padding="0dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_phosphor_fan"
+                android:tint="@color/widget_action_icon" />
+
+            <ImageView
+                android:id="@+id/imgWAcOn"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:padding="0dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_widget_ac_on"
+                android:scaleX="1.45"
+                android:scaleY="1.45"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <ImageView
+            android:id="@+id/btnWTrunk"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/widget_action_background"
+            android:contentDescription="打开后备箱"
+            android:padding="0dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_phosphor_trunk_open"
+            android:tint="@color/widget_action_icon" />
+    </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

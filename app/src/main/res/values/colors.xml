@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="leap_blue">#0066FF</color>
+    <color name="energy_green">#00C853</color>
+    <color name="alert_red">#FF3B30</color>
+    <color name="feedback_icon">#000000</color>
+    <!-- Cool neutral surface keeps the opaque widget from reading as a stark white board. -->
+    <color name="widget_surface">#F4F6F8</color>
+    <color name="widget_on_surface">#101828</color>
+    <color name="widget_on_surface_variant">#2D3748</color>
+    <color name="widget_action_pressed">#E8EDF2</color>
+    <color name="widget_action_icon">#101828</color>
+    <color name="widget_range_track">#CDEFD9</color>
+    <color name="widget_range_good">#00C853</color>
+    <color name="widget_range_warning">#FF9500</color>
+    <color name="widget_range_critical">#FF3B30</color>
+    <color name="widget_fuel_range">#FF9500</color>
+    <color name="widget_fuel_range_track">#FFE2B8</color>
+    <color name="widget_on_surface_high_contrast">#000000</color>
+    <color name="widget_range_track_high_contrast">#AAB4C2</color>
+    <color name="widget_range_good_high_contrast">#008F3D</color>
+    <color name="widget_range_warning_high_contrast">#C56F00</color>
+    <color name="widget_range_critical_high_contrast">#D91F16</color>
+    <color name="widget_fuel_range_high_contrast">#C56F00</color>
+    <color name="widget_fuel_range_track_high_contrast">#B8A07A</color>
+    <color name="widget_text_shadow">#FFFFFFFF</color>
+    <color name="widget_compact_action_neutral">#F1F3F6</color>
+    <color name="widget_compact_action_success">#DDF3E6</color>
+    <color name="widget_compact_action_primary">#E5EEFF</color>
+</resources>

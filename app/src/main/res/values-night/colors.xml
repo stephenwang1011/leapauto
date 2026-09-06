@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="feedback_icon">#E6EAF2</color>
+    <color name="widget_surface">#20242D</color>
+    <color name="widget_on_surface">#E6EAF2</color>
+    <color name="widget_on_surface_variant">#A3ADBB</color>
+    <color name="widget_action_pressed">#334A5568</color>
+    <color name="widget_action_icon">#E6EAF2</color>
+    <color name="widget_range_track">#34443A</color>
+    <color name="widget_range_good">#4ADE80</color>
+    <color name="widget_range_warning">#FFB74D</color>
+    <color name="widget_range_critical">#FF8A80</color>
+    <color name="widget_fuel_range">#FFB74D</color>
+    <color name="widget_fuel_range_track">#59452B</color>
+    <color name="widget_on_surface_high_contrast">#FFFFFF</color>
+    <color name="widget_range_track_high_contrast">#667085</color>
+    <color name="widget_range_good_high_contrast">#69F59C</color>
+    <color name="widget_range_warning_high_contrast">#FFD080</color>
+    <color name="widget_range_critical_high_contrast">#FFAAA3</color>
+    <color name="widget_fuel_range_high_contrast">#FFD080</color>
+    <color name="widget_fuel_range_track_high_contrast">#80643E</color>
+    <color name="widget_text_shadow">#FF000000</color>
+    <color name="widget_compact_action_neutral">#2B303A</color>
+    <color name="widget_compact_action_success">#253D32</color>
+    <color name="widget_compact_action_primary">#26364F</color>
+</resources>
