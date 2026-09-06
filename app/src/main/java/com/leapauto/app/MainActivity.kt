@@ -119,6 +119,8 @@ class MainActivity : ComponentActivity() {
     /** Position coordinates stay in this activity-only snapshot and are never persisted or displayed. */
     @Volatile private var vehicleLocationSnapshot: VehicleLocationSnapshot? = null
     private var vehicleLocationSnapshotState by mutableStateOf<VehicleLocationSnapshot?>(null)
+    private var vehicleAddress by mutableStateOf<GeocodedAddress?>(null)
+    @Volatile private var lastGeocodedLocation: Pair<Double, Double>? = null
     private var statusError by mutableStateOf("")
     private var controlFeedback by mutableStateOf<ControlFeedback?>(null)
     private var climateTemperatureRequestState by mutableStateOf(ClimateControlRequestState())
@@ -199,6 +201,7 @@ class MainActivity : ComponentActivity() {
                     status = status,
                     statusUpdatedAtEpochMs = statusUpdatedAtEpochMs,
                     locationSnapshot = vehicleLocationSnapshotState,
+                    vehicleAddress = vehicleAddress,
                     vehicleVin = session.selectedVin,
                     statusError = statusError,
                     controlFeedback = controlFeedback,
@@ -492,6 +495,8 @@ class MainActivity : ComponentActivity() {
         statusUpdatedAtEpochMs = 0L
         vehicleLocationSnapshot = null
         vehicleLocationSnapshotState = null
+        vehicleAddress = null
+        lastGeocodedLocation = null
         statusError = ""
         controlFeedback = null
         climateOptimisticGuard = null
@@ -981,6 +986,9 @@ class MainActivity : ComponentActivity() {
                     // Replace the activity-only snapshot only when this refresh yields a valid position.
                     vehicleLocationSnapshot = locationSnapshot
                     vehicleLocationSnapshotState = locationSnapshot
+                    if (locationSnapshot != null) {
+                        maybeUpdateVehicleAddress(locationSnapshot)
+                    }
                     val guard = climateOptimisticGuard
                     val decision = ClimateTelemetryMergePolicy.decide(
                         guard = guard,
@@ -1777,6 +1785,29 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }, ParkingAnomalyPolicy.POST_LOCK_CHECK_DELAY_MS)
+    }
+
+    private fun maybeUpdateVehicleAddress(snapshot: VehicleLocationSnapshot) {
+        val lat = snapshot.location.latitude
+        val lng = snapshot.location.longitude
+        val last = lastGeocodedLocation
+        if (last != null &&
+            kotlin.math.abs(last.first - lat) < 0.0002 &&
+            kotlin.math.abs(last.second - lng) < 0.0002 &&
+            vehicleAddress != null
+        ) {
+            return
+        }
+        lastGeocodedLocation = lat to lng
+        val generation = operationGeneration
+        worker.execute {
+            val address = VehicleLocationGeocoder.reverseGeocode(lat, lng)
+            if (address != null) {
+                runOnMain(generation) {
+                    vehicleAddress = address
+                }
+            }
+        }
     }
 
     private fun control(name: String) {

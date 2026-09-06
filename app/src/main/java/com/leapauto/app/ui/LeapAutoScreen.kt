@@ -3706,6 +3706,7 @@ fun EnergyHomeWeeklyPage(data: EnergyAnalyticsData) {
         Text(
             displayEnergyMetric(data.overallConsumption, "kWh/100km"),
             style = MaterialTheme.typography.titleMedium.energyStyle(),
+            fontWeight = FontWeight.Bold,
             color = if (data.overallConsumption == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.statusGood,
             maxLines = 1
         )
@@ -3727,6 +3728,7 @@ fun EnergyHomeMileagePage(data: EnergyAnalyticsData) {
         Text(
             displayEnergyMetric(data.recentMileage, "km"),
             style = MaterialTheme.typography.titleLarge.energyStyle(),
+            fontWeight = FontWeight.Bold,
             color = if (data.recentMileage == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.statusGood,
             maxLines = 1
         )
@@ -3743,7 +3745,7 @@ private fun EnergyHomeMetricLine(
     label: String,
     value: String,
     valueColor: Color = MaterialTheme.colorScheme.onSurface,
-    valueBold: Boolean = false
+    valueBold: Boolean = true
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -3753,6 +3755,7 @@ private fun EnergyHomeMetricLine(
         Text(
             label,
             style = MaterialTheme.typography.labelLarge.energyStyle(),
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1
         )
@@ -3760,7 +3763,7 @@ private fun EnergyHomeMetricLine(
             value,
             style = MaterialTheme.typography.titleMedium.energyStyle(),
             color = valueColor,
-            fontWeight = if (valueBold) FontWeight.Bold else FontWeight.Medium,
+            fontWeight = FontWeight.Bold,
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Ellipsis
@@ -3803,6 +3806,7 @@ private fun EnergyHomeBars(
                     point.value.formatEnergyNumber(),
                     modifier = Modifier.padding(top = 4.dp),
                     style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 9.sp),
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     softWrap = false
@@ -3857,6 +3861,7 @@ fun EnergyHomeCompositionPage(data: EnergyAnalyticsData) {
                                 label,
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -3864,6 +3869,7 @@ fun EnergyHomeCompositionPage(data: EnergyAnalyticsData) {
                             Text(
                                 energyValue,
                                 style = MaterialTheme.typography.labelSmall.energyStyle(),
+                                fontWeight = FontWeight.Bold,
                                 color = typeColor,
                                 maxLines = 1
                             )
@@ -3872,6 +3878,7 @@ fun EnergyHomeCompositionPage(data: EnergyAnalyticsData) {
                                 percent,
                                 modifier = Modifier.width(46.dp),
                                 style = MaterialTheme.typography.labelSmall.energyStyle(),
+                                fontWeight = FontWeight.Bold,
                                 color = typeColor,
                                 textAlign = TextAlign.End,
                                 maxLines = 1
@@ -3894,30 +3901,44 @@ private fun EnergyHomeCompositionDonut(
         energyCompositionColor(category.label, index)
     }
     val emptyChartColor = MaterialTheme.colorScheme.surfaceContainerHighest
-    Canvas(modifier.size(68.dp)) {
-        var start = -90f
-        val stroke = 8.dp.toPx()
-        if (total <= 0.0) {
-            drawArc(
-                color = emptyChartColor,
-                startAngle = 0f,
-                sweepAngle = 360f,
-                useCenter = false,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
-            )
-        } else {
-            categories.forEachIndexed { index, category ->
-                val sweep = (category.value.coerceAtLeast(0.0) / total * 360.0).toFloat()
+    val totalText = if (total > 0.0) "${total.formatEnergyNumber()}kWh" else "--"
+    Box(
+        modifier = modifier.size(72.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            var start = -90f
+            val stroke = 7.dp.toPx()
+            if (total <= 0.0) {
                 drawArc(
-                    color = chartColors[index % chartColors.size],
-                    startAngle = start,
-                    sweepAngle = sweep,
+                    color = emptyChartColor,
+                    startAngle = 0f,
+                    sweepAngle = 360f,
                     useCenter = false,
                     style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
                 )
-                start += sweep
+            } else {
+                categories.forEachIndexed { index, category ->
+                    val sweep = (category.value.coerceAtLeast(0.0) / total * 360.0).toFloat()
+                    drawArc(
+                        color = chartColors[index % chartColors.size],
+                        startAngle = start,
+                        sweepAngle = sweep,
+                        useCenter = false,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
+                    )
+                    start += sweep
+                }
             }
         }
+        Text(
+            text = totalText,
+            style = MaterialTheme.typography.labelMedium.energyStyle().copy(fontSize = 11.sp),
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            softWrap = false
+        )
     }
 }
 
@@ -3940,6 +3961,7 @@ private fun EnergyHomeLineChart(points: List<com.leapauto.app.EnergySeriesPoint>
             color = labelColor.toArgb()
             textSize = 9.sp.toPx()
             textAlign = Paint.Align.CENTER
+            isFakeBoldText = true
         }
         val plotTop = labelReserve + pointRadius
         val plotBottom = (size.height - dateReserve - pointRadius).coerceAtLeast(plotTop)
@@ -4027,6 +4049,7 @@ private fun EnergyHomeMissingData(message: String) {
         Text(
             message,
             style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
