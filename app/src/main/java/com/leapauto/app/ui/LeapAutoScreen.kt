@@ -3092,7 +3092,8 @@ fun VehicleStatusCard(
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.glassInsetSurface
+                        color = MaterialTheme.glassInsetSurface,
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                     ) {
                         HorizontalPager(
                             state = powerPagerState,
@@ -3173,7 +3174,8 @@ fun VehicleStatusCell(
     Surface(
         modifier = modifier.clickable(enabled = onClick != null, onClick = { onClick?.invoke() }),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.glassInsetSurface
+        color = MaterialTheme.glassInsetSurface,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
@@ -3188,7 +3190,7 @@ fun VehicleStatusCell(
             Spacer(Modifier.height(2.dp))
             Text(
                 value,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Normal,
                 color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1
