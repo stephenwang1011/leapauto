@@ -2411,7 +2411,10 @@ private fun QuickVehicleActions(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
             shadowElevation = 0.dp
         ) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = if (pageCount > 1) 8.dp else 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxWidth().height(84.dp),
@@ -2573,11 +2576,17 @@ private fun QuickVehicleActions(
                     }
                 }
                 if (pageCount > 1) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         repeat(pageCount) { page ->
                             val isSelected = pagerState.currentPage == page
                             val indicatorWidth by animateDpAsState(
-                                targetValue = if (isSelected) 18.dp else 6.dp,
+                                targetValue = if (isSelected) 10.dp else 3.dp,
                                 animationSpec = spring(
                                     dampingRatio = Spring.DampingRatioMediumBouncy,
                                     stiffness = Spring.StiffnessMedium
@@ -2588,16 +2597,16 @@ private fun QuickVehicleActions(
                                 targetValue = if (isSelected) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
-                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
                                 },
-                                animationSpec = tween(250),
+                                animationSpec = tween(200),
                                 label = "pageIndicatorColor"
                             )
                             Box(
                                 Modifier
-                                    .padding(horizontal = 3.dp)
-                                    .size(indicatorWidth, 5.dp)
-                                    .clip(RoundedCornerShape(2.5.dp))
+                                    .padding(horizontal = 2.dp)
+                                    .size(indicatorWidth, 2.5.dp)
+                                    .clip(RoundedCornerShape(1.5.dp))
                                     .background(indicatorColor)
                             )
                         }
@@ -2951,12 +2960,18 @@ private fun QuickVehicleButton(
 private fun HomeTirePressureCard(status: VehicleStatus?, modifier: Modifier = Modifier) {
     val tireByPosition = status?.tires.orEmpty().associateBy { it.position }
     val outlineVariant = MaterialTheme.colorScheme.outlineVariant
+    val hasWarning = status?.tires?.any { it.warning } == true
+    val cardBorder = if (hasWarning) {
+        BorderStroke(1.2.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.8f))
+    } else {
+        BorderStroke(1.dp, outlineVariant.copy(alpha = 0.45f))
+    }
     Surface(
         modifier = modifier.heightIn(min = 120.dp),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, outlineVariant.copy(alpha = 0.45f)),
+        border = cardBorder,
         shadowElevation = 0.dp
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -3072,11 +3087,20 @@ fun VehicleStatusCard(
     val remainTime = status?.chargeRemainTime?.trim().takeUnless { it.isNullOrBlank() } ?: "未充"
     var showWindowDetails by rememberSaveable { mutableStateOf(false) }
     var powerNextPageRequest by rememberSaveable { mutableStateOf<Int?>(null) }
+    val windowAlert = windowAvailable && openWindows.isNotEmpty()
+    val lockAlert = status?.locked == false
+    val isSecure = status?.locked == true && (!windowAvailable || openWindows.isEmpty())
+    val outlineVariant = MaterialTheme.colorScheme.outlineVariant
+    val cardBorder = when {
+        lockAlert || windowAlert -> BorderStroke(1.2.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.8f))
+        isSecure -> BorderStroke(1.2.dp, MaterialTheme.statusGood.copy(alpha = 0.8f))
+        else -> BorderStroke(1.dp, outlineVariant.copy(alpha = 0.45f))
+    }
     Surface(
         modifier = modifier.heightIn(min = 120.dp),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        border = cardBorder,
         shadowElevation = 0.dp
     ) {
         Column(Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -3686,19 +3710,37 @@ fun EnergyHomePagerCard(
                 is EnergyAnalyticsState.Failed -> EnergyHomeEmptyPage(state)
             }
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 repeat(EnergyHomePage.entries.size) { page ->
+                    val isSelected = pagerState.currentPage == page
+                    val indicatorWidth by animateDpAsState(
+                        targetValue = if (isSelected) 10.dp else 3.dp,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        ),
+                        label = "energyIndicatorWidth"
+                    )
+                    val indicatorColor by animateColorAsState(
+                        targetValue = if (isSelected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
+                        },
+                        animationSpec = tween(200),
+                        label = "energyIndicatorColor"
+                    )
                     Box(
                         Modifier
-                            .padding(horizontal = 3.dp)
-                            .size(if (pagerState.currentPage == page) 18.dp else 6.dp, 5.dp)
-                            .clip(RoundedCornerShape(2.5.dp))
-                            .background(
-                                if (pagerState.currentPage == page) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-                            )
+                            .padding(horizontal = 2.dp)
+                            .size(indicatorWidth, 2.5.dp)
+                            .clip(RoundedCornerShape(1.5.dp))
+                            .background(indicatorColor)
                     )
                 }
             }
