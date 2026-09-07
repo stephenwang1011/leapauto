@@ -91,7 +91,7 @@ class VehicleHomeStatusTest {
             VehicleHomeStatus.drivingPresentation("0 km/h", "P挡", true)
         )
         assertEquals(
-            VehicleHomeStatus.DrivingPresentation("已停车"),
+            VehicleHomeStatus.DrivingPresentation(null),
             VehicleHomeStatus.drivingPresentation(null, null, true)
         )
         assertEquals(

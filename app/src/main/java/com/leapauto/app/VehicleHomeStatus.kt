@@ -84,10 +84,6 @@ object VehicleHomeStatus {
         return when {
             speedValue != null && speedValue > 0.0 ->
                 DrivingPresentation("行驶中", formatSpeed(speedValue))
-            gearStatus == "P挡" ->
-                DrivingPresentation(null)
-            locked == true && (speedValue == null || speedValue == 0.0) ->
-                DrivingPresentation("已停车")
             else -> DrivingPresentation(null)
         }
     }

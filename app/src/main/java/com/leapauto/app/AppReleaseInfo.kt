@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 空调控制大升级：新增内外循环手动分段切换（内循环/外循环）\n" +
-        "2. 新增出风方向手动调节（全车环绕出风/前风挡除雾），双温区设定温展示\n" +
-        "3. 新增座舱舒适状态面板：主副驾座椅加热/通风档位与方向盘加热状态完整遥测"
+        "1. 彻底移除行驶状态胶囊中的“已停车”冗余文本，静止驻车时保持纯净\n" +
+        "2. 状态告警胶囊统一右置填补留白，彻底解除车模上方与机盖贴纸感\n" +
+        "3. 空调与座舱大升级：内外循环切换、出风方向选择与座椅加热通风遥测"
 }
