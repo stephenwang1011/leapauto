@@ -477,16 +477,16 @@
                 android:src="@drawable/ic_phosphor_fan"
                 android:tint="@color/widget_action_icon" />
 
-            <ImageView
+            <ProgressBar
                 android:id="@+id/imgWAcOn"
+                style="@null"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:layout_gravity="center"
                 android:contentDescription="@null"
-                android:padding="0dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_widget_ac_on"
-                android:scaleX="1.45"
-                android:scaleY="1.45"
+                android:indeterminate="true"
+                android:indeterminateOnly="true"
+                android:indeterminateDrawable="@drawable/widget_ac_spinning_snowflake"
                 android:visibility="gone" />
         </FrameLayout>
 
