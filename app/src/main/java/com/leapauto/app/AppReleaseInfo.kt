@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 状态告警胶囊全面采用警示红（尾门、车门、车窗、门锁）与生动图标（🚨⚠️🪟🔓⚡）\n" +
-        "2. 彻底移除静止时的已停车冗余标签，只在真实行驶时展示\n" +
-        "3. 状态告警胶囊统一右置填补留白，车身高点上方100%纯净留白"
+        "1. 主界面全面换装拟态磨砂透光玻璃：全卡片升级为微透明磨砂质感与物理高光微折射微边框\n" +
+        "2. 背景融入柔和透光环境光场，形成晶莹剔透、高级内敛的悬浮通透感\n" +
+        "3. 状态告警胶囊统一警示红与表情符号(🚨⚠️🪟🔓⚡)，彻底消除违和遮挡"
 }

@@ -200,6 +200,7 @@ import com.leapauto.app.VehicleStatus
 import com.leapauto.app.VehicleStatusMapper
 import com.leapauto.app.VersionUpdatePromptPolicy
 import com.leapauto.app.VersionUpdateState
+import com.leapauto.app.ui.theme.LocalAppDarkTheme
 import com.leapauto.app.ui.theme.glassInsetSurface
 import com.leapauto.app.ui.theme.glassSurface
 import com.leapauto.app.ui.theme.statusGood
@@ -471,11 +472,29 @@ fun LeapAutoScreen(
         )
     }
 
+    val isAppDark = LocalAppDarkTheme.current
     Box(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = if (isAppDark) listOf(
+                        Color(0xFF1E293B).copy(alpha = 0.45f),
+                        Color(0xFF0F172A).copy(alpha = 0.18f),
+                        Color.Transparent
+                    ) else listOf(
+                        Color(0xFFD6E4FF).copy(alpha = 0.50f),
+                        Color(0xFFE8EEF8).copy(alpha = 0.20f),
+                        Color.Transparent
+                    ),
+                    center = Offset(size.width * 0.5f, size.height * 0.22f),
+                    radius = size.width * 0.85f
+                )
+            )
+        }
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
@@ -1979,6 +1998,29 @@ private fun DrivingBreathingDot(modifier: Modifier = Modifier) {
     }
 }
 
+@Composable
+private fun glassCardBorder(): BorderStroke {
+    val isDark = LocalAppDarkTheme.current
+    val topColor = if (isDark) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.80f)
+    val bottomColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.35f else 0.40f)
+    return BorderStroke(
+        1.dp,
+        Brush.verticalGradient(listOf(topColor, bottomColor))
+    )
+}
+
+@Composable
+private fun glassInsetBorder(warning: Boolean = false): BorderStroke {
+    if (warning) return BorderStroke(1.2.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
+    val isDark = LocalAppDarkTheme.current
+    val topColor = if (isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.60f)
+    val bottomColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.30f else 0.35f)
+    return BorderStroke(
+        0.5.dp,
+        Brush.verticalGradient(listOf(topColor, bottomColor))
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VehicleHero(
@@ -2021,7 +2063,7 @@ fun VehicleHero(
         shape = RoundedCornerShape(20.dp),
         color = heroColor,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
         Column(
@@ -2917,12 +2959,12 @@ private fun QuickVehicleActions(
     Box(modifier = Modifier.fillMaxWidth()) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.glassSurface,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-            shadowElevation = 0.dp
-        ) {
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.glassSurface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = glassCardBorder(),
+        shadowElevation = 0.dp
+    ) {
             Column(
                 Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = if (pageCount > 1) 8.dp else 12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -3472,7 +3514,7 @@ private fun QuickVehicleButton(
 private fun HomeTirePressureCard(status: VehicleStatus?, modifier: Modifier = Modifier) {
     val tireByPosition = status?.tires.orEmpty().associateBy { it.position }
     val outlineVariant = MaterialTheme.colorScheme.outlineVariant
-    val cardBorder = BorderStroke(1.dp, outlineVariant.copy(alpha = 0.45f))
+    val cardBorder = glassCardBorder()
     Surface(
         modifier = modifier.heightIn(min = 120.dp),
         shape = RoundedCornerShape(16.dp),
@@ -3531,12 +3573,7 @@ private fun HomeTirePressureCard(status: VehicleStatus?, modifier: Modifier = Mo
 @Composable
 fun HomeTireCell(position: String, tire: TireStatus?, modifier: Modifier = Modifier) {
     val warning = tire?.warning == true
-    val outlineVariant = MaterialTheme.colorScheme.outlineVariant
-    val cellBorder = if (warning) {
-        BorderStroke(1.2.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
-    } else {
-        BorderStroke(0.5.dp, outlineVariant.copy(alpha = 0.35f))
-    }
+    val cellBorder = glassInsetBorder(warning)
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
@@ -3601,8 +3638,7 @@ fun VehicleStatusCard(
     var powerNextPageRequest by rememberSaveable { mutableStateOf<Int?>(null) }
     val windowAlert = windowAvailable && openWindows.isNotEmpty()
     val lockAlert = status?.locked == false
-    val outlineVariant = MaterialTheme.colorScheme.outlineVariant
-    val cardBorder = BorderStroke(1.dp, outlineVariant.copy(alpha = 0.45f))
+    val cardBorder = glassCardBorder()
     Surface(
         modifier = modifier.heightIn(min = 120.dp),
         shape = RoundedCornerShape(16.dp),
@@ -3745,12 +3781,7 @@ fun VehicleStatusCell(
     warning: Boolean = false,
     valueColor: Color? = null
 ) {
-    val outlineVariant = MaterialTheme.colorScheme.outlineVariant
-    val cellBorder = if (warning) {
-        BorderStroke(1.2.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
-    } else {
-        BorderStroke(0.5.dp, outlineVariant.copy(alpha = 0.35f))
-    }
+    val cellBorder = glassInsetBorder(warning)
     Surface(
         modifier = modifier.clickable(enabled = onClick != null, onClick = { onClick?.invoke() }),
         shape = RoundedCornerShape(12.dp),

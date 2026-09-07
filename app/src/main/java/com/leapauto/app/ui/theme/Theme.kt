@@ -90,10 +90,10 @@ val MaterialTheme.statusBad: Color
     @Composable get() = if (LocalAppDarkTheme.current) StatusBadDark else StatusBadLight
 
 val MaterialTheme.glassSurface: Color
-    @Composable get() = if (LocalAppDarkTheme.current) GlassSurfaceDark else GlassSurfaceLight
+    @Composable get() = if (LocalAppDarkTheme.current) GlassSurfaceDark.copy(alpha = 0.85f) else GlassSurfaceLight.copy(alpha = 0.88f)
 
 val MaterialTheme.glassInsetSurface: Color
-    @Composable get() = if (LocalAppDarkTheme.current) GlassInsetSurfaceDark else GlassInsetSurfaceLight
+    @Composable get() = if (LocalAppDarkTheme.current) GlassInsetSurfaceDark.copy(alpha = 0.72f) else GlassInsetSurfaceLight.copy(alpha = 0.78f)
 
 @Composable
 fun LeapAutoTheme(
