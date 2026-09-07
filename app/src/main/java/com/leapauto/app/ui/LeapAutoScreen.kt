@@ -2070,128 +2070,93 @@ fun VehicleHero(
             modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // ====== 1. 顶部第一行：座驾名称、状态标签、位置与设置入口 (单行一体化) ======
+            // ====== 1. 顶部区域：左侧昵称+更新时间，右侧设置按钮+位置信息 ======
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 20.dp, end = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .padding(start = 20.dp, end = 16.dp),
+                verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // 左侧：座驾名称 + 状态徽章
-                Row(
+                // 左侧列：座驾名称 + 状态更新时间
+                Column(
                     modifier = Modifier.weight(1f, fill = false),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Text(
-                        nickname,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (status?.sentryMode == true) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
-                            contentColor = MaterialTheme.colorScheme.error.copy(alpha = 0.90f)
-                        ) {
-                            Text(
-                                "哨兵已开",
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                    val drivingPresentation = VehicleHomeStatus.drivingPresentation(
-                        speed = status?.speed,
-                        gearStatus = status?.gearStatus,
-                        locked = status?.locked
-                    )
-                    drivingPresentation.label?.let { label ->
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-                            contentColor = MaterialTheme.colorScheme.primary
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            nickname,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (status?.sentryMode == true) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
+                                contentColor = MaterialTheme.colorScheme.error.copy(alpha = 0.90f)
                             ) {
-                                if (drivingPresentation.speed != null) {
-                                    DrivingBreathingDot()
-                                    Text(
-                                        text = "$label ${drivingPresentation.speed}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                } else {
-                                    Text(
-                                        text = label,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
+                                Text(
+                                    "哨兵已开",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        val drivingPresentation = VehicleHomeStatus.drivingPresentation(
+                            speed = status?.speed,
+                            gearStatus = status?.gearStatus,
+                            locked = status?.locked
+                        )
+                        drivingPresentation.label?.let { label ->
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                                contentColor = MaterialTheme.colorScheme.primary
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    if (drivingPresentation.speed != null) {
+                                        DrivingBreathingDot()
+                                        Text(
+                                            text = "$label ${drivingPresentation.speed}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    } else {
+                                        Text(
+                                            text = label,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
+                    Text(
+                        text = VehicleHomeStatus.updatedLabel(statusUpdatedAtEpochMs),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
                 }
 
-                // 右侧：位置与更新时间胶囊 + 设置齿轮
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                // 右侧列：设置按钮 + 位置信息 (放在设置按钮正下方)
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    val address = vehicleAddress?.takeIf { it.isNotBlank() }
-                    val timeStr = VehicleHomeStatus.updatedLabel(statusUpdatedAtEpochMs)
-                        .removePrefix("状态更新").trim()
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .then(if (address != null) Modifier.clickable(onClick = onAddressClick) else Modifier),
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.glassInsetSurface.copy(alpha = 0.85f),
-                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            if (address != null) {
-                                Image(
-                                    painter = painterResource(R.drawable.ic_vehicle_location_marker),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(10.dp)
-                                )
-                                Text(
-                                    text = address,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    "·",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outlineVariant
-                                )
-                            }
-                            Text(
-                                text = timeStr,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1
-                            )
-                        }
-                    }
-
                     TooltipBox(
                         positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
                         tooltip = { PlainTooltip { Text("设置") } },
@@ -2199,12 +2164,43 @@ fun VehicleHero(
                     ) {
                         IconButton(
                             onClick = onOpenAccount,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(28.dp)
                         ) {
                             Image(
                                 painter = painterResource(R.drawable.ic_settings_tight),
                                 contentDescription = "设置",
                                 modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    val address = vehicleAddress?.takeIf { it.isNotBlank() }
+                    if (address != null) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable(onClick = onAddressClick)
+                                .background(MaterialTheme.glassInsetSurface.copy(alpha = 0.85f))
+                                .border(
+                                    0.5.dp,
+                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f),
+                                    RoundedCornerShape(6.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Image(
+                                painter = painterResource(R.drawable.ic_vehicle_location_marker),
+                                contentDescription = null,
+                                modifier = Modifier.size(10.dp)
+                            )
+                            Text(
+                                text = address,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
