@@ -271,6 +271,8 @@ fun LeapAutoScreen(
     widgetSensitiveActionVerificationEnabled: Boolean,
     appearanceMode: AppearanceMode,
     energyState: EnergyAnalyticsState = EnergyAnalyticsState.Idle,
+    healthyChargeLimitSoc: Int = 80,
+    onApplyHealthyCharging: (Boolean, Int) -> Unit = { _, _ -> },
     networkDebugEnabled: Boolean = false,
     vehicleImageVersion: Int = 0,
     currentVersion: String,
@@ -315,6 +317,7 @@ fun LeapAutoScreen(
     var selectedTab by rememberSaveable { mutableStateOf(0) }
     var showVehicleLocation by rememberSaveable { mutableStateOf(false) }
     var showClimateControl by rememberSaveable { mutableStateOf(false) }
+    var showHealthyChargingSheet by rememberSaveable { mutableStateOf(false) }
     val destination = when {
         !loggedIn -> ScreenDestination.LOGIN
         showVehicleLocation && selectedTab == MainNavigationTabs.VEHICLE -> ScreenDestination.LOCATION_DETAIL
@@ -473,6 +476,19 @@ fun LeapAutoScreen(
         )
     }
 
+    if (showHealthyChargingSheet) {
+        HealthyChargingBottomSheet(
+            onDismissRequest = { showHealthyChargingSheet = false },
+            status = status,
+            currentLimitSoc = healthyChargeLimitSoc,
+            isHealthyChargeEnabled = status?.healthyChargeEnabled ?: true,
+            onApply = { enabled, targetSoc ->
+                onApplyHealthyCharging(enabled, targetSoc)
+                showHealthyChargingSheet = false
+            }
+        )
+    }
+
     val isAppDark = LocalAppDarkTheme.current
     Box(
         Modifier
@@ -617,6 +633,9 @@ fun LeapAutoScreen(
                     onQuickAc,
                     onOpenClimateControl = {
                         showClimateControl = true
+                    },
+                    onOpenHealthyCharging = {
+                        showHealthyChargingSheet = true
                     },
                     onOpenAccount = {
                         selectedTab = MainNavigationTabs.ACCOUNT
@@ -889,6 +908,7 @@ private fun HomeContent(
     controlFeedback: ControlFeedback?, onRefresh: () -> Unit, onRefreshEnergy: () -> Unit,
     onControl: (String) -> Unit, onDismissControlFeedback: () -> Unit, onQuickAc: (Int, Long) -> Unit,
     onOpenClimateControl: () -> Unit,
+    onOpenHealthyCharging: () -> Unit = {},
     onOpenAccount: () -> Unit,
     vehicleImageVersion: Int = 0
 ) {
@@ -924,7 +944,8 @@ private fun HomeContent(
                 },
                 vehicleVin = vehicleVin,
                 vehicleImageVersion = vehicleImageVersion,
-                onControl = onControl
+                onControl = onControl,
+                onOpenHealthyCharging = onOpenHealthyCharging
             )
             Row(
                 Modifier.fillMaxWidth(),
@@ -934,6 +955,7 @@ private fun HomeContent(
                 VehicleStatusCard(
                     status = status,
                     todayMileage = EnergyHomeCardPolicy.todayMileage((energyState as? EnergyAnalyticsState.Success)?.data),
+                    onOpenHealthyCharging = onOpenHealthyCharging,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -958,6 +980,7 @@ private fun HomeContent(
                 state = energyState,
                 vehicleTotalMileage = status?.totalMileage,
                 vehicleModel = vehicleDisplayModel.ifBlank { vehicleModel },
+                onOpenHealthyCharging = onOpenHealthyCharging,
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(8.dp))
@@ -2057,7 +2080,8 @@ fun VehicleHero(
     onAddressClick: () -> Unit = {},
     vehicleVin: String = "",
     vehicleImageVersion: Int = 0,
-    onControl: ((String) -> Unit)? = null
+    onControl: ((String) -> Unit)? = null,
+    onOpenHealthyCharging: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val remoteBitmap = remember(vehicleVin, vehicleImageVersion) {
@@ -2181,7 +2205,10 @@ fun VehicleHero(
                     val unitDisplayColor = if (isRangeExtender) MaterialTheme.colorScheme.onSurfaceVariant else rangeColor
 
                     Column(
-                        modifier = Modifier.offset(y = (-5).dp),
+                        modifier = Modifier
+                            .offset(y = (-5).dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(onClick = onOpenHealthyCharging),
                         verticalArrangement = Arrangement.spacedBy(0.dp)
                     ) {
                         // 公里数大字 + 紧随其后的 km 单位
@@ -3485,7 +3512,8 @@ fun VehicleStatusCard(
     status: VehicleStatus?,
     todayMileage: String = "--",
     modifier: Modifier = Modifier,
-    powerAutoPlayEnabled: Boolean = false
+    powerAutoPlayEnabled: Boolean = false,
+    onOpenHealthyCharging: () -> Unit = {}
 ) {
     val powerSummary = VehicleHomeStatus.powerSummary(
         chargeState = status?.chargeState,
@@ -4073,6 +4101,7 @@ fun EnergyHomePagerCard(
     state: EnergyAnalyticsState,
     vehicleTotalMileage: String? = null,
     vehicleModel: String = "",
+    onOpenHealthyCharging: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val pagerState = rememberPagerState { EnergyHomePage.entries.size }
@@ -4099,11 +4128,41 @@ fun EnergyHomePagerCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = pageTitle,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = pageTitle,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.statusGood.copy(alpha = 0.12f),
+                        border = BorderStroke(0.5.dp, MaterialTheme.statusGood.copy(alpha = 0.35f)),
+                        modifier = Modifier.clickable(onClick = onOpenHealthyCharging)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_phosphor_battery_charging),
+                                contentDescription = null,
+                                modifier = Modifier.size(11.dp),
+                                tint = MaterialTheme.statusGood
+                            )
+                            Text(
+                                text = "充电上限",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.statusGood
+                            )
+                        }
+                    }
+                }
                 if (pagerState.currentPage == EnergyHomePage.WEEKLY_CONSUMPTION.ordinal) {
                     val rank = (state as? EnergyAnalyticsState.Success)?.data?.rankLabel
                     rank?.let {

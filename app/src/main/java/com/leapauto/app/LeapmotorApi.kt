@@ -1098,6 +1098,28 @@ class LeapmotorApi(private val session: Session) {
         return resp
     }
 
+    /** 电池健康充电控制（慢充目标电量限额与养护开关）。 */
+    fun setHealthyCharging(enabled: Boolean, targetSoc: Int): JSONObject {
+        requireVin()
+        val route = ensureRoute()
+        val url = "${route.appRegion}/carownerservice/v3/api/healthyCharging/control"
+        val params = mapOf(
+            "carvin" to session.selectedVin,
+            "switchState" to if (enabled) "1" else "0",
+            "soc" to targetSoc.coerceIn(50, 100).toString()
+        )
+        return gatewayFetch(url, method = "POST", params = params, jsonBody = JSONObject(params))
+    }
+
+    /** 查询健康充电推送与策略状态。 */
+    fun queryHealthyChargingPushState(): JSONObject {
+        requireVin()
+        val route = ensureRoute()
+        val url = "${route.appRegion}/carownerservice/v3/api/healthyCharging/queryPushState"
+        val params = mapOf("carvin" to session.selectedVin)
+        return gatewayFetch(url, method = "POST", params = params, jsonBody = JSONObject(params))
+    }
+
     // ---------------------------------------------------------------- 内部
 
     private fun gatewayFetch(

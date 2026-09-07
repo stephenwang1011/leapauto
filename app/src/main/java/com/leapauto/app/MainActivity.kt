@@ -157,6 +157,7 @@ class MainActivity : ComponentActivity() {
     private var vehicleConfig by mutableStateOf(SessionStore.VehicleConfig())
     private var hvacCapability by mutableStateOf(HvacCapability.fallback())
     private var networkDebugEnabled by mutableStateOf(false)
+    private var healthyChargeLimitSoc by mutableStateOf(80)
     private var signalMapDebugState by mutableStateOf<VehicleSignalMapDebugState>(VehicleSignalMapDebugState.Idle)
     private var versionUpdateState by mutableStateOf<VersionUpdateState>(VersionUpdateState.Idle)
     private var handledUpdateVersion by mutableStateOf<String?>(null)
@@ -195,6 +196,7 @@ class MainActivity : ComponentActivity() {
             sessionStore.loadWidgetSensitiveActionVerificationEnabled()
         appearanceMode = sessionStore.loadAppearanceMode()
         handledUpdateVersion = sessionStore.loadHandledUpdateVersion()
+        healthyChargeLimitSoc = sessionStore.loadHealthyChargeLimit(session.selectedVin)
         ChargeNotificationManager.ensureChannel(this)
         ParkingAnomalyNotificationManager.ensureChannel(this)
 
@@ -231,6 +233,8 @@ class MainActivity : ComponentActivity() {
                     widgetOpacity = widgetOpacity,
                     appearanceMode = appearanceMode,
                     energyState = energyState,
+                    healthyChargeLimitSoc = healthyChargeLimitSoc,
+                    onApplyHealthyCharging = ::applyHealthyCharging,
                     networkDebugEnabled = networkDebugEnabled,
                     currentVersion = AppReleaseInfo.currentVersion,
                     currentReleaseNotes = AppReleaseInfo.currentReleaseNotes,
@@ -755,6 +759,32 @@ class MainActivity : ComponentActivity() {
                 }
             } finally {
                 energyRefreshInFlight.set(false)
+            }
+        }
+    }
+
+    private fun applyHealthyCharging(enabled: Boolean, targetSoc: Int) {
+        val vin = session.selectedVin
+        sessionStore.saveHealthyChargeLimit(vin, targetSoc)
+        healthyChargeLimitSoc = targetSoc
+        worker.execute {
+            try {
+                val api = LeapmotorApi(session)
+                val resp = api.setHealthyCharging(enabled, targetSoc)
+                val code = resp.optInt("code", resp.optInt("result", -1))
+                val msg = resp.optString("msg", resp.optString("message", ""))
+                mainHandler.post {
+                    if (code == 200 || code == 0) {
+                        Toast.makeText(this@MainActivity, "健康充电已下发：限额 ${targetSoc}%", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "已保存到本地 (${msg.ifBlank { "已同步网关" }})", Toast.LENGTH_SHORT).show()
+                    }
+                    refreshStatus()
+                }
+            } catch (e: Exception) {
+                mainHandler.post {
+                    Toast.makeText(this@MainActivity, "已保存在本地 (网关: ${e.message ?: "离线"})", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

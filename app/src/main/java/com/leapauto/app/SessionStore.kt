@@ -141,6 +141,19 @@ class SessionStore(context: Context) {
         prefs.edit().putInt("ac_temp", temperature).apply()
     }
 
+    /** 健康充电目标上限百分比（按 VIN 隔离存储，默认 80%）。 */
+    fun loadHealthyChargeLimit(vin: String): Int {
+        if (vin.isBlank()) return 80
+        val key = "healthy_charge_limit_$vin"
+        return prefs.getInt(key, 80)
+    }
+
+    fun saveHealthyChargeLimit(vin: String, soc: Int) {
+        if (vin.isBlank()) return
+        val key = "healthy_charge_limit_$vin"
+        prefs.edit().putInt(key, soc.coerceIn(50, 100)).apply()
+    }
+
     /** 用户确认的车型配置，按 VIN 隔离保存，避免多车续航规则串用。 */
     fun loadVehicleConfig(
         vin: String,
