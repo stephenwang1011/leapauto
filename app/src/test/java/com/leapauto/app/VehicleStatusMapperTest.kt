@@ -203,10 +203,10 @@ class VehicleStatusMapperTest {
             powerType = SessionStore.VehiclePowerType.RANGE_EXTENDER
         )
 
-        assertEquals(29, mocked.getInt("fuelSoc"))
-        assertEquals(129, mocked.getInt("fuelRangeDynamic"))
-        assertEquals(469, mocked.getInt("combinedRangeDynamic"))
-        assertEquals(469, mocked.getInt("3261"))
+        assertEquals(50, mocked.getInt("fuelSoc"))
+        assertEquals(300, mocked.getInt("fuelRangeDynamic"))
+        assertEquals(640, mocked.getInt("combinedRangeDynamic"))
+        assertEquals(640, mocked.getInt("3261"))
         assertEquals(340, original.getInt("3260"))
         assertNotSame(original, mocked)
     }
@@ -221,10 +221,10 @@ class VehicleStatusMapperTest {
             powerType = SessionStore.VehiclePowerType.RANGE_EXTENDER
         )
 
-        assertEquals(445, mocked.getInt("combinedRangeStandard"))
-        assertEquals(445, mocked.getInt("3258"))
+        assertEquals(616, mocked.getInt("combinedRangeStandard"))
+        assertEquals(616, mocked.getInt("3258"))
         assertEquals(
-            "445",
+            "616",
             VehicleStatusMapper.widgetRange(
                 mocked,
                 "Lafa5",

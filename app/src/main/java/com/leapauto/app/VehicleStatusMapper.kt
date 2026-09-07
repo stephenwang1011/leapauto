@@ -10,8 +10,8 @@ object VehicleStatusMapper {
     enum class PowerType { PURE_ELECTRIC, RANGE_EXTENDER }
 
     private const val MOCK_RANGE_EXTENDER_VIN = "LFZ63AZ55SH023503"
-    private const val MOCK_FUEL_SOC_PERCENT = 29
-    private const val MOCK_FUEL_RANGE_KM = 129
+    private const val MOCK_FUEL_SOC_PERCENT = 50
+    private const val MOCK_FUEL_RANGE_KM = 300
 
     /**
      * Supplies local-only fuel telemetry for the configured test vehicle.
