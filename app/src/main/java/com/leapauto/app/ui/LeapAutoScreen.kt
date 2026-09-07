@@ -3459,11 +3459,6 @@ fun VehicleStatusCard(
         false -> "车锁未锁"
         null -> "--"
     }
-    val lockColor = when (status?.locked) {
-        true -> MaterialTheme.statusGood
-        false -> MaterialTheme.colorScheme.error
-        null -> null
-    }
     val remainTime = status?.chargeRemainTime?.trim().takeUnless { it.isNullOrBlank() } ?: "未充"
     var showWindowDetails by rememberSaveable { mutableStateOf(false) }
     var powerNextPageRequest by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -3482,11 +3477,7 @@ fun VehicleStatusCard(
                 VehicleStatusCell("今日里程", todayMileage, Modifier.weight(1f))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     val speedValue = status?.speed?.trim()?.removeSuffix("km/h")?.toDoubleOrNull()
-                    val powerTitle = when {
-                        status?.chargeState == 1 -> "充电功率"
-                        speedValue != null && speedValue > 0.0 -> "行车功率"
-                        else -> "用电功率"
-                    }
+                    val powerTitle = if (speedValue != null && speedValue > 0.0) "行车功率" else "充电功率"
                     val powerItems = listOf(
                         powerTitle to powerSummary,
                         "剩余时间" to remainTime,
@@ -3531,28 +3522,8 @@ fun VehicleStatusCard(
                                 modifier = Modifier.fillMaxWidth(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(top = 4.dp, end = 5.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    repeat(powerItems.size) { dotIndex ->
-                                        val isCurrent = powerPagerState.currentPage == dotIndex
-                                        Box(
-                                            modifier = Modifier
-                                                .size(if (isCurrent) 4.5.dp else 2.5.dp)
-                                                .clip(CircleShape)
-                                                .background(
-                                                    if (isCurrent) MaterialTheme.colorScheme.primary
-                                                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-                                                )
-                                        )
-                                    }
-                                }
                                 Column(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+                                    modifier = Modifier.padding(start = 6.dp, top = 6.dp, end = 6.dp, bottom = 10.dp),
                                     verticalArrangement = Arrangement.spacedBy(2.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
@@ -3571,13 +3542,44 @@ fun VehicleStatusCard(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
+
+                                Row(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(bottom = 3.5.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(2.5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    repeat(powerItems.size) { dotIndex ->
+                                        val isCurrent = powerPagerState.currentPage == dotIndex
+                                        val indicatorWidth by animateDpAsState(
+                                            targetValue = if (isCurrent) 6.dp else 2.5.dp,
+                                            animationSpec = tween(200),
+                                            label = "powerIndicatorWidth"
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(indicatorWidth, 1.8.dp)
+                                                .clip(RoundedCornerShape(1.dp))
+                                                .background(
+                                                    if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.70f)
+                                                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                                                )
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                VehicleStatusCell("门锁", lockLabel, Modifier.weight(1f), warning = status?.locked == false, valueColor = lockColor)
+                VehicleStatusCell(
+                    "门锁",
+                    lockLabel,
+                    Modifier.weight(1f),
+                    warning = status?.locked == false
+                )
                 VehicleStatusCell(
                     "车窗",
                     windowLabel,

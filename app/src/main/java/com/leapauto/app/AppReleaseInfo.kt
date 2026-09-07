@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 续航指标间距极致收敛：大数字与下方电量进度条间隙收紧至3~4dp，排版极度紧致一体\n" +
-        "2. 续航数字与km同排加粗展示，km紧跟在数字后方并在底部平齐贴地\n" +
-        "3. 纯电续航与单位km全面联动电量变色逻辑（绿/橙/红），与进度条及百分比统一"
+        "1. 车况卡片标题统一为“充电功率”，轮播指示器移至底部居中并做微型胶囊处理\n" +
+        "2. 车锁已锁移除绿字恢复常态，未锁车时与车窗未关保持统一红框警示样式\n" +
+        "3. 续航大数字与下方电量进度条间隙收紧至3~4dp，排版极致紧致一体"
 }
