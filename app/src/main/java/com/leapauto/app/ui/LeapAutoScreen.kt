@@ -2820,6 +2820,7 @@ private fun QuickVehicleActions(
                                     QuickVehicleButton(
                                         label = label,
                                         iconRes = command.iconRes,
+                                        warning = windowOpen,
                                         onClick = {
                                             if (!editing) {
                                                 sunshadeMenuExpanded = false
@@ -2866,6 +2867,7 @@ private fun QuickVehicleActions(
                                         label = label,
                                         iconRes = command.iconRes,
                                         active = trunkOpen,
+                                        warning = trunkOpen,
                                         onClick = {
                                             if (!editing) {
                                                 when (trunkState) {
@@ -2889,20 +2891,27 @@ private fun QuickVehicleActions(
                                     }
                                 }
                             } else {
+                                val isWarningCmd = when (command.name) {
+                                    "unlock" -> status?.locked == false
+                                    "windowOpen" -> windowOpen
+                                    else -> false
+                                }
+                                val isActiveCmd = when (command.name) {
+                                    "unlock" -> false
+                                    "lock" -> status?.locked == true
+                                    "windowVent" -> false
+                                    "windowOpen" -> false
+                                    "windowClose" -> !windowOpen
+                                    "trunk" -> false
+                                    "batteryPreheat" -> status?.batteryPreheatEnabled == true
+                                    "sentry" -> status?.sentryMode == true
+                                    else -> false
+                                }
                                 QuickVehicleButton(
                                     label = label,
                                     iconRes = command.iconRes,
-                                    active = when (command.name) {
-                                        "unlock" -> status?.locked != true
-                                        "lock" -> status?.locked == true
-                                        "windowVent" -> false
-                                        "windowOpen" -> windowOpen
-                                        "windowClose" -> !windowOpen
-                                        "trunk" -> trunkOpen
-                                        "batteryPreheat" -> status?.batteryPreheatEnabled == true
-                                        "sentry" -> status?.sentryMode == true
-                                        else -> false
-                                    },
+                                    active = isActiveCmd,
+                                    warning = isWarningCmd,
                                     onClick = {
                                         if (!editing) {
                                             when (command.name) {
@@ -3267,11 +3276,20 @@ private fun QuickVehicleButton(
     label: String,
     iconRes: Int,
     active: Boolean = false,
+    warning: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier,
     onLongClick: (() -> Unit)? = null,
-    iconTint: Color = if (active) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurface,
-    labelTint: Color = if (active) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurface
+    iconTint: Color = when {
+        warning -> MaterialTheme.colorScheme.error
+        active -> MaterialTheme.statusGood
+        else -> MaterialTheme.colorScheme.onSurface
+    },
+    labelTint: Color = when {
+        warning -> MaterialTheme.colorScheme.error
+        active -> MaterialTheme.statusGood
+        else -> MaterialTheme.colorScheme.onSurface
+    }
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -3284,6 +3302,19 @@ private fun QuickVehicleButton(
         label = "quickBtnScale"
     )
     val haptic = LocalHapticFeedback.current
+
+    val isWarning = warning || iconTint == MaterialTheme.colorScheme.error
+    val circleBg = when {
+        isWarning -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.30f)
+        active -> iconTint.copy(alpha = 0.10f)
+        isPressed -> MaterialTheme.colorScheme.surfaceContainerHighest
+        else -> MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val circleBorder = when {
+        isWarning -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
+        active -> BorderStroke(0.8.dp, iconTint.copy(alpha = 0.40f))
+        else -> BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isPressed) 0.6f else 0.35f))
+    }
 
     Column(
         modifier = modifier,
@@ -3312,16 +3343,8 @@ private fun QuickVehicleButton(
                     }
                 ),
             shape = CircleShape,
-            color = when {
-                active -> iconTint.copy(alpha = 0.10f)
-                isPressed -> MaterialTheme.colorScheme.surfaceContainerHighest
-                else -> MaterialTheme.colorScheme.surfaceContainerHigh
-            },
-            border = BorderStroke(
-                0.8.dp,
-                if (active) iconTint.copy(alpha = 0.40f)
-                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isPressed) 0.6f else 0.35f)
-            )
+            color = circleBg,
+            border = circleBorder
         ) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Icon(
@@ -3336,6 +3359,7 @@ private fun QuickVehicleButton(
             label,
             style = MaterialTheme.typography.labelSmall,
             color = labelTint,
+            fontWeight = if (active || isWarning) FontWeight.Bold else FontWeight.Medium,
             maxLines = 1
         )
     }
