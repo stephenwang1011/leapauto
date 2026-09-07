@@ -2007,6 +2007,15 @@ fun VehicleHero(
         VehicleHomeStatus.SocBand.CRITICAL -> MaterialTheme.colorScheme.error
     }
 
+    val isRangeExtender = status?.rangeExtender == true
+    val rangeModeLabel = when (status?.rangeMode) {
+        "0" -> "CLTC"
+        "1" -> "WLTC"
+        else -> null
+    }
+    val mileageLabel = status?.mileage ?: "--"
+    val mileageHasUnit = mileageLabel.endsWith("km", ignoreCase = true)
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -2015,280 +2024,81 @@ fun VehicleHero(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
         shadowElevation = 0.dp
     ) {
-        Box {
-            Column(
-                modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        Column(
+            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // ====== 1. 顶部第一行：座驾名称、状态标签与设置入口 ======
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                    verticalAlignment = Alignment.Top
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    Text(
+                        nickname,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (status?.sentryMode == true) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
+                            contentColor = MaterialTheme.colorScheme.error.copy(alpha = 0.90f)
                         ) {
                             Text(
-                                nickname,
-                                modifier = Modifier.weight(1f, fill = false),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                "哨兵已开",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
                             )
-                            if (status?.sentryMode == true) {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
-                                    contentColor = MaterialTheme.colorScheme.error.copy(alpha = 0.90f)
-                                ) {
-                                    Text(
-                                        "哨兵已开",
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                        }
-                        Text(
-                            VehicleHomeStatus.updatedLabel(statusUpdatedAtEpochMs),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(0.dp)
-                        ) {
-                            val rangeModeLabel = when (status?.rangeMode) {
-                                "0" -> "CLTC"
-                                "1" -> "WLTC"
-                                else -> null
-                            }
-                            val mileageLabel = status?.mileage ?: "--"
-                            val mileageHasUnit = mileageLabel.endsWith("km", ignoreCase = true)
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(0.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
-                                    modifier = Modifier
-                                        .weight(1f, fill = false)
-                                        .alignByBaseline(),
-                                    fontSize = PureElectricRangeValueSize,
-                                    lineHeight = PureElectricRangeValueLineHeight,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (status?.rangeExtender == true) {
-                                        MaterialTheme.colorScheme.onSurface
-                                    } else {
-                                        rangeColor
-                                    },
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                if (mileageHasUnit) {
-                                    Text(
-                                        "km",
-                                        modifier = Modifier.alignByBaseline(),
-                                        fontSize = PureElectricRangeUnitSize,
-                                        lineHeight = PureElectricRangeUnitLineHeight,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (status?.rangeExtender == true) {
-                                            MaterialTheme.colorScheme.onSurface
-                                        } else {
-                                            rangeColor
-                                        },
-                                        maxLines = 1
-                                    )
-                                }
-                                rangeModeLabel?.let {
-                                    RangeModeLabel(it, modifier = Modifier.padding(start = 8.dp).alignByBaseline())
-                                }
-                            }
-
-                            if (status?.rangeExtender == true) {
-                                HybridRangeBreakdown(
-                                    electricMileage = status.electricMileage,
-                                    fuelMileage = status.fuelMileage,
-                                    electricSoc = VehicleHomeStatus.resolvedSoc(status.preciseSoc, status.soc),
-                                    fuelSoc = status.fuelSoc,
-                                    electricColor = rangeColor,
-                                    fuelColor = rangeColorForSoc(
-                                        status.fuelSoc,
-                                        fallback = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        normal = MaterialTheme.statusGood,
-                                        warning = MaterialTheme.statusWarn,
-                                        critical = MaterialTheme.colorScheme.error
-                                    )
-                                )
-                            } else {
-                                val electricSocLabel = VehicleHomeStatus.resolvedSocLabel(status?.preciseSoc, status?.soc)
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    EnergyCapsuleProgressBar(
-                                        progress = chargeProgress(normalizedSoc),
-                                        color = rangeColor,
-                                        isCharging = status?.chargeState == 1,
-                                        modifier = Modifier.fillMaxWidth(PureElectricProgressMaxWidthFraction)
-                                    )
-                                    Text(
-                                        text = electricSocLabel,
-                                        fontSize = PureElectricRangeUnitSize,
-                                        lineHeight = PureElectricRangeUnitLineHeight,
-                                        color = rangeColor,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
                         }
                     }
-                    Column(
-                        modifier = Modifier.widthIn(min = 104.dp, max = 160.dp).padding(end = 4.dp),
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Spacer(Modifier.height(26.dp))
-                        val drivingPresentation = VehicleHomeStatus.drivingPresentation(
-                            speed = status?.speed,
-                            gearStatus = status?.gearStatus,
-                            locked = status?.locked
-                        )
-                        drivingPresentation.label?.let { label ->
-                            if (drivingPresentation.speed != null) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                ) {
+                    val drivingPresentation = VehicleHomeStatus.drivingPresentation(
+                        speed = status?.speed,
+                        gearStatus = status?.gearStatus,
+                        locked = status?.locked
+                    )
+                    drivingPresentation.label?.let { label ->
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                if (drivingPresentation.speed != null) {
                                     DrivingBreathingDot()
                                     Text(
-                                        label,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        maxLines = 1
+                                        text = "$label ${drivingPresentation.speed}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold
                                     )
-                                }
-                                drivingPresentation.speed?.let { currentSpeed ->
+                                } else {
                                     Text(
-                                        currentSpeed,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1
+                                        text = label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                 }
-                            } else {
-                                Text(
-                                    label,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1
-                                )
                             }
                         }
-                        val address = vehicleAddress?.takeIf { it.isNotBlank() }
-                        if (address != null) {
-                            Text(
-                                text = address,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .clickable(onClick = onAddressClick),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.labelSmall,
-                                textAlign = TextAlign.End,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
                     }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(142.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // 车轮地面接触微阴影 (Ground Contact Shadow)
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxWidth(0.80f)
-                            .height(14.dp)
-                            .align(Alignment.BottomCenter)
-                            .offset(y = (-2).dp)
-                    ) {
-                        drawOval(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    Color.Black.copy(alpha = 0.16f),
-                                    Color.Black.copy(alpha = 0.05f),
-                                    Color.Transparent
-                                ),
-                                center = center,
-                                radius = size.width / 2f
-                            ),
-                            size = size
-                        )
-                    }
-
-                    if (remoteBitmap != null) {
-                        Image(
-                            bitmap = remoteBitmap,
-                            contentDescription = "车身展示主图",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(142.dp)
-                                .padding(horizontal = 20.dp)
-                        )
-                    } else {
-                        Image(
-                            painter = painterResource(vehicleAppearance.imageResource),
-                            contentDescription = "车身展示主图",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(142.dp)
-                                .padding(horizontal = 20.dp)
-                        )
-                    }
-
-                    // 方案 B：轻量化分层状态叠加与交互热点 (Layered Vehicle Status Overlay)
-                    VehicleStatusOverlay(
-                        status = status,
-                        onControl = onControl,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(142.dp)
-                            .padding(horizontal = 12.dp)
-                    )
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 4.dp, end = 4.dp)
-                    .size(48.dp)
-            ) {
                 TooltipBox(
                     positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
                     tooltip = { PlainTooltip { Text("设置") } },
@@ -2296,15 +2106,250 @@ fun VehicleHero(
                 ) {
                     IconButton(
                         onClick = onOpenAccount,
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(36.dp)
                     ) {
                         Image(
                             painter = painterResource(R.drawable.ic_settings_tight),
                             contentDescription = "设置",
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
+            }
+
+            // ====== 2. 顶部第二行：车辆地址与更新时间 ======
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val address = vehicleAddress?.takeIf { it.isNotBlank() }
+                if (address != null) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(onClick = onAddressClick)
+                            .background(MaterialTheme.glassInsetSurface.copy(alpha = 0.85f))
+                            .border(
+                                0.5.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f),
+                                RoundedCornerShape(6.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_vehicle_location_marker),
+                            contentDescription = null,
+                            modifier = Modifier.size(11.dp)
+                        )
+                        Text(
+                            text = address,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Text(
+                        "·",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
+                }
+                Text(
+                    text = VehicleHomeStatus.updatedLabel(statusUpdatedAtEpochMs),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+
+            // ====== 3. 核心续航与电量 HUD 仪表（左右平衡设计） ======
+            if (isRangeExtender) {
+                // 增程车型：上方总综合续航，下方左右纯电/燃油分栏
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "综合续航",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.alignByBaseline()
+                            )
+                            Text(
+                                text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
+                                fontSize = 26.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.alignByBaseline()
+                            )
+                            if (mileageHasUnit) {
+                                Text(
+                                    text = "km",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.alignByBaseline()
+                                )
+                            }
+                        }
+                        rangeModeLabel?.let {
+                            RangeModeLabel(it)
+                        }
+                    }
+
+                    HybridRangeBreakdown(
+                        electricMileage = status?.electricMileage,
+                        fuelMileage = status?.fuelMileage,
+                        electricSoc = VehicleHomeStatus.resolvedSoc(status?.preciseSoc, status?.soc),
+                        fuelSoc = status?.fuelSoc,
+                        electricColor = rangeColor,
+                        fuelColor = rangeColorForSoc(
+                            status?.fuelSoc,
+                            fallback = MaterialTheme.colorScheme.onSurfaceVariant,
+                            normal = MaterialTheme.statusGood,
+                            warning = MaterialTheme.statusWarn,
+                            critical = MaterialTheme.colorScheme.error
+                        )
+                    )
+                }
+            } else {
+                // 纯电车型：左侧大字续航，右侧电量胶囊进度条与百分比
+                val electricSocLabel = VehicleHomeStatus.resolvedSocLabel(status?.preciseSoc, status?.soc)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // 左侧：剩余续航
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
+                            fontSize = PureElectricRangeValueSize,
+                            lineHeight = PureElectricRangeValueLineHeight,
+                            fontWeight = FontWeight.Bold,
+                            color = rangeColor,
+                            maxLines = 1
+                        )
+                        if (mileageHasUnit) {
+                            Text(
+                                text = "km",
+                                fontSize = PureElectricRangeUnitSize,
+                                lineHeight = PureElectricRangeUnitLineHeight,
+                                fontWeight = FontWeight.SemiBold,
+                                color = rangeColor,
+                                modifier = Modifier.alignByBaseline()
+                            )
+                        }
+                        rangeModeLabel?.let {
+                            RangeModeLabel(it, modifier = Modifier.padding(start = 4.dp).alignByBaseline())
+                        }
+                    }
+
+                    // 右侧：电量胶囊与百分比
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        EnergyCapsuleProgressBar(
+                            progress = chargeProgress(normalizedSoc),
+                            color = rangeColor,
+                            isCharging = status?.chargeState == 1,
+                            modifier = Modifier.width(88.dp)
+                        )
+                        Text(
+                            text = electricSocLabel,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = rangeColor,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            // ====== 4. 100% 原始饱满比例车身主图与轻量化状态胶囊 ======
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(142.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // 车轮地面接触微阴影 (Ground Contact Shadow)
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth(0.80f)
+                        .height(14.dp)
+                        .align(Alignment.BottomCenter)
+                        .offset(y = (-2).dp)
+                ) {
+                    drawOval(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.16f),
+                                Color.Black.copy(alpha = 0.05f),
+                                Color.Transparent
+                            ),
+                            center = center,
+                            radius = size.width / 2f
+                        ),
+                        size = size
+                    )
+                }
+
+                if (remoteBitmap != null) {
+                    Image(
+                        bitmap = remoteBitmap,
+                        contentDescription = "车身展示主图",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(142.dp)
+                            .padding(horizontal = 20.dp)
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(vehicleAppearance.imageResource),
+                        contentDescription = "车身展示主图",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(142.dp)
+                            .padding(horizontal = 20.dp)
+                    )
+                }
+
+                // 方案 B：轻量化分层状态叠加与交互热点 (Layered Vehicle Status Overlay)
+                VehicleStatusOverlay(
+                    status = status,
+                    onControl = onControl,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(142.dp)
+                        .padding(horizontal = 12.dp)
+                )
             }
         }
     }

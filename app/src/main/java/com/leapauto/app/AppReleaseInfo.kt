@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 恢复车图 100% 饱满大气原始比例，消除车身缩小与比例失调\n" +
-        "2. 状态胶囊重构至四周开阔留白区域（左上前挡/机盖、右上尾门、左下门锁、右下充电口），彻底杜绝遮挡车身\n" +
-        "3. 优化异常状态指示：精确定位异常小卡片变红，大卡片维持中性微边框"
+        "1. 全面落地方案A：左右平衡HUD布局，彻底消除右侧大面积空白\n" +
+        "2. 续航与电量横向对称展示，纯电/增程双车型完美自适应\n" +
+        "3. 地址与更新时间优雅合流，车模顶空开阔舒展，状态胶囊互不干扰"
 }
