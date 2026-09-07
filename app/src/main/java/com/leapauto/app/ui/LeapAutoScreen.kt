@@ -2280,10 +2280,10 @@ fun VehicleHero(
                             maxLines = 1
                         )
                         Column(
-                            modifier = Modifier.width(72.dp),
+                            modifier = Modifier.width(78.dp),
                             verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
-                            // 第一行：km 与 WLTC (两端对齐，统一 12.sp，紧凑行高避免下推)
+                            // 第一行：km 与 WLTC 胶囊 (两端对齐，统一 12.sp)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -2296,13 +2296,7 @@ fun VehicleHero(
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Text(
-                                    text = rangeModeLabel ?: "CLTC",
-                                    fontSize = 12.sp,
-                                    lineHeight = 14.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                RangeModeLabel(rangeModeLabel ?: "CLTC")
                             }
 
                             // 第二行：续航条 与 百分比 (两端对齐，长度与第一行严格一致，无任何裁切)
