@@ -284,6 +284,7 @@ fun LeapAutoScreen(
     pin: String,
     onPinChange: (String) -> Unit,
     onSendSms: () -> Unit,
+    smsCountdownSeconds: Int = 0,
     onLogin: () -> Unit,
     onSavePin: () -> Unit,
     onCancelPinSetup: () -> Unit,
@@ -478,7 +479,7 @@ fun LeapAutoScreen(
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
-                if (destination != ScreenDestination.HOME) {
+                if (destination != ScreenDestination.HOME && destination != ScreenDestination.LOGIN) {
                     TopAppBar(
                         navigationIcon = if (showVehicleLocation || showClimateControl ||
                             selectedTab == MainNavigationTabs.ACCOUNT
@@ -543,7 +544,16 @@ fun LeapAutoScreen(
             label = "screen-navigation"
         ) { target ->
             when (target) {
-                ScreenDestination.LOGIN -> LoginContent(phone, onPhoneChange, code, onCodeChange, onSendSms, onLogin, busy = busy)
+                ScreenDestination.LOGIN -> LoginContent(
+                    phone,
+                    onPhoneChange,
+                    code,
+                    onCodeChange,
+                    onSendSms,
+                    onLogin,
+                    busy = busy,
+                    smsCountdownSeconds = smsCountdownSeconds
+                )
                 ScreenDestination.HOME -> HomeContent(
                     busy,
                     vehicleVin,
@@ -591,6 +601,7 @@ fun LeapAutoScreen(
                     onApplyClimateSettings = onApplyClimateSettings
                 )
                 ScreenDestination.ACCOUNT -> MyContent(
+                    phone,
                     pinSaved,
                     pin,
                     onPinChange,
@@ -620,68 +631,159 @@ fun LeapAutoScreen(
 }
 
 @Composable
-private fun LoginContent(phone: String, onPhoneChange: (String) -> Unit, code: String, onCodeChange: (String) -> Unit, onSendSms: () -> Unit, onLogin: () -> Unit, busy: Boolean = false, smsCountdownSeconds: Int = 0) {
+private fun LoginContent(
+    phone: String,
+    onPhoneChange: (String) -> Unit,
+    code: String,
+    onCodeChange: (String) -> Unit,
+    onSendSms: () -> Unit,
+    onLogin: () -> Unit,
+    busy: Boolean = false,
+    smsCountdownSeconds: Int = 0
+) {
+    val haptic = LocalHapticFeedback.current
+    val canLogin = phone.length == 11 && code.length >= 4 && !busy
+    val canSendSms = smsCountdownSeconds == 0 && phone.length == 11 && !busy
+
     Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(36.dp))
+
+        // 品牌徽标与名称
+        Surface(
+            modifier = Modifier.size(64.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+            shadowElevation = 0.dp
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_phosphor_car),
+                    contentDescription = "零跑智控",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        Text(
+            text = "零跑智控",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        Spacer(Modifier.height(4.dp))
+
+        Text(
+            text = "连接你的每一次出发",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(28.dp))
+
+        // 登录卡片
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.glassSurface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
             shadowElevation = 0.dp
         ) {
             Column(
                 modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text("账号登录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = "账号验证登录",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                // 手机号输入框
                 OutlinedTextField(
                     value = phone,
-                    onValueChange = onPhoneChange,
+                    onValueChange = { onPhoneChange(it.filter(Char::isDigit).take(11)) },
                     label = { Text("手机号") },
-                    placeholder = { Text("零跑 App 绑定手机号") },
+                    placeholder = { Text("零跑 App 注册手机号") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    trailingIcon = {
+                        if (phone.isNotEmpty()) {
+                            IconButton(onClick = { onPhoneChange("") }) {
+                                Text(
+                                    "✕",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                // 验证码输入框（行内尾部整合“获取验证码”按钮）
                 OutlinedTextField(
                     value = code,
-                    onValueChange = onCodeChange,
+                    onValueChange = { onCodeChange(it.filter(Char::isDigit).take(6)) },
                     label = { Text("短信验证码") },
                     placeholder = { Text("6 位验证码") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    trailingIcon = {
+                        TextButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onSendSms()
+                            },
+                            enabled = canSendSms,
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.primary,
+                                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.40f)
+                            ),
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) {
+                            Text(
+                                text = if (smsCountdownSeconds == 0) "获取验证码" else "${smsCountdownSeconds}s",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
-                TextButton(
-                    onClick = {
-                        onSendSms()
-                    },
-                    enabled = smsCountdownSeconds == 0,
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary),
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Text(
-                        if (smsCountdownSeconds == 0) "发送验证码"
-                        else "${smsCountdownSeconds}s 后重发"
-                    )
-                }
+
+                Spacer(Modifier.height(4.dp))
+
+                // 登录大按钮
                 Button(
-                    onClick = onLogin,
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onLogin()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
+                        contentColor = Color.White,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.40f)
                     ),
-                    enabled = !busy
+                    enabled = canLogin
                 ) {
                     if (busy) {
                         CircularProgressIndicator(
@@ -690,12 +792,45 @@ private fun LoginContent(phone: String, onPhoneChange: (String) -> Unit, code: S
                             color = Color.White
                         )
                     } else {
-                        Text("登录")
+                        Text(
+                            text = "登录",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }
         }
-        Spacer(Modifier.height(16.dp))
+
+        Spacer(Modifier.height(28.dp))
+
+        // 底部安全凭证提示胶囊
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.glassSurface,
+            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+            shadowElevation = 0.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_phosphor_lock),
+                    contentDescription = "安全存储",
+                    tint = MaterialTheme.statusGood,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = "直连零跑官方车联服务 · 凭据本地硬件级加密存储",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -854,7 +989,67 @@ private fun ControlFeedbackBanner(feedback: ControlFeedback, onDismiss: () -> Un
 }
 
 @Composable
+private fun SettingsSectionTitle(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp)
+    )
+}
+
+@Composable
+private fun AccountInfoCard(maskedPhone: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.glassSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(42.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_phosphor_car),
+                        contentDescription = "账号信息",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = maskedPhone,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "已连接零跑官方车联网",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.statusGood
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun MyContent(
+    phone: String = "",
     pinSaved: Boolean,
     pin: String,
     onPinChange: (String) -> Unit,
@@ -878,6 +1073,11 @@ private fun MyContent(
     onLogout: () -> Unit
 ) {
     var showDiagnosticLogDialog by rememberSaveable { mutableStateOf(false) }
+    val maskedPhone = when {
+        phone.length == 11 -> "${phone.take(3)}****${phone.takeLast(4)}"
+        phone.isNotBlank() -> phone
+        else -> "已连接零跑"
+    }
 
     Column(
         Modifier
@@ -886,6 +1086,9 @@ private fun MyContent(
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        AccountInfoCard(maskedPhone)
+
+        SettingsSectionTitle("控车安全")
         PinCard(
             pinSaved = pinSaved,
             pin = pin,
@@ -897,6 +1100,7 @@ private fun MyContent(
 
         VehicleConfigCard(vehicleModel, vehicleConfig, onSaveVehicleConfig)
 
+        SettingsSectionTitle("个性化与小组件")
         AppearanceModeCard(appearanceMode, onAppearanceModeChange)
         WidgetOpacityCard(widgetOpacity, onWidgetOpacityChange)
         WidgetSensitiveActionVerificationCard(
@@ -904,6 +1108,7 @@ private fun MyContent(
             onEnabledChange = onWidgetSensitiveActionVerificationChange
         )
 
+        SettingsSectionTitle("系统与诊断")
         VersionUpdateCard(
             currentVersion = currentVersion,
             currentReleaseNotes = currentReleaseNotes,
@@ -914,16 +1119,28 @@ private fun MyContent(
 
         DiagnosticLogCard(onClick = { showDiagnosticLogDialog = true })
 
+        Spacer(Modifier.height(4.dp))
+
         OutlinedButton(
             onClick = onLogout,
-            modifier = Modifier.fillMaxWidth().height(46.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.06f),
+                contentColor = MaterialTheme.colorScheme.error
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
         ) {
-            Text("退出登录")
+            Text(
+                "退出登录",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.error
+            )
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(8.dp))
     }
 
     if (showDiagnosticLogDialog) {
@@ -946,18 +1163,84 @@ private fun VehicleConfigCard(
         null -> "未设置"
     }
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable { editing = true },
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { editing = true },
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
         shadowElevation = 0.dp
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("车型配置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text("车辆昵称：${config.nickname.ifBlank { displayModel }}", style = MaterialTheme.typography.bodyMedium)
-            Text("车型：$displayModel", style = MaterialTheme.typography.bodyMedium)
-            Text("年份：${config.modelYear.ifBlank { "未设置" }}    动力：$typeLabel", style = MaterialTheme.typography.bodyMedium)
-            Text("点击修改，续航显示将按动力类型计算", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("座驾配置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("· ${config.nickname.ifBlank { displayModel }}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text("修改 >", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                ) {
+                    Text(
+                        displayModel,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                val isReev = config.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = (if (isReev) MaterialTheme.statusWarn else MaterialTheme.statusGood).copy(alpha = 0.12f),
+                    border = BorderStroke(0.5.dp, (if (isReev) MaterialTheme.statusWarn else MaterialTheme.statusGood).copy(alpha = 0.35f))
+                ) {
+                    Text(
+                        typeLabel,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isReev) MaterialTheme.statusWarn else MaterialTheme.statusGood
+                    )
+                }
+
+                if (config.modelYear.isNotBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    ) {
+                        Text(
+                            "${config.modelYear}款",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Text(
+                "续航里程与电量算法按此配置展示",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
     if (editing) {
@@ -1287,6 +1570,7 @@ private fun VersionUpdateCard(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
         shadowElevation = 0.dp
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1400,7 +1684,9 @@ private fun DiagnosticLogCard(onClick: () -> Unit) {
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface
+        color = MaterialTheme.glassSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        shadowElevation = 0.dp
     ) {
         Row(
             modifier = Modifier
@@ -1513,6 +1799,7 @@ private fun AppearanceModeCard(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
         shadowElevation = 0.dp
     ) {
         Column(
@@ -1561,6 +1848,7 @@ private fun WidgetOpacityCard(opacity: Int, onOpacityChange: (Int) -> Unit) {
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
         shadowElevation = 0.dp
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1607,6 +1895,7 @@ private fun WidgetSensitiveActionVerificationCard(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
         shadowElevation = 0.dp
     ) {
         Row(
@@ -3588,6 +3877,7 @@ private fun LocationMapStateMessage(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
         shadowElevation = 0.dp
     ) {
         Column(

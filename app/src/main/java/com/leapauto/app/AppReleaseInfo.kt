@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 快捷控车与底部能耗卡片指示器重构为超纤巧微型胶囊\n" +
-        "2. 大幅缩减指示器高度与纵向占用空间，界面排版更紧凑耐看\n" +
-        "3. 车况卡片支持全闭锁安全绿与异常隐患红边框指示"
+        "1. 系统设置页面结构化分组重构，加入账号信息栏与全卡片微边框\n" +
+        "2. 车型配置卡片升级为多标签展示，退出登录操作语义强化\n" +
+        "3. 全面美化重构登录界面，增加品牌徽标与行内验证码按钮"
 }

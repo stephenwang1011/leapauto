@@ -234,6 +234,7 @@ class MainActivity : ComponentActivity() {
                     pin = pin,
                     onPinChange = { pin = it.take(4) },
                     onSendSms = ::sendSms,
+                    smsCountdownSeconds = smsCountdownSeconds,
                     onLogin = ::login,
                     onSavePin = ::savePin,
                     onCancelPinSetup = ::cancelPinSetup,
