@@ -2153,30 +2153,19 @@ fun VehicleHero(
                         maxLines = 1
                     )
 
-                    // 公里数大字（紧贴状态更新文本，无动态/标准续航标识）
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    // 公里数大字（变色逻辑与进度条完全一致）
+                    val mileageDisplayColor = if (isRangeExtender) MaterialTheme.colorScheme.onSurface else rangeColor
+                    Text(
+                        text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
+                        fontSize = 34.sp,
+                        lineHeight = 36.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = mileageDisplayColor,
+                        maxLines = 1,
                         modifier = Modifier.padding(top = 1.dp)
-                    ) {
-                        Text(
-                            text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
-                            fontSize = 32.sp,
-                            lineHeight = 34.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1
-                        )
-                        Text(
-                            text = "km",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.alignByBaseline()
-                        )
-                    }
+                    )
 
-                    // 续航进度条与电量 (紧跟公里数下方)
+                    // km 显示在下方，并与电量/进度条并排
                     if (isRangeExtender) {
                         val elecMiles = status?.electricMileage?.trim()?.takeIf { it.isNotEmpty() } ?: "--"
                         val elecSoc = VehicleStatusMapper.displayPreciseSoc(
@@ -2190,6 +2179,12 @@ fun VehicleHero(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.padding(top = 1.dp)
                         ) {
+                            Text(
+                                text = "km",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = MaterialTheme.statusGood.copy(alpha = 0.10f),
@@ -2245,6 +2240,12 @@ fun VehicleHero(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.padding(top = 1.dp)
                         ) {
+                            Text(
+                                text = "km",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = rangeColor
+                            )
                             EnergyCapsuleProgressBar(
                                 progress = chargeProgress(normalizedSoc),
                                 color = rangeColor,
