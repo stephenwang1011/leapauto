@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 主界面全面换装拟态磨砂透光玻璃：全卡片升级为微透明磨砂质感与物理高光微折射微边框\n" +
-        "2. 背景融入柔和透光环境光场，形成晶莹剔透、高级内敛的悬浮通透感\n" +
-        "3. 状态告警胶囊统一警示红与表情符号(🚨⚠️🪟🔓⚡)，彻底消除违和遮挡"
+        "1. 紧急修复4x2桌面插件车图充满全屏挤掉左侧数据与底部按键的严重布局Bug\n" +
+        "2. 修复插件RemoteViews位图显存过载问题，优化图片缩放与IPC传输体积\n" +
+        "3. 完整恢复桌面插件左侧续航进度条与底部5项控车操作按钮"
 }

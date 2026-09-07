@@ -579,6 +579,12 @@ class ControlWidget : AppWidgetProvider() {
             return VehicleAppearanceCatalog.resolveAppearance(displayModel, config.color)
         }
 
+        private fun scaleBitmapForWidget(bitmap: android.graphics.Bitmap, targetWidth: Int = 400): android.graphics.Bitmap {
+            if (bitmap.width <= targetWidth) return bitmap
+            val targetHeight = (bitmap.height * (targetWidth.toFloat() / bitmap.width)).toInt().coerceAtLeast(1)
+            return android.graphics.Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
+        }
+
         private fun setVehicleImage(
             views: RemoteViews,
             appearance: VehicleAppearance,
@@ -591,7 +597,8 @@ class ControlWidget : AppWidgetProvider() {
                 null
             }
             if (remoteBitmap != null) {
-                views.setImageViewBitmap(R.id.imgWCar, remoteBitmap)
+                val scaledBitmap = scaleBitmapForWidget(remoteBitmap, 400)
+                views.setImageViewBitmap(R.id.imgWCar, scaledBitmap)
             } else {
                 views.setImageViewResource(
                     R.id.imgWCar,
