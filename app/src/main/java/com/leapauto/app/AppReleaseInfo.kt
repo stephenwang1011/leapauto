@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 增强健康充电控制接口诊断日志追踪：发生异常或响应失败时自动记录入【设置 -> 诊断日志】\n" +
-        "2. 记录请求参数、HTTP状态码与服务端原始完整返回，支持一键复制分析"
+        "1. 修复健康充电控制请求协议：对齐车端网关'state'开关参数及Query/Body全通道传参\n" +
+        "2. 保持诊断日志全量捕获，支持下发结果实时追踪"
 }

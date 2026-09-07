@@ -1103,12 +1103,16 @@ class LeapmotorApi(private val session: Session) {
         requireVin()
         val route = ensureRoute()
         val url = "${route.appRegion}/carownerservice/v3/api/healthyCharging/control"
+        val stateInt = if (enabled) 1 else 0
+        val socInt = targetSoc.coerceIn(50, 100)
         val params = mapOf(
             "carvin" to session.selectedVin,
-            "switchState" to if (enabled) "1" else "0",
-            "soc" to targetSoc.coerceIn(50, 100).toString()
+            "vin" to session.selectedVin,
+            "state" to stateInt.toString(),
+            "soc" to socInt.toString(),
+            "targetSoc" to socInt.toString()
         )
-        return gatewayFetch(url, method = "POST", params = params, jsonBody = JSONObject(params))
+        return gatewayFetch(url, method = "POST", params = params, query = params, jsonBody = JSONObject(params))
     }
 
     /** 查询健康充电推送与策略状态。 */
@@ -1116,8 +1120,11 @@ class LeapmotorApi(private val session: Session) {
         requireVin()
         val route = ensureRoute()
         val url = "${route.appRegion}/carownerservice/v3/api/healthyCharging/queryPushState"
-        val params = mapOf("carvin" to session.selectedVin)
-        return gatewayFetch(url, method = "POST", params = params, jsonBody = JSONObject(params))
+        val params = mapOf(
+            "carvin" to session.selectedVin,
+            "vin" to session.selectedVin
+        )
+        return gatewayFetch(url, method = "POST", params = params, query = params, jsonBody = JSONObject(params))
     }
 
     // ---------------------------------------------------------------- 内部
