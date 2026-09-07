@@ -3311,7 +3311,7 @@ private fun QuickVehicleButton(
         else -> MaterialTheme.colorScheme.surfaceContainerHigh
     }
     val circleBorder = when {
-        isWarning -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
+        isWarning -> BorderStroke(0.8.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
         active -> BorderStroke(0.8.dp, iconTint.copy(alpha = 0.40f))
         else -> BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isPressed) 0.6f else 0.35f))
     }
