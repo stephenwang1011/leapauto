@@ -10,6 +10,7 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -4590,6 +4591,19 @@ fun ClimateOverviewCard(
     controlBusy: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val isAcRunning = status?.acSwitch == true
+    val infiniteTransition = rememberInfiniteTransition(label = "acRunningRotation")
+    val animatedAngle by infiniteTransition.animateFloat(
+        initialValue = ClimateIconRotationSpec.START_DEGREES,
+        targetValue = ClimateIconRotationSpec.END_DEGREES,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = ClimateIconRotationSpec.ROTATION_DURATION_MS, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "acRotationAngle"
+    )
+    val rotationAngle = ClimateIconRotationSpec.rotationAngle(isAcRunning, animatedAngle)
+
     val temperatureTarget = Commands.acTemperatureTarget(status?.acSetting)
     val quickToggle = HomeClimateTogglePresentationMapper.from(status?.acSwitch, controlBusy)
     val quickToggleCommand = quickToggle.command
@@ -4682,7 +4696,11 @@ fun ClimateOverviewCard(
                 Icon(
                     painter = painterResource(R.drawable.ic_phosphor_fan),
                     contentDescription = "空调状态",
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier
+                        .size(22.dp)
+                        .graphicsLayer {
+                            rotationZ = rotationAngle
+                        },
                     tint = temperatureColor
                 )
                 Spacer(Modifier.width(10.dp))

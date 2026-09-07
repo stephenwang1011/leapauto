@@ -1,5 +1,6 @@
 package com.leapauto.app
 
+import com.leapauto.app.ui.ClimateIconRotationSpec
 import com.leapauto.app.ui.ClimateToggleGlyph
 import com.leapauto.app.ui.ClimateToggleVisualSpec
 import org.junit.Assert.assertEquals
@@ -30,5 +31,16 @@ class ClimateToggleVisualSpecTest {
         assertEquals(ClimateToggleGlyph.CROSS, off.glyph)
         assertEquals(16, on.thumbOffsetDp)
         assertEquals(ClimateToggleGlyph.CHECK, on.glyph)
+    }
+
+    @Test
+    fun iconRotationSpecRotatesWhenAcIsRunningAndStandsStillWhenOff() {
+        assertEquals(3000, ClimateIconRotationSpec.ROTATION_DURATION_MS)
+        assertEquals(0f, ClimateIconRotationSpec.START_DEGREES)
+        assertEquals(360f, ClimateIconRotationSpec.END_DEGREES)
+
+        assertEquals(120f, ClimateIconRotationSpec.rotationAngle(isAcRunning = true, animatedDegrees = 120f))
+        assertEquals(0f, ClimateIconRotationSpec.rotationAngle(isAcRunning = false, animatedDegrees = 120f))
+        assertEquals(0f, ClimateIconRotationSpec.rotationAngle(isAcRunning = false, animatedDegrees = 360f))
     }
 }

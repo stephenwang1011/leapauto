@@ -54,6 +54,15 @@ object ClimateToggleVisualSpec {
     )
 }
 
+object ClimateIconRotationSpec {
+    const val ROTATION_DURATION_MS = 3000
+    const val START_DEGREES = 0f
+    const val END_DEGREES = 360f
+
+    fun rotationAngle(isAcRunning: Boolean, animatedDegrees: Float): Float =
+        if (isAcRunning) animatedDegrees else 0f
+}
+
 @Composable
 fun ClimateToggle(
     checked: Boolean,
