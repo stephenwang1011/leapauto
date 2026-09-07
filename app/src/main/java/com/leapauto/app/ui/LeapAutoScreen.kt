@@ -2177,32 +2177,32 @@ fun VehicleHero(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // 左侧部分：综合大字续航 + 模式徽标
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Text(
-                        text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = "km",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.alignByBaseline()
-                    )
-                    rangeModeLabel?.let {
-                        RangeModeLabel(it, modifier = Modifier.alignByBaseline().padding(start = 3.dp))
-                    }
-                }
-
-                // 右侧部分：纯电 or 增程 能源双微胶囊
                 if (isRangeExtender) {
+                    // 增程车型：左侧大字综合续航 + 模式徽标
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = "km",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.alignByBaseline()
+                        )
+                        rangeModeLabel?.let {
+                            RangeModeLabel(it, modifier = Modifier.alignByBaseline().padding(start = 3.dp))
+                        }
+                    }
+
+                    // 增程车型：右侧纯电 + 燃油 能源双微胶囊
                     val elecMiles = status?.electricMileage?.trim()?.takeIf { it.isNotEmpty() } ?: "--"
                     val elecSoc = VehicleStatusMapper.displayPreciseSoc(
                         VehicleHomeStatus.resolvedSoc(status?.preciseSoc, status?.soc)
@@ -2265,30 +2265,69 @@ fun VehicleHero(
                         }
                     }
                 } else {
-                    // 纯电车型微胶囊：电量百分比 + 微进度条
+                    // 纯电车型：左侧大字续航，紧贴矩形指标子群 (km WLTC / 能量条 百分比 两端严格对齐)
                     val electricSocLabel = VehicleHomeStatus.resolvedSocLabel(status?.preciseSoc, status?.soc)
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = rangeColor.copy(alpha = 0.10f),
-                        border = BorderStroke(0.5.dp, rangeColor.copy(alpha = 0.35f))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        Text(
+                            text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
+                            fontSize = PureElectricRangeValueSize,
+                            lineHeight = PureElectricRangeValueSize,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1
+                        )
+                        Column(
+                            modifier = Modifier
+                                .height(38.dp)
+                                .width(78.dp),
+                            verticalArrangement = Arrangement.SpaceBetween
                         ) {
-                            EnergyCapsuleProgressBar(
-                                progress = chargeProgress(normalizedSoc),
-                                color = rangeColor,
-                                isCharging = status?.chargeState == 1,
-                                modifier = Modifier.width(46.dp)
-                            )
-                            Text(
-                                text = electricSocLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = rangeColor
-                            )
+                            // 第一行：km 与 WLTC (两端对齐，统一 13.sp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "km",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = rangeModeLabel ?: "CLTC",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            // 第二行：续航条 与 百分比 (两端对齐，长度与第一行严格一致)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                EnergyCapsuleProgressBar(
+                                    progress = chargeProgress(normalizedSoc),
+                                    color = rangeColor,
+                                    isCharging = status?.chargeState == 1,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(4.dp)
+                                )
+                                Spacer(Modifier.width(5.dp))
+                                Text(
+                                    text = electricSocLabel,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = rangeColor,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                 }
