@@ -480,13 +480,13 @@ fun LeapAutoScreen(
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             if (!isAppDark) {
-                // 浅色模式：北欧冰川微渐变 + 晨曦微光晕，为白色车模提供立体深邃的高级底色
+                // 浅色模式：方案2【轻奢暖钛羊绒灰】，温润、典雅、扎实耐看，极具车规内饰高级感
                 drawRect(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFFE2E9F3),
-                            Color(0xFFE5EBF2),
-                            Color(0xFFE9EEF5)
+                            Color(0xFFE4E7E2),
+                            Color(0xFFE7EAE5),
+                            Color(0xFFEAECE8)
                         ),
                         startY = 0f,
                         endY = size.height
@@ -495,8 +495,8 @@ fun LeapAutoScreen(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFD4E2F2).copy(alpha = 0.65f),
-                            Color(0xFFDFE9F6).copy(alpha = 0.30f),
+                            Color(0xFFEDEFEA).copy(alpha = 0.65f),
+                            Color(0xFFE7EAE4).copy(alpha = 0.30f),
                             Color.Transparent
                         ),
                         center = Offset(size.width * 0.5f, size.height * 0.22f),
