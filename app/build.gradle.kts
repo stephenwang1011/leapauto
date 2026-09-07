@@ -7,7 +7,7 @@ plugins {
 }
 
 val apkDisplayName = "零跑智控"
-val apkVersionName = "3.0.26"
+val apkVersionName = "3.0.27"
 
 val localProperties = Properties().apply {
     val localPropertiesFile = rootProject.file("local.properties")
@@ -39,7 +39,7 @@ android {
         applicationId = "com.leapauto.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3000026
+        versionCode = 3000027
         versionName = apkVersionName
         buildConfigField("String", "AMAP_WEB_KEY", "\"${localProperty("AMAP_WEB_KEY") ?: "468e462adad376c2aa08d252ae20fcba"}\"")
     }

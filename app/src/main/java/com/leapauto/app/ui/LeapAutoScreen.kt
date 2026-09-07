@@ -2051,8 +2051,8 @@ fun VehicleHero(
 
     val isRangeExtender = status?.rangeExtender == true
     val rangeModeLabel = when (status?.rangeMode) {
-        "0" -> "CLTC"
-        "1" -> "WLTC"
+        "0" -> "标准续航"
+        "1" -> "动态续航"
         else -> null
     }
     val mileageLabel = status?.mileage ?: "--"
@@ -2234,7 +2234,7 @@ fun VehicleHero(
                                 verticalArrangement = Arrangement.spacedBy(1.dp),
                                 horizontalAlignment = Alignment.Start
                             ) {
-                                RangeModeLabel(rangeModeLabel ?: "CLTC")
+                                RangeModeLabel(rangeModeLabel ?: "标准续航")
                                 Text(
                                     text = "km",
                                     fontSize = 12.sp,
@@ -2327,7 +2327,7 @@ fun VehicleHero(
                                 verticalArrangement = Arrangement.spacedBy(1.dp),
                                 horizontalAlignment = Alignment.Start
                             ) {
-                                RangeModeLabel(rangeModeLabel ?: "CLTC")
+                                RangeModeLabel(rangeModeLabel ?: "标准续航")
                                 Text(
                                     text = "km",
                                     fontSize = 12.sp,
