@@ -2265,27 +2265,25 @@ fun VehicleHero(
                         }
                     }
                 } else {
-                    // 纯电车型：左侧大字续航，紧贴矩形指标子群 (km WLTC / 能量条 百分比 两端严格对齐)
+                    // 纯电车型：左侧大字续航，紧贴矩形指标子群 (km WLTC / 能量条 百分比 两端严格对齐，无裁切)
                     val electricSocLabel = VehicleHomeStatus.resolvedSocLabel(status?.preciseSoc, status?.soc)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Text(
                             text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
-                            fontSize = PureElectricRangeValueSize,
-                            lineHeight = PureElectricRangeValueSize,
+                            fontSize = 34.sp,
+                            lineHeight = 34.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1
                         )
                         Column(
-                            modifier = Modifier
-                                .height(38.dp)
-                                .width(78.dp),
-                            verticalArrangement = Arrangement.SpaceBetween
+                            modifier = Modifier.width(72.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
-                            // 第一行：km 与 WLTC (两端对齐，统一 13.sp)
+                            // 第一行：km 与 WLTC (两端对齐，统一 12.sp，紧凑行高避免下推)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -2293,19 +2291,21 @@ fun VehicleHero(
                             ) {
                                 Text(
                                     text = "km",
-                                    fontSize = 13.sp,
+                                    fontSize = 12.sp,
+                                    lineHeight = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
                                     text = rangeModeLabel ?: "CLTC",
-                                    fontSize = 13.sp,
+                                    fontSize = 12.sp,
+                                    lineHeight = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
-                            // 第二行：续航条 与 百分比 (两端对齐，长度与第一行严格一致)
+                            // 第二行：续航条 与 百分比 (两端对齐，长度与第一行严格一致，无任何裁切)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -2319,10 +2319,11 @@ fun VehicleHero(
                                         .weight(1f)
                                         .height(4.dp)
                                 )
-                                Spacer(Modifier.width(5.dp))
+                                Spacer(Modifier.width(4.dp))
                                 Text(
                                     text = electricSocLabel,
-                                    fontSize = 13.sp,
+                                    fontSize = 12.sp,
+                                    lineHeight = 14.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = rangeColor,
                                     maxLines = 1

@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 纯电车型HUD升级为指标子群：续航条与百分比置于km与WLTC下方，长宽与高度严格对齐大数字\n" +
-        "2. 增程纯电双自适应，彻底消除多层堆叠与视觉杂乱\n" +
-        "3. 保持车图100%原厂饱满大气比例，状态胶囊通透悬浮"
+        "1. 修复纯电车型电量百分比底部被裁切问题，彻底移除强制高度限制\n" +
+        "2. 优化指标子群纵向对齐与紧凑行高，km与WLTC自然对齐大数字顶部\n" +
+        "3. 保持续航条与百分比长度严格对齐km与WLTC，双车型完美适配"
 }
