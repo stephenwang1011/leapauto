@@ -2207,7 +2207,7 @@ fun VehicleHero(
                 }
             }
 
-            // ====== 2. 核心续航与能源流线 HUD 仪表 + 右侧状态告警快捷胶囊 ======
+            // ====== 2. 核心续航与能源流线 HUD 仪表 ======
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2220,24 +2220,28 @@ fun VehicleHero(
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             Text(
                                 text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
-                                fontSize = 30.sp,
+                                fontSize = 32.sp,
+                                lineHeight = 32.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1
                             )
-                            Text(
-                                text = "km",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.alignByBaseline()
-                            )
-                            rangeModeLabel?.let {
-                                RangeModeLabel(it, modifier = Modifier.alignByBaseline().padding(start = 2.dp))
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(1.dp),
+                                horizontalAlignment = Alignment.Start
+                            ) {
+                                RangeModeLabel(rangeModeLabel ?: "CLTC")
+                                Text(
+                                    text = "km",
+                                    fontSize = 12.sp,
+                                    lineHeight = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
 
@@ -2309,24 +2313,28 @@ fun VehicleHero(
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             Text(
                                 text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
-                                fontSize = 30.sp,
+                                fontSize = 32.sp,
+                                lineHeight = 32.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1
                             )
-                            Text(
-                                text = "km",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.alignByBaseline()
-                            )
-                            rangeModeLabel?.let {
-                                RangeModeLabel(it, modifier = Modifier.alignByBaseline().padding(start = 2.dp))
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(1.dp),
+                                horizontalAlignment = Alignment.Start
+                            ) {
+                                RangeModeLabel(rangeModeLabel ?: "CLTC")
+                                Text(
+                                    text = "km",
+                                    fontSize = 12.sp,
+                                    lineHeight = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
 
@@ -2409,23 +2417,23 @@ fun VehicleHero(
 @Composable
 private fun RangeModeLabel(rangeModeLabel: String, modifier: Modifier = Modifier) {
     Text(
-            text = rangeModeLabel,
-            modifier = modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(
-                    color = MaterialTheme.glassInsetSurface.copy(alpha = 0.72f),
-                    shape = RoundedCornerShape(6.dp)
-                )
-                .border(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f),
-                    shape = RoundedCornerShape(6.dp)
-                )
-                .padding(1.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
-        )
+        text = rangeModeLabel,
+        modifier = modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(
+                color = MaterialTheme.glassInsetSurface.copy(alpha = 0.75f),
+                shape = RoundedCornerShape(4.dp)
+            )
+            .border(
+                width = 0.5.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f),
+                shape = RoundedCornerShape(4.dp)
+            )
+            .padding(horizontal = 3.5.dp, vertical = 0.5.dp),
+        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1
+    )
 }
 
 @Composable
