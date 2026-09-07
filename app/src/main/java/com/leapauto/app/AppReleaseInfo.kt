@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 换装通用标准地图图钉矢量图标（空心水滴图钉），告别实心黑坨，辨识度显著提升\n" +
-        "2. 定位微图标与地址文字统一调整为优雅黑，风格沉稳克制\n" +
-        "3. 更新Mock燃油数据：燃油续航调整为300km，油箱百分比调整为50%（健康绿状态）"
+        "1. 续航数字与km同排加粗展示，km紧跟在数字后方并在底部平齐贴地\n" +
+        "2. 核心数据组整体上提5dp，将视觉间距收紧至精致的7~8dp呼吸感\n" +
+        "3. 换装通用标准空心水滴地图图钉矢量图标，位置信息与图标统一调整为沉稳黑"
 }
