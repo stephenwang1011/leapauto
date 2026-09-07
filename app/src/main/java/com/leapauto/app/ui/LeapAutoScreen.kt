@@ -2070,7 +2070,7 @@ fun VehicleHero(
             modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // ====== 1. 顶部区域：左侧昵称+更新时间，右侧设置按钮+位置信息 ======
+            // ====== 1. 顶部区域：左侧昵称+更新时间+续航电量(整体紧密靠拢)，右侧设置按钮+位置信息 ======
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2078,7 +2078,7 @@ fun VehicleHero(
                 verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // 左侧列：座驾名称 + 状态更新时间
+                // 左侧列：座驾名称 + 状态更新时间 + 公里数 + 进度条 (紧密纵向堆叠)
                 Column(
                     modifier = Modifier.weight(1f, fill = false),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -2144,12 +2144,121 @@ fun VehicleHero(
                             }
                         }
                     }
+
+                    // 状态更新时间
                     Text(
                         text = VehicleHomeStatus.updatedLabel(statusUpdatedAtEpochMs),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1
                     )
+
+                    // 公里数大字（紧贴状态更新文本，无动态/标准续航标识）
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier.padding(top = 1.dp)
+                    ) {
+                        Text(
+                            text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
+                            fontSize = 32.sp,
+                            lineHeight = 34.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = "km",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.alignByBaseline()
+                        )
+                    }
+
+                    // 续航进度条与电量 (紧跟公里数下方)
+                    if (isRangeExtender) {
+                        val elecMiles = status?.electricMileage?.trim()?.takeIf { it.isNotEmpty() } ?: "--"
+                        val elecSoc = VehicleStatusMapper.displayPreciseSoc(
+                            VehicleHomeStatus.resolvedSoc(status?.preciseSoc, status?.soc)
+                        ) ?: "--"
+                        val fuelMiles = status?.fuelMileage?.trim()?.takeIf { it.isNotEmpty() } ?: "--"
+                        val fSoc = VehicleStatusMapper.displayPreciseSoc(status?.fuelSoc) ?: "--"
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(top = 1.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.statusGood.copy(alpha = 0.10f),
+                                border = BorderStroke(0.5.dp, MaterialTheme.statusGood.copy(alpha = 0.35f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Image(
+                                        painter = painterResource(R.drawable.ic_hybrid_electric),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Text(
+                                        text = "$elecMiles · $elecSoc",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.statusGood
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.statusWarn.copy(alpha = 0.10f),
+                                border = BorderStroke(0.5.dp, MaterialTheme.statusWarn.copy(alpha = 0.35f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Image(
+                                        painter = painterResource(R.drawable.ic_hybrid_fuel),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Text(
+                                        text = "$fuelMiles · $fSoc",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.statusWarn
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        val electricSocLabel = VehicleHomeStatus.resolvedSocLabel(status?.preciseSoc, status?.soc)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(top = 1.dp)
+                        ) {
+                            EnergyCapsuleProgressBar(
+                                progress = chargeProgress(normalizedSoc),
+                                color = rangeColor,
+                                isCharging = status?.chargeState == 1,
+                                modifier = Modifier.width(64.dp).height(4.5.dp)
+                            )
+                            Text(
+                                text = electricSocLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = rangeColor
+                            )
+                        }
+                    }
                 }
 
                 // 右侧列：设置按钮 + 位置信息 (放在设置按钮正下方)
@@ -2207,159 +2316,7 @@ fun VehicleHero(
                 }
             }
 
-            // ====== 2. 核心续航与能源流线 HUD 仪表 ======
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // 左侧部分：续航与电量指标
-                if (isRangeExtender) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Text(
-                                text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
-                                fontSize = 32.sp,
-                                lineHeight = 32.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1
-                            )
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(1.dp),
-                                horizontalAlignment = Alignment.Start
-                            ) {
-                                RangeModeLabel(rangeModeLabel ?: "标准续航")
-                                Text(
-                                    text = "km",
-                                    fontSize = 12.sp,
-                                    lineHeight = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        val elecMiles = status?.electricMileage?.trim()?.takeIf { it.isNotEmpty() } ?: "--"
-                        val elecSoc = VehicleStatusMapper.displayPreciseSoc(
-                            VehicleHomeStatus.resolvedSoc(status?.preciseSoc, status?.soc)
-                        ) ?: "--"
-                        val fuelMiles = status?.fuelMileage?.trim()?.takeIf { it.isNotEmpty() } ?: "--"
-                        val fSoc = VehicleStatusMapper.displayPreciseSoc(status?.fuelSoc) ?: "--"
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            // 纯电微胶囊 (微绿底)
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.statusGood.copy(alpha = 0.10f),
-                                border = BorderStroke(0.5.dp, MaterialTheme.statusGood.copy(alpha = 0.35f))
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                ) {
-                                    Image(
-                                        painter = painterResource(R.drawable.ic_hybrid_electric),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(11.dp)
-                                    )
-                                    Text(
-                                        text = "$elecMiles · $elecSoc",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.statusGood
-                                    )
-                                }
-                            }
-
-                            // 燃油微胶囊 (微暖橙底)
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.statusWarn.copy(alpha = 0.10f),
-                                border = BorderStroke(0.5.dp, MaterialTheme.statusWarn.copy(alpha = 0.35f))
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                ) {
-                                    Image(
-                                        painter = painterResource(R.drawable.ic_hybrid_fuel),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(11.dp)
-                                    )
-                                    Text(
-                                        text = "$fuelMiles · $fSoc",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.statusWarn
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // 纯电车型：左侧续航与紧凑电量进度条
-                    val electricSocLabel = VehicleHomeStatus.resolvedSocLabel(status?.preciseSoc, status?.soc)
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Text(
-                                text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
-                                fontSize = 32.sp,
-                                lineHeight = 32.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1
-                            )
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(1.dp),
-                                horizontalAlignment = Alignment.Start
-                            ) {
-                                RangeModeLabel(rangeModeLabel ?: "标准续航")
-                                Text(
-                                    text = "km",
-                                    fontSize = 12.sp,
-                                    lineHeight = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            EnergyCapsuleProgressBar(
-                                progress = chargeProgress(normalizedSoc),
-                                color = rangeColor,
-                                isCharging = status?.chargeState == 1,
-                                modifier = Modifier.width(64.dp).height(4.5.dp)
-                            )
-                            Text(
-                                text = electricSocLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = rangeColor
-                            )
-                        }
-                    }
-                }
-            }
-
-            // ====== 3. 100% 原始饱满比例车身主图 (纯净无遮挡) ======
+            // ====== 2. 100% 原始饱满比例车身主图 (纯净无遮挡) ======
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
