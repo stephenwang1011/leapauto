@@ -2225,8 +2225,8 @@ fun VehicleHero(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(146.dp),
-                    contentAlignment = Alignment.Center
+                        .height(160.dp),
+                    contentAlignment = Alignment.BottomCenter
                 ) {
                     // 车轮地面接触微阴影 (Ground Contact Shadow)
                     Canvas(
@@ -2257,7 +2257,8 @@ fun VehicleHero(
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(142.dp)
+                                .height(130.dp)
+                                .align(Alignment.BottomCenter)
                                 .padding(horizontal = 20.dp)
                         )
                     } else {
@@ -2267,7 +2268,8 @@ fun VehicleHero(
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(142.dp)
+                                .height(130.dp)
+                                .align(Alignment.BottomCenter)
                                 .padding(horizontal = 20.dp)
                         )
                     }
@@ -2278,7 +2280,7 @@ fun VehicleHero(
                         onControl = onControl,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(146.dp)
+                            .height(160.dp)
                             .padding(horizontal = 14.dp)
                     )
                 }
@@ -2362,7 +2364,7 @@ private fun VehicleStatusOverlay(
                 onClick = onControl?.let { { it("trunkClose") } },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset(x = (-4).dp, y = 8.dp)
+                    .offset(x = (-4).dp, y = 14.dp)
             )
         }
 
@@ -2377,7 +2379,7 @@ private fun VehicleStatusOverlay(
                 onClick = null,
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .offset(x = 10.dp, y = 6.dp)
+                    .offset(x = 10.dp, y = 16.dp)
             )
         } else if (isUnlocked) {
             StatusOverlayChip(
@@ -2389,7 +2391,7 @@ private fun VehicleStatusOverlay(
                 onClick = onControl?.let { { it("lock") } },
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .offset(x = 10.dp, y = 6.dp)
+                    .offset(x = 10.dp, y = 16.dp)
             )
         }
 
