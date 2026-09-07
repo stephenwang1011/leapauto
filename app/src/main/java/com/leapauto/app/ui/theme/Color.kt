@@ -27,7 +27,7 @@ val OutlineVariantLight = Color(0xFFDDE3EC)
 val ErrorLight = AlertRed
 val ErrorContainerLight = Color(0xFFFFDAD6)
 val OnErrorContainerLight = Color(0xFF410002)
-val AppBackgroundLight = Color(0xFFF0F3F4)
+val AppBackgroundLight = Color(0xFFE4E9F0)
 val GlassSurfaceLight = Color(0xFFFFFFFF)
 val GlassInsetSurfaceLight = Color(0xFFF5F7F8)
 

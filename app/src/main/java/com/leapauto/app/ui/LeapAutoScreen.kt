@@ -479,21 +479,43 @@ fun LeapAutoScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = if (isAppDark) listOf(
-                        Color(0xFF1E293B).copy(alpha = 0.45f),
-                        Color(0xFF0F172A).copy(alpha = 0.18f),
-                        Color.Transparent
-                    ) else listOf(
-                        Color(0xFFD6E4FF).copy(alpha = 0.50f),
-                        Color(0xFFE8EEF8).copy(alpha = 0.20f),
-                        Color.Transparent
-                    ),
-                    center = Offset(size.width * 0.5f, size.height * 0.22f),
-                    radius = size.width * 0.85f
+            if (!isAppDark) {
+                // 浅色模式：北欧冰川微渐变 + 晨曦微光晕，为白色车模提供立体深邃的高级底色
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFE2E9F3),
+                            Color(0xFFE5EBF2),
+                            Color(0xFFE9EEF5)
+                        ),
+                        startY = 0f,
+                        endY = size.height
+                    )
                 )
-            )
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFFD4E2F2).copy(alpha = 0.65f),
+                            Color(0xFFDFE9F6).copy(alpha = 0.30f),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width * 0.5f, size.height * 0.22f),
+                        radius = size.width * 0.90f
+                    )
+                )
+            } else {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFF1E293B).copy(alpha = 0.45f),
+                            Color(0xFF0F172A).copy(alpha = 0.18f),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width * 0.5f, size.height * 0.22f),
+                        radius = size.width * 0.85f
+                    )
+                )
+            }
         }
         Scaffold(
             containerColor = Color.Transparent,

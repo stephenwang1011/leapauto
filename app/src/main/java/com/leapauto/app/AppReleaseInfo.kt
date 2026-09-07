@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 快捷控车异常告警描线精修：红圈描边保持0.8dp精细标准，不额外加粗，视觉精致协调\n" +
-        "2. 修复快捷控车激活按钮圆圈背景与边框跟随图标动态着色，告别蓝绿冲突\n" +
-        "3. 车况卡片标题统一为“充电功率”，轮播指示器移至底部居中并做微型胶囊处理"
+        "1. 注入北欧冰川微渐变氛围背景：沉稳浅天青灰底色大幅凸显白色车身高光轮廓与磨砂玻璃质感\n" +
+        "2. 排版架构零变动，100%保持全部现有组件位置、尺寸、对齐与交互\n" +
+        "3. 快捷控车异常告警描边恢复0.8dp精细标准，不额外加粗，精致协调"
 }
