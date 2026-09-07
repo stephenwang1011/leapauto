@@ -3313,13 +3313,13 @@ private fun QuickVehicleButton(
                 ),
             shape = CircleShape,
             color = when {
-                active -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                active -> iconTint.copy(alpha = 0.10f)
                 isPressed -> MaterialTheme.colorScheme.surfaceContainerHighest
                 else -> MaterialTheme.colorScheme.surfaceContainerHigh
             },
             border = BorderStroke(
                 0.8.dp,
-                if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                if (active) iconTint.copy(alpha = 0.40f)
                 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isPressed) 0.6f else 0.35f)
             )
         ) {
