@@ -600,7 +600,7 @@ class ControlWidget : AppWidgetProvider() {
             return VehicleAppearanceCatalog.resolveAppearance(displayModel, config.color)
         }
 
-        private fun scaleBitmapForWidget(bitmap: android.graphics.Bitmap, targetWidth: Int = 400): android.graphics.Bitmap {
+        internal fun scaleBitmapForWidget(bitmap: android.graphics.Bitmap, targetWidth: Int = 400): android.graphics.Bitmap {
             if (bitmap.width <= targetWidth) return bitmap
             val targetHeight = (bitmap.height * (targetWidth.toFloat() / bitmap.width)).toInt().coerceAtLeast(1)
             return android.graphics.Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)

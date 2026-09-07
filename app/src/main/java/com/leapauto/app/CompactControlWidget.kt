@@ -35,6 +35,7 @@ class CompactControlWidget : AppWidgetProvider() {
                     "setBackgroundResource",
                     ControlWidget.widgetBackgroundResource(opacity, darkTheme)
                 )
+                setVehicleImage(this, appearance, session.selectedVin, context)
                 applyStaticAppearance(themeContext, this, opacity)
                 setTextViewText(R.id.txtWCTitle, ControlWidget.widgetTitle(config, appearance))
                 applyRangePresentation(
@@ -89,6 +90,28 @@ class CompactControlWidget : AppWidgetProvider() {
                 ComponentName(context.applicationContext, CompactControlWidget::class.java)
             )
 
+        private fun setVehicleImage(
+            views: RemoteViews,
+            appearance: VehicleAppearance,
+            vin: String = "",
+            context: Context? = null
+        ) {
+            val remoteBitmap = if (vin.isNotBlank() && context != null) {
+                VehicleImageCache.loadCachedBitmap(context, vin)
+            } else {
+                null
+            }
+            if (remoteBitmap != null) {
+                val scaledBitmap = ControlWidget.scaleBitmapForWidget(remoteBitmap, 320)
+                views.setImageViewBitmap(R.id.imgWCCar, scaledBitmap)
+            } else {
+                views.setImageViewResource(
+                    R.id.imgWCCar,
+                    appearance.imageResource
+                )
+            }
+        }
+
         private fun applyRangePresentation(
             context: Context,
             views: RemoteViews,
@@ -103,31 +126,12 @@ class CompactControlWidget : AppWidgetProvider() {
                 R.id.compactHybridRange,
                 if (presentation.rangeExtender) View.VISIBLE else View.GONE
             )
-            views.setViewVisibility(
-                R.id.compactPureProgress,
-                if (presentation.rangeExtender) View.GONE else View.VISIBLE
-            )
             if (presentation.rangeExtender) {
                 applyHybridRangePresentation(context, views, presentation, highContrast)
                 return
             }
             views.setTextViewText(R.id.txtWCSocValue, presentation.socLabel)
             views.setTextViewText(R.id.txtWCRange, presentation.rangeLabel)
-            views.setProgressBar(R.id.progressWCNormal, 100, presentation.progress, false)
-            views.setProgressBar(R.id.progressWCWarning, 100, presentation.progress, false)
-            views.setProgressBar(R.id.progressWCCritical, 100, presentation.progress, false)
-            views.setViewVisibility(
-                R.id.progressWCNormal,
-                if (presentation.tone == WidgetPureRangeTone.NORMAL) View.VISIBLE else View.GONE
-            )
-            views.setViewVisibility(
-                R.id.progressWCWarning,
-                if (presentation.tone == WidgetPureRangeTone.WARNING) View.VISIBLE else View.GONE
-            )
-            views.setViewVisibility(
-                R.id.progressWCCritical,
-                if (presentation.tone == WidgetPureRangeTone.CRITICAL) View.VISIBLE else View.GONE
-            )
             val colorResource = if (!presentation.progressKnown) {
                 R.color.widget_on_surface
             } else {
@@ -140,6 +144,7 @@ class CompactControlWidget : AppWidgetProvider() {
             val color = ContextCompat.getColor(context, highContrastRangeColorResource(colorResource, highContrast))
             views.setTextColor(R.id.txtWCSocValue, color)
             views.setTextColor(R.id.txtWCSocUnit, color)
+            views.setTextColor(R.id.txtWCRange, color)
             views.setContentDescription(
                 R.id.compactRangeContainer,
                 "剩余电量 ${presentation.socLabel}%，续航 ${presentation.rangeLabel}"
@@ -154,17 +159,9 @@ class CompactControlWidget : AppWidgetProvider() {
         ) {
             views.setTextViewText(R.id.txtWCElectricRange, presentation.electricRangeLabel)
             views.setTextViewText(R.id.txtWCFuelRange, presentation.fuelRangeLabel)
-            views.setTextViewText(R.id.txtWCElectricSoc, presentation.electricSocLabel)
-            views.setTextViewText(R.id.txtWCFuelSoc, presentation.fuelSocLabel)
-            applyHybridProgress(
-                views,
-                presentation.electricProgress,
-                presentation.electricProgressKnown,
-                R.id.progressWCElectric,
-                R.id.progressWCElectricWarning,
-                R.id.progressWCElectricCritical
-            )
-            views.setProgressBar(R.id.progressWCFuel, 100, presentation.fuelProgress, false)
+            views.setTextViewText(R.id.txtWCElectricSoc, "· " + presentation.electricSocLabel)
+            views.setTextViewText(R.id.txtWCFuelSoc, "· " + presentation.fuelSocLabel)
+
             val electricColor = ContextCompat.getColor(
                 context,
                 highContrastRangeColorResource(
@@ -190,23 +187,6 @@ class CompactControlWidget : AppWidgetProvider() {
                 R.id.compactHybridRange,
                 "总续航 ${presentation.totalRangeLabel}，纯电 ${presentation.electricRangeLabel} ${presentation.electricSocLabel}，燃油 ${presentation.fuelRangeLabel} ${presentation.fuelSocLabel}"
             )
-        }
-
-        private fun applyHybridProgress(
-            views: RemoteViews,
-            progress: Int,
-            known: Boolean,
-            normalId: Int,
-            warningId: Int,
-            criticalId: Int
-        ) {
-            val tone = if (known) WidgetPureRangeToneMapper.fromSoc(progress) else WidgetPureRangeTone.NORMAL
-            views.setProgressBar(normalId, 100, progress, false)
-            views.setProgressBar(warningId, 100, progress, false)
-            views.setProgressBar(criticalId, 100, progress, false)
-            views.setViewVisibility(normalId, if (tone == WidgetPureRangeTone.NORMAL) View.VISIBLE else View.GONE)
-            views.setViewVisibility(warningId, if (tone == WidgetPureRangeTone.WARNING) View.VISIBLE else View.GONE)
-            views.setViewVisibility(criticalId, if (tone == WidgetPureRangeTone.CRITICAL) View.VISIBLE else View.GONE)
         }
 
         private fun hybridColorResource(progress: Int, known: Boolean): Int = when {
@@ -321,45 +301,6 @@ class CompactControlWidget : AppWidgetProvider() {
                 ContextCompat.getColor(
                     context,
                     if (highContrast) R.color.widget_range_track_high_contrast else R.color.widget_range_track
-                )
-            )
-            val tones = listOf(
-                (if (highContrast) R.color.widget_range_good_high_contrast else R.color.widget_range_good) to
-                    listOf(R.id.progressWCNormal, R.id.progressWCElectric),
-                (if (highContrast) R.color.widget_range_warning_high_contrast else R.color.widget_range_warning) to
-                    listOf(R.id.progressWCWarning, R.id.progressWCElectricWarning),
-                (if (highContrast) R.color.widget_range_critical_high_contrast else R.color.widget_range_critical) to
-                    listOf(R.id.progressWCCritical, R.id.progressWCElectricCritical)
-            )
-            tones.forEach { (colorResource, viewIds) ->
-                val tint = ColorStateList.valueOf(ContextCompat.getColor(context, colorResource))
-                viewIds.forEach { id ->
-                    views.setColorStateList(id, "setProgressTintList", tint)
-                    views.setColorStateList(id, "setProgressBackgroundTintList", track)
-                }
-            }
-            views.setColorStateList(
-                R.id.progressWCFuel,
-                "setProgressTintList",
-                ColorStateList.valueOf(
-                    ContextCompat.getColor(
-                        context,
-                        if (highContrast) R.color.widget_fuel_range_high_contrast else R.color.widget_fuel_range
-                    )
-                )
-            )
-            views.setColorStateList(
-                R.id.progressWCFuel,
-                "setProgressBackgroundTintList",
-                ColorStateList.valueOf(
-                    ContextCompat.getColor(
-                        context,
-                        if (highContrast) {
-                            R.color.widget_fuel_range_track_high_contrast
-                        } else {
-                            R.color.widget_fuel_range_track
-                        }
-                    )
                 )
             )
         }

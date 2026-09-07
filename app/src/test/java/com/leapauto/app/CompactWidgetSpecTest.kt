@@ -41,42 +41,20 @@ class CompactWidgetSpecTest {
         assertTrue(!layout.contains("android:id=\"@+id/btnWCRefresh\""))
         assertTrue(!provider.contains("ACTION_REFRESH"))
         assertTrue(!provider.contains("refreshPendingIntent"))
-        assertTrue(layout.contains("android:id=\"@+id/txtWCSocValue\""))
-        assertTrue(layout.contains("android:id=\"@+id/txtWCRange\""))
+        assertTrue(layout.contains("android:id=\"@+id/imgWCCar\""))
+        assertTrue(layout.contains("android:id=\"@+id/txtWCTitle\""))
         assertTrue(layout.contains("android:id=\"@+id/compactHybridRange\""))
-        assertTrue(!layout.contains("android:id=\"@+id/txtWCTotalRange\""))
         assertTrue(layout.contains("android:id=\"@+id/txtWCElectricRange\""))
         assertTrue(layout.contains("android:id=\"@+id/txtWCFuelRange\""))
-        assertTrue(layout.contains("android:id=\"@+id/progressWCElectric\""))
-        assertTrue(layout.contains("android:id=\"@+id/progressWCFuel\""))
-        assertTrue(layout.contains("android:id=\"@+id/compactHybridRange\"\n            android:layout_width=\"match_parent\"\n            android:layout_height=\"0dp\"\n            android:layout_marginTop=\"2dp\""))
-        assertTrue(!layout.contains("android:id=\"@+id/txtWCTotalRange\""))
-        assertTrue(!layout.contains("android:text=\"总续航\""))
-        assertTrue(layout.contains("android:id=\"@+id/compactRangeContainer\"\n            android:layout_width=\"match_parent\"\n            android:layout_height=\"0dp\"\n            android:layout_weight=\"1\"\n            android:gravity=\"center_vertical\"\n            android:orientation=\"vertical\""))
+        assertTrue(!layout.contains("android:id=\"@+id/progressWCElectric\""))
+        assertTrue(!layout.contains("android:id=\"@+id/progressWCFuel\""))
+        assertTrue(!layout.contains("android:id=\"@+id/progressWCNormal\""))
+        assertTrue(layout.contains("android:id=\"@+id/compactRangeContainer\""))
+        assertTrue(layout.contains("android:id=\"@+id/txtWCRange\""))
         assertTrue(layout.contains("android:id=\"@+id/txtWCSocValue\""))
-        assertTrue(layout.contains("android:textSize=\"34sp\""))
-        assertTrue(!layout.contains("android:textSize=\"22sp\""))
-        assertTrue(layout.contains("android:textSize=\"12sp\""))
-        assertTrue(layout.contains("android:textSize=\"9sp\""))
-        assertTrue(layout.contains("android:layout_width=\"12dp\"\n                            android:layout_height=\"14dp\""))
-        assertTrue(layout.contains("android:baselineAligned=\"false\"\n                android:orientation=\"vertical\""))
-        assertTrue(layout.contains("android:id=\"@+id/txtWCElectricRange\"\n                            android:layout_width=\"wrap_content\""))
-        assertTrue(layout.contains("android:id=\"@+id/txtWCFuelRange\"\n                            android:layout_width=\"wrap_content\""))
-        assertTrue(
-            layout.contains(
-                "android:id=\"@+id/compactPureProgress\"\n" +
-                    "            android:layout_width=\"match_parent\"\n" +
-                    "            android:layout_height=\"3dp\"\n" +
-                    "            android:layout_marginTop=\"2dp\"\n" +
-                    "            android:layout_marginBottom=\"4dp\""
-            )
-        )
-        assertTrue(layout.contains("android:layout_height=\"44dp\"\n            android:layout_marginTop=\"11dp\""))
-        assertTrue(!layout.contains("android:layout_marginTop=\"-4dp\""))
         assertTrue(layout.contains("android:id=\"@+id/btnWCLock\""))
         assertTrue(layout.contains("android:id=\"@+id/btnWCAc\""))
-        assertTrue(layout.contains("android:id=\"@+id/progressWCNormal\""))
-        assertTrue(layout.contains("android:layout_height=\"3dp\""))
+        assertTrue(layout.contains("android:layout_height=\"44dp\""))
         assertTrue(layout.contains("android:maxLines=\"1\""))
     }
 
@@ -202,16 +180,10 @@ class CompactWidgetSpecTest {
             "app/src/main/res/drawable/widget_compact_fuel_range_progress.xml"
         ).readText()
 
-        assertTrue(layout.contains("android:id=\"@+id/progressWCFuel\""))
-        assertTrue(
-            layout.contains(
-                "android:layout_height=\"3dp\"\n" +
-                    "                        android:layout_marginTop=\"1dp\">\n\n" +
-                    "                        <ProgressBar\n" +
-                    "                            android:id=\"@+id/progressWCFuel\""
-            )
-        )
-        assertTrue(layout.contains("android:id=\"@+id/progressWCFuel\"\n                            style=\"?android:attr/progressBarStyleHorizontal\"\n                            android:layout_width=\"match_parent\"\n                            android:layout_height=\"match_parent\""))
+        assertTrue(layout.contains("android:id=\"@+id/imgWCCar\""))
+        assertTrue(layout.contains("android:id=\"@+id/compactHybridRange\""))
+        assertTrue(layout.contains("android:id=\"@+id/txtWCElectricRange\""))
+        assertTrue(layout.contains("android:id=\"@+id/txtWCFuelRange\""))
         listOf(electric, fuel).forEach { drawable ->
             assertTrue(drawable.contains("android:id=\"@android:id/background\""))
             assertTrue(drawable.contains("android:shape=\"rectangle\""))

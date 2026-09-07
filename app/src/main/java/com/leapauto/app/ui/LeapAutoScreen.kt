@@ -1012,7 +1012,6 @@ private fun HomeContent(
                 state = energyState,
                 vehicleTotalMileage = status?.totalMileage,
                 vehicleModel = vehicleDisplayModel.ifBlank { vehicleModel },
-                onOpenHealthyCharging = onOpenHealthyCharging,
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(8.dp))
@@ -2284,21 +2283,41 @@ fun VehicleHero(
                                 critical = MaterialTheme.colorScheme.error
                             )
 
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.offset(y = (-3).dp)
+                            Column(
+                                modifier = Modifier
+                                    .padding(top = 2.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
-                                // 纯电微胶囊 (跟随纯电电量动态变色: 绿/橙/红)
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = electricColor.copy(alpha = 0.10f),
-                                    border = BorderStroke(0.5.dp, electricColor.copy(alpha = 0.35f))
+                                // 1. 一体化双段双拼能量微高光槽 (左纯电·右燃油，中间留微缝)
+                                Row(
+                                    modifier = Modifier.width(180.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    EnergyCapsuleProgressBar(
+                                        progress = chargeProgress(normalizedSoc),
+                                        color = electricColor,
+                                        isCharging = status?.chargeState == 1,
+                                        modifier = Modifier.weight(1f).height(4.5.dp)
+                                    )
+                                    EnergyCapsuleProgressBar(
+                                        progress = chargeProgress(status?.fuelSoc),
+                                        color = fuelColor,
+                                        isCharging = false,
+                                        modifier = Modifier.weight(1f).height(4.5.dp)
+                                    )
+                                }
+
+                                // 2. 纯净字符排版行 (彻底移除外框与底色药丸补丁，极度通透高级)
+                                Row(
+                                    modifier = Modifier.width(180.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // 纯电数据 (绿/橙/红变色)
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
                                         Icon(
                                             painter = painterResource(R.drawable.ic_hybrid_electric),
@@ -2307,24 +2326,23 @@ fun VehicleHero(
                                             tint = electricColor
                                         )
                                         Text(
-                                            text = "$elecMiles · $elecSoc",
+                                            text = "$elecMiles",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.SemiBold,
                                             color = electricColor
                                         )
+                                        Text(
+                                            text = "· $elecSoc",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = electricColor.copy(alpha = 0.85f),
+                                            fontSize = 10.sp
+                                        )
                                     }
-                                }
 
-                                // 燃油微胶囊 (跟随油量动态变色: 绿/橙/红)
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = fuelColor.copy(alpha = 0.10f),
-                                    border = BorderStroke(0.5.dp, fuelColor.copy(alpha = 0.35f))
-                                ) {
+                                    // 燃油数据 (橙黄/红变色)
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
                                         Icon(
                                             painter = painterResource(R.drawable.ic_hybrid_fuel),
@@ -2333,10 +2351,16 @@ fun VehicleHero(
                                             tint = fuelColor
                                         )
                                         Text(
-                                            text = "$fuelMiles · $fSoc",
+                                            text = "$fuelMiles",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.SemiBold,
                                             color = fuelColor
+                                        )
+                                        Text(
+                                            text = "· $fSoc",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = fuelColor.copy(alpha = 0.85f),
+                                            fontSize = 10.sp
                                         )
                                     }
                                 }
@@ -2737,16 +2761,12 @@ private fun QuickVehicleActions(
     var editing by rememberSaveable { mutableStateOf(false) }
     var windowMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var sunshadeMenuExpanded by rememberSaveable { mutableStateOf(false) }
-    var navigationMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var windowButtonTopLeft by remember { mutableStateOf(Offset.Zero) }
     var windowButtonWidth by remember { mutableStateOf(0f) }
     var windowButtonHeight by remember { mutableStateOf(0f) }
     var sunshadeButtonTopLeft by remember { mutableStateOf(Offset.Zero) }
     var sunshadeButtonWidth by remember { mutableStateOf(0f) }
     var sunshadeButtonHeight by remember { mutableStateOf(0f) }
-    var navigationButtonTopLeft by remember { mutableStateOf(Offset.Zero) }
-    var navigationButtonWidth by remember { mutableStateOf(0f) }
-    var navigationButtonHeight by remember { mutableStateOf(0f) }
     val trunkState = status?.trunkState ?: TrunkState.UNKNOWN
     val commandsPerPage = 4
     val availableCommands = remember(vehicleModel, status?.sentryMode, status?.batteryPreheatEnabled) {
@@ -2766,8 +2786,6 @@ private fun QuickVehicleActions(
             emptyList()
         }
         val extraCommands = allCommands.filterNot { it.name == "windowOpen" || it.name == "windowClose" }
-        val sentryLabel = if (status?.sentryMode == true) "关闭哨兵" else "开启哨兵"
-        val batteryPreheatLabel = if (status?.batteryPreheatEnabled == true) "关闭电池预热" else "开启电池预热"
         listOf(
             Cmd("unlock", "解锁", R.drawable.ic_phosphor_lock_open),
             Cmd("lock", "上锁", R.drawable.ic_phosphor_lock),
@@ -2775,9 +2793,8 @@ private fun QuickVehicleActions(
             Cmd("trunk", "开后备箱", R.drawable.ic_phosphor_trunk_open),
             *frunkCommands.toTypedArray(),
             *extraCommands.toTypedArray(),
-            Cmd("batteryPreheat", batteryPreheatLabel, R.drawable.ic_phosphor_battery_charging),
-            Cmd("sentry", sentryLabel, R.drawable.ic_sentry),
-            Cmd("navigate", "导航到爱车", R.drawable.ic_location_navigate)
+            Cmd("batteryPreheat", "电池预热", R.drawable.ic_phosphor_battery_charging),
+            Cmd("sentry", "哨兵模式", R.drawable.ic_sentry)
         )
     }
     var savedOrder by remember(vehicleVin, availableCommands) { mutableStateOf<List<String>?>(null) }
@@ -2800,16 +2817,6 @@ private fun QuickVehicleActions(
     val lockPresentation = VehicleHomeStatus.lockButtonPresentation(status?.locked)
     val windowOpen = status?.windowStatusAvailable == true && status.openWindows.isNotEmpty()
     val trunkOpen = trunkState == TrunkState.OPEN
-    val canNavigateToVehicle = locationSnapshot != null && VehicleLocationMapDomain.model(
-        snapshot = locationSnapshot,
-        summary = status?.locationSummary,
-        mapRequested = true
-    ).showMarker
-    val availableNavigationApps = if (navigationMenuExpanded) {
-        ExternalMapLauncher.availableApps(context, forNavigation = true)
-    } else {
-        emptyList()
-    }
     val pageCount = (orderedCommands.size + commandsPerPage - 1) / commandsPerPage
     val pagerState = rememberPagerState(pageCount = { pageCount })
 
@@ -2998,19 +3005,6 @@ private fun QuickVehicleActions(
                                     onClick = {
                                         if (!editing) {
                                             when (command.name) {
-                                                "navigate" -> {
-                                                    if (canNavigateToVehicle) {
-                                                        windowMenuExpanded = false
-                                                        sunshadeMenuExpanded = false
-                                                        navigationMenuExpanded = !navigationMenuExpanded
-                                                    } else {
-                                                        Toast.makeText(
-                                                            context,
-                                                            "暂无可信车辆位置，请先刷新车况",
-                                                            Toast.LENGTH_SHORT
-                                                        ).show()
-                                                    }
-                                                }
                                                 "trunk" -> {
                                                     when (trunkState) {
                                                         TrunkState.CLOSED -> onControl("trunkOpen")
@@ -3028,15 +3022,7 @@ private fun QuickVehicleActions(
                                             }
                                         }
                                     },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .onGloballyPositioned { coordinates ->
-                                            if (command.name == "navigate") {
-                                                navigationButtonTopLeft = coordinates.positionInWindow()
-                                                navigationButtonWidth = coordinates.size.width.toFloat()
-                                                navigationButtonHeight = coordinates.size.height.toFloat()
-                                            }
-                                        },
+                                    modifier = Modifier.weight(1f),
                                     onLongClick = if (!editing) ::openEditor else null
                                 )
                             }
@@ -3218,83 +3204,6 @@ private fun QuickVehicleActions(
                                 onControl("sunshadeClose")
                             }
                         )
-                    }
-                }
-            }
-        }
-
-        if (navigationMenuExpanded) {
-            val navigationApps = availableNavigationApps
-            if (navigationApps.isEmpty()) {
-                LaunchedEffect(Unit) {
-                    Toast.makeText(context, "未检测到可用的地图应用", Toast.LENGTH_SHORT).show()
-                    navigationMenuExpanded = false
-                }
-            } else {
-                Popup(
-                    popupPositionProvider = object : PopupPositionProvider {
-                        override fun calculatePosition(
-                            anchorBounds: IntRect,
-                            windowSize: IntSize,
-                            layoutDirection: LayoutDirection,
-                            popupContentSize: IntSize
-                        ): IntOffset {
-                            val menuWidth = popupContentSize.width
-                            val menuHeight = popupContentSize.height
-                            val buttonCenterX = (navigationButtonTopLeft.x + navigationButtonWidth / 2).roundToInt()
-                            val desiredX = buttonCenterX - menuWidth / 2
-                            val clampedX = desiredX.coerceIn(8, windowSize.width - menuWidth - 8)
-                            val spaceAbove = navigationButtonTopLeft.y.roundToInt()
-                            val y = if (menuHeight <= spaceAbove) {
-                                spaceAbove - menuHeight - 8
-                            } else {
-                                spaceAbove + navigationButtonHeight.roundToInt() + 8
-                            }
-                            return IntOffset(clampedX, y)
-                        }
-                    },
-                    onDismissRequest = { navigationMenuExpanded = false },
-                    properties = PopupProperties(focusable = true)
-                ) {
-                    Surface(
-                        modifier = Modifier.widthIn(min = 120.dp, max = 160.dp),
-                        shape = RoundedCornerShape(18.dp),
-                        tonalElevation = 2.dp,
-                        shadowElevation = 8.dp,
-                        color = MaterialTheme.glassSurface
-                    ) {
-                        Column {
-                            navigationApps.forEachIndexed { index, app ->
-                                QuickMenuAction(
-                                    label = app.displayName,
-                                    iconRes = R.drawable.ic_location_navigate,
-                                    onClick = {
-                                        navigationMenuExpanded = false
-                                        runCatching {
-                                            requireNotNull(locationSnapshot).location.let { location ->
-                                                ExternalMapLauncher.navigateToVehicle(
-                                                    context = context,
-                                                    app = app,
-                                                    latitude = location.latitude,
-                                                    longitude = location.longitude
-                                                )
-                                            }
-                                        }.onFailure {
-                                            Toast.makeText(context, "无法打开所选地图", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                )
-                                if (index < navigationApps.lastIndex) {
-                                    Box(
-                                        modifier = Modifier
-                                            .padding(horizontal = 14.dp)
-                                            .fillMaxWidth()
-                                            .height(1.dp)
-                                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -4132,7 +4041,6 @@ fun EnergyHomePagerCard(
     state: EnergyAnalyticsState,
     vehicleTotalMileage: String? = null,
     vehicleModel: String = "",
-    onOpenHealthyCharging: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val pagerState = rememberPagerState { EnergyHomePage.entries.size }
@@ -4159,41 +4067,11 @@ fun EnergyHomePagerCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = pageTitle,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.statusGood.copy(alpha = 0.12f),
-                        border = BorderStroke(0.5.dp, MaterialTheme.statusGood.copy(alpha = 0.35f)),
-                        modifier = Modifier.clickable(onClick = onOpenHealthyCharging)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_phosphor_battery_charging),
-                                contentDescription = null,
-                                modifier = Modifier.size(11.dp),
-                                tint = MaterialTheme.statusGood
-                            )
-                            Text(
-                                text = "充电上限",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.statusGood
-                            )
-                        }
-                    }
-                }
+                Text(
+                    text = pageTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
                 if (pagerState.currentPage == EnergyHomePage.WEEKLY_CONSUMPTION.ordinal) {
                     val rank = (state as? EnergyAnalyticsState.Success)?.data?.rankLabel
                     rank?.let {

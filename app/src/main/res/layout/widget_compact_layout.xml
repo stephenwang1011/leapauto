@@ -12,14 +12,15 @@
         android:background="@drawable/widget_card_background"
         android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:paddingStart="8dp"
-        android:paddingTop="6dp"
-        android:paddingEnd="8dp"
-        android:paddingBottom="6dp">
+        android:paddingStart="10dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="8dp">
 
+        <!-- 1. 顶部栏：车辆昵称/车型 (C16) -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="21dp"
+            android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -29,58 +30,148 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:ellipsize="end"
-                android:gravity="start|center_vertical"
                 android:maxLines="1"
+                android:shadowColor="@color/widget_text_shadow"
+                android:shadowDx="0"
+                android:shadowDy="0"
+                android:shadowRadius="1.5"
                 android:text="@string/widget_default_title"
                 android:textColor="@color/widget_on_surface"
-                android:textSize="13sp" />
+                android:textSize="13sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
-        <LinearLayout
-            android:id="@+id/compactRangeContainer"
+        <!-- 2. 上半部：精致微缩车模展厅 (C16) -->
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:gravity="center_vertical"
-            android:orientation="vertical"
-            tools:ignore="NestedWeights">
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="2dp">
 
-            <LinearLayout
+            <ImageView
+                android:id="@+id/imgWCCar"
                 android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter"
+                android:src="@drawable/vehicle_lafa5_liquid_silver" />
+        </FrameLayout>
+
+        <!-- 3. 中间部：纯净双能源数据胶囊/指示行 (告别生硬横条) -->
+        <!-- 增程版：左右并排双能源 -->
+        <LinearLayout
+            android:id="@+id/compactHybridRange"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <!-- 纯电微卡 -->
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:gravity="start|center_vertical"
+                android:layout_weight="1"
+                android:gravity="center"
                 android:orientation="horizontal">
 
-                <TextView
-                    android:id="@+id/txtWCSocValue"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:shadowColor="@color/widget_text_shadow"
-                    android:shadowDx="0"
-                    android:shadowDy="0"
-                    android:shadowRadius="1.5"
-                    android:text="@string/widget_unknown_value"
-                    android:textColor="@color/widget_on_surface"
-                    android:textSize="34sp" />
+                <ImageView
+                    android:id="@+id/imgWCElectricIcon"
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_hybrid_electric"
+                    android:tint="@color/widget_range_good" />
 
                 <TextView
-                    android:id="@+id/txtWCSocUnit"
+                    android:id="@+id/txtWCElectricRange"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="center_vertical"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginStart="3dp"
                     android:includeFontPadding="false"
                     android:maxLines="1"
                     android:shadowColor="@color/widget_text_shadow"
                     android:shadowDx="0"
                     android:shadowDy="0"
                     android:shadowRadius="1.5"
-                    android:text="@string/widget_percent_symbol"
-                    android:textColor="@color/widget_on_surface"
-                    android:textSize="15sp" />
+                    android:text="--km"
+                    android:textColor="@color/widget_range_good"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/txtWCElectricSoc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="2dp"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="· --%"
+                    android:textColor="@color/widget_range_good"
+                    android:textSize="10sp" />
             </LinearLayout>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="10dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:background="@color/widget_range_track" />
+
+            <!-- 燃油微卡 -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/imgWCFuelIcon"
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_hybrid_fuel"
+                    android:tint="@color/widget_range_warning" />
+
+                <TextView
+                    android:id="@+id/txtWCFuelRange"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="3dp"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:shadowColor="@color/widget_text_shadow"
+                    android:shadowDx="0"
+                    android:shadowDy="0"
+                    android:shadowRadius="1.5"
+                    android:text="--km"
+                    android:textColor="@color/widget_range_warning"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/txtWCFuelSoc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="2dp"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="· --%"
+                    android:textColor="@color/widget_range_warning"
+                    android:textSize="10sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 纯电版：居中大字或胶囊 -->
+        <LinearLayout
+            android:id="@+id/compactRangeContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
+            android:gravity="center"
+            android:orientation="horizontal">
 
             <TextView
                 android:id="@+id/txtWCRange"
@@ -92,235 +183,50 @@
                 android:shadowDx="0"
                 android:shadowDy="0"
                 android:shadowRadius="1.5"
-                android:text="@string/widget_unknown_range"
-                android:textColor="@color/widget_on_surface_variant"
-                android:textSize="14sp" />
-        </LinearLayout>
+                android:text="-- km"
+                android:textColor="@color/widget_range_good"
+                android:textSize="13sp"
+                android:textStyle="bold" />
 
-        <LinearLayout
-            android:id="@+id/compactHybridRange"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_marginTop="2dp"
-            android:layout_weight="1"
-            android:gravity="top"
-            android:orientation="vertical"
-            android:visibility="gone"
-            tools:ignore="NestedWeights">
-
-            <LinearLayout
-                android:layout_width="match_parent"
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:baselineAligned="false"
-                android:orientation="vertical">
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:text="·"
+                android:textColor="@color/widget_on_surface_variant"
+                android:textSize="12sp" />
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="1dp"
-                    android:orientation="vertical">
+            <TextView
+                android:id="@+id/txtWCSocValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:shadowColor="@color/widget_text_shadow"
+                android:shadowDx="0"
+                android:shadowDy="0"
+                android:shadowRadius="1.5"
+                android:text="--"
+                android:textColor="@color/widget_range_good"
+                android:textSize="13sp"
+                android:textStyle="bold" />
 
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <ImageView
-                            android:id="@+id/imgWCElectricIcon"
-                            android:layout_width="12dp"
-                            android:layout_height="14dp"
-                            android:contentDescription="@null"
-                            android:src="@drawable/ic_hybrid_electric"
-                            android:tint="@color/widget_range_good" />
-
-                        <TextView
-                            android:id="@+id/txtWCElectricRange"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="2dp"
-                            android:includeFontPadding="false"
-                            android:maxLines="1"
-                            android:shadowColor="@color/widget_text_shadow"
-                            android:shadowDx="0"
-                            android:shadowDy="0"
-                            android:shadowRadius="1.5"
-                            android:text="--km"
-                            android:textColor="@color/widget_range_good"
-                            android:textSize="12sp" />
-
-                        <TextView
-                            android:id="@+id/txtWCElectricSoc"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="1dp"
-                            android:layout_weight="1"
-                            android:gravity="end"
-                            android:includeFontPadding="false"
-                            android:maxLines="1"
-                            android:shadowColor="@color/widget_text_shadow"
-                            android:shadowDx="0"
-                            android:shadowDy="0"
-                            android:shadowRadius="1.5"
-                            android:text="--%"
-                            android:textColor="@color/widget_range_good"
-                            android:textSize="9sp" />
-                    </LinearLayout>
-
-                    <FrameLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="3dp"
-                        android:layout_marginTop="1dp">
-
-                        <ProgressBar
-                            android:id="@+id/progressWCElectric"
-                            style="?android:attr/progressBarStyleHorizontal"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:indeterminate="false"
-                            android:max="100"
-                            android:progressDrawable="@drawable/widget_pure_range_progress" />
-
-                        <ProgressBar
-                            android:id="@+id/progressWCElectricWarning"
-                            style="?android:attr/progressBarStyleHorizontal"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:indeterminate="false"
-                            android:max="100"
-                            android:progressDrawable="@drawable/widget_pure_range_warning_progress"
-                            android:visibility="gone" />
-
-                        <ProgressBar
-                            android:id="@+id/progressWCElectricCritical"
-                            style="?android:attr/progressBarStyleHorizontal"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:indeterminate="false"
-                            android:max="100"
-                            android:progressDrawable="@drawable/widget_pure_range_critical_progress"
-                            android:visibility="gone" />
-                    </FrameLayout>
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="1dp"
-                    android:orientation="vertical">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <ImageView
-                            android:id="@+id/imgWCFuelIcon"
-                            android:layout_width="12dp"
-                            android:layout_height="14dp"
-                            android:contentDescription="@null"
-                            android:src="@drawable/ic_hybrid_fuel"
-                            android:tint="@color/widget_range_warning" />
-
-                        <TextView
-                            android:id="@+id/txtWCFuelRange"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="2dp"
-                            android:includeFontPadding="false"
-                            android:maxLines="1"
-                            android:shadowColor="@color/widget_text_shadow"
-                            android:shadowDx="0"
-                            android:shadowDy="0"
-                            android:shadowRadius="1.5"
-                            android:text="--km"
-                            android:textColor="@color/widget_range_warning"
-                            android:textSize="12sp" />
-
-                        <TextView
-                            android:id="@+id/txtWCFuelSoc"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="1dp"
-                            android:layout_weight="1"
-                            android:gravity="end"
-                            android:includeFontPadding="false"
-                            android:maxLines="1"
-                            android:shadowColor="@color/widget_text_shadow"
-                            android:shadowDx="0"
-                            android:shadowDy="0"
-                            android:shadowRadius="1.5"
-                            android:text="--%"
-                            android:textColor="@color/widget_range_warning"
-                            android:textSize="9sp" />
-                    </LinearLayout>
-
-                    <FrameLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="3dp"
-                        android:layout_marginTop="1dp">
-
-                        <ProgressBar
-                            android:id="@+id/progressWCFuel"
-                            style="?android:attr/progressBarStyleHorizontal"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:indeterminate="false"
-                            android:max="100"
-                            android:progressDrawable="@drawable/widget_compact_fuel_range_progress" />
-                    </FrameLayout>
-
-                </LinearLayout>
-            </LinearLayout>
+            <TextView
+                android:id="@+id/txtWCSocUnit"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="%"
+                android:textColor="@color/widget_range_good"
+                android:textSize="11sp" />
         </LinearLayout>
 
-        <FrameLayout
-            android:id="@+id/compactPureProgress"
-            android:layout_width="match_parent"
-            android:layout_height="3dp"
-            android:layout_marginTop="2dp"
-            android:layout_marginBottom="4dp">
-
-            <ProgressBar
-                android:id="@+id/progressWCNormal"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:indeterminate="false"
-                android:max="100"
-                android:progress="0"
-                android:progressDrawable="@drawable/widget_pure_range_progress" />
-
-            <ProgressBar
-                android:id="@+id/progressWCWarning"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:indeterminate="false"
-                android:max="100"
-                android:progress="0"
-                android:progressDrawable="@drawable/widget_pure_range_warning_progress"
-                android:visibility="gone" />
-
-            <ProgressBar
-                android:id="@+id/progressWCCritical"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:indeterminate="false"
-                android:max="100"
-                android:progress="0"
-                android:progressDrawable="@drawable/widget_pure_range_critical_progress"
-                android:visibility="gone" />
-        </FrameLayout>
-
+        <!-- 4. 底部控车按钮（车锁 + 空调） -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="44dp"
-            android:layout_marginTop="11dp"
-            android:baselineAligned="false"
             android:gravity="center"
             android:orientation="horizontal">
 
@@ -328,10 +234,10 @@
                 android:id="@+id/btnWCLock"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_marginEnd="3dp"
                 android:layout_weight="1"
+                android:layout_marginEnd="5dp"
                 android:background="@drawable/widget_compact_action_neutral"
-                android:contentDescription="@string/widget_lock_unknown_description"
+                android:contentDescription="车锁"
                 android:gravity="center"
                 android:orientation="vertical">
 
@@ -341,8 +247,7 @@
                     android:layout_height="22dp"
                     android:contentDescription="@null"
                     android:scaleType="fitCenter"
-                    android:src="@drawable/ic_phosphor_lock"
-                    android:tint="@color/widget_on_surface_variant" />
+                    android:src="@drawable/ic_phosphor_lock" />
 
                 <TextView
                     android:id="@+id/txtWCLock"
@@ -360,9 +265,10 @@
                 android:id="@+id/btnWCAc"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_marginStart="3dp"
                 android:layout_weight="1"
+                android:layout_marginStart="5dp"
                 android:background="@drawable/widget_compact_action_neutral"
+                android:clipChildren="false"
                 android:contentDescription="@string/widget_ac_unknown_description"
                 android:gravity="center"
                 android:orientation="vertical">
