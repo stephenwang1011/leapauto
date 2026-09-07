@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 续航数字与km同排加粗展示，km紧跟在数字后方并在底部平齐贴地\n" +
-        "2. 核心数据组整体上提5dp，将视觉间距收紧至精致的7~8dp呼吸感\n" +
-        "3. 换装通用标准空心水滴地图图钉矢量图标，位置信息与图标统一调整为沉稳黑"
+        "1. 续航指标间距极致收敛：大数字与下方电量进度条间隙收紧至3~4dp，排版极度紧致一体\n" +
+        "2. 续航数字与km同排加粗展示，km紧跟在数字后方并在底部平齐贴地\n" +
+        "3. 纯电续航与单位km全面联动电量变色逻辑（绿/橙/红），与进度条及百分比统一"
 }

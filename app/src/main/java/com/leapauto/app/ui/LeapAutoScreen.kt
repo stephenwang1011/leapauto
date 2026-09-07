@@ -2153,13 +2153,13 @@ fun VehicleHero(
                         maxLines = 1
                     )
 
-                    // 核心数据组整体上提 5dp，将视觉间隙收紧至精致的 7~8dp
+                    // 核心数据组整体上提，大字与下方电量收紧至精致的 3~4dp 间隙
                     val mileageDisplayColor = if (isRangeExtender) MaterialTheme.colorScheme.onSurface else rangeColor
                     val unitDisplayColor = if (isRangeExtender) MaterialTheme.colorScheme.onSurfaceVariant else rangeColor
 
                     Column(
                         modifier = Modifier.offset(y = (-5).dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        verticalArrangement = Arrangement.spacedBy(0.dp)
                     ) {
                         // 公里数大字 + 紧随其后的 km 单位
                         Row(
@@ -2169,7 +2169,7 @@ fun VehicleHero(
                             Text(
                                 text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
                                 fontSize = 32.sp,
-                                lineHeight = 34.sp,
+                                lineHeight = 30.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = mileageDisplayColor,
                                 maxLines = 1
@@ -2180,11 +2180,11 @@ fun VehicleHero(
                                 lineHeight = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = unitDisplayColor,
-                                modifier = Modifier.padding(bottom = 2.5.dp)
+                                modifier = Modifier.padding(bottom = 2.dp)
                             )
                         }
 
-                        // 下方进度条与电量百分比 / 增程双胶囊
+                        // 下方进度条与电量百分比 / 增程双胶囊 (向上贴紧大数字至 3~4dp)
                         if (isRangeExtender) {
                             val elecMiles = status?.electricMileage?.trim()?.takeIf { it.isNotEmpty() } ?: "--"
                             val elecSoc = VehicleStatusMapper.displayPreciseSoc(
@@ -2204,7 +2204,8 @@ fun VehicleHero(
 
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.offset(y = (-3).dp)
                             ) {
                                 // 纯电微胶囊 (跟随纯电电量动态变色: 绿/橙/红)
                                 Surface(
@@ -2262,7 +2263,8 @@ fun VehicleHero(
                             val electricSocLabel = VehicleHomeStatus.resolvedSocLabel(status?.preciseSoc, status?.soc)
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.offset(y = (-3).dp)
                             ) {
                                 EnergyCapsuleProgressBar(
                                     progress = chargeProgress(normalizedSoc),
