@@ -1144,7 +1144,7 @@ class LeapmotorApi(private val session: Session) {
             "startTime" to startTime,
             "endTime" to endTime
         )
-        return gatewayFetch(url, method = "POST", params = params, query = params, jsonBody = JSONObject(params))
+        return gatewayFetch(url, method = "POST", params = params, formBody = params)
     }
 
     /**
@@ -1163,7 +1163,7 @@ class LeapmotorApi(private val session: Session) {
             "state" to stateInt.toString(),
             "startTime" to startTime
         )
-        return gatewayFetch(url, method = "POST", params = params, query = params, jsonBody = JSONObject(params))
+        return gatewayFetch(url, method = "POST", params = params, formBody = params)
     }
 
     // ---------------------------------------------------------------- 内部
