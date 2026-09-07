@@ -1136,11 +1136,18 @@ class LeapmotorApi(private val session: Session) {
         val route = ensureRoute()
         val url = "${route.appRegion}/carownerservice/v3/api/appremotectl/appointment"
         val stateInt = if (enabled) 1 else 0
+        val stateJson = JSONObject().apply {
+            put("startTime", startTime)
+            put("endTime", endTime)
+            put("state", stateInt)
+            put("status", stateInt)
+            put("repeat", "1,2,3,4,5,6,7")
+        }
         val params = mapOf(
             "carvin" to session.selectedVin,
             "vin" to session.selectedVin,
             "cmdid" to "361",
-            "state" to stateInt.toString(),
+            "state" to stateJson.toString(),
             "startTime" to startTime,
             "endTime" to endTime
         )
@@ -1156,12 +1163,30 @@ class LeapmotorApi(private val session: Session) {
         val route = ensureRoute()
         val url = "${route.appRegion}/carownerservice/v3/api/appremotectl/appointment"
         val stateInt = if (enabled) 1 else 0
+        val stateJson = JSONObject().apply {
+            put("startTime", startTime)
+            put("state", stateInt)
+            put("status", stateInt)
+            put("repeat", "1,2,3,4,5,6,7")
+        }
         val params = mapOf(
             "carvin" to session.selectedVin,
             "vin" to session.selectedVin,
             "cmdid" to "161",
-            "state" to stateInt.toString(),
+            "state" to stateJson.toString(),
             "startTime" to startTime
+        )
+        return gatewayFetch(url, method = "POST", params = params, formBody = params)
+    }
+
+    /** 查询车辆当前已设置的预约任务。 */
+    fun getAppointment(): JSONObject {
+        requireVin()
+        val route = ensureRoute()
+        val url = "${route.appRegion}/carownerservice/v3/api/appremotectl/getappointment"
+        val params = mapOf(
+            "carvin" to session.selectedVin,
+            "vin" to session.selectedVin
         )
         return gatewayFetch(url, method = "POST", params = params, formBody = params)
     }
