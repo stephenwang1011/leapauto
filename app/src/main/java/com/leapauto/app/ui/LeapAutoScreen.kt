@@ -2188,55 +2188,68 @@ fun VehicleHero(
                         val fuelMiles = status?.fuelMileage?.trim()?.takeIf { it.isNotEmpty() } ?: "--"
                         val fSoc = VehicleStatusMapper.displayPreciseSoc(status?.fuelSoc) ?: "--"
 
+                        val electricColor = rangeColor
+                        val fuelColor = rangeColorForSoc(
+                            soc = status?.fuelSoc,
+                            fallback = MaterialTheme.colorScheme.onSurfaceVariant,
+                            normal = MaterialTheme.statusGood,
+                            warning = MaterialTheme.statusWarn,
+                            critical = MaterialTheme.colorScheme.error
+                        )
+
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.padding(top = 1.dp)
                         ) {
+                            // 纯电微胶囊 (跟随纯电电量动态变色: 绿/橙/红)
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.statusGood.copy(alpha = 0.10f),
-                                border = BorderStroke(0.5.dp, MaterialTheme.statusGood.copy(alpha = 0.35f))
+                                color = electricColor.copy(alpha = 0.10f),
+                                border = BorderStroke(0.5.dp, electricColor.copy(alpha = 0.35f))
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(3.dp)
                                 ) {
-                                    Image(
+                                    Icon(
                                         painter = painterResource(R.drawable.ic_hybrid_electric),
                                         contentDescription = null,
-                                        modifier = Modifier.size(11.dp)
+                                        modifier = Modifier.size(11.dp),
+                                        tint = electricColor
                                     )
                                     Text(
                                         text = "$elecMiles · $elecSoc",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.statusGood
+                                        color = electricColor
                                     )
                                 }
                             }
 
+                            // 燃油微胶囊 (跟随油量动态变色: 绿/橙/红)
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.statusWarn.copy(alpha = 0.10f),
-                                border = BorderStroke(0.5.dp, MaterialTheme.statusWarn.copy(alpha = 0.35f))
+                                color = fuelColor.copy(alpha = 0.10f),
+                                border = BorderStroke(0.5.dp, fuelColor.copy(alpha = 0.35f))
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(3.dp)
                                 ) {
-                                    Image(
+                                    Icon(
                                         painter = painterResource(R.drawable.ic_hybrid_fuel),
                                         contentDescription = null,
-                                        modifier = Modifier.size(11.dp)
+                                        modifier = Modifier.size(11.dp),
+                                        tint = fuelColor
                                     )
                                     Text(
                                         text = "$fuelMiles · $fSoc",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.statusWarn
+                                        color = fuelColor
                                     )
                                 }
                             }
