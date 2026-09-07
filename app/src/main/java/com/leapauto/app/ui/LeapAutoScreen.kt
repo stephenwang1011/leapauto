@@ -4865,12 +4865,16 @@ fun ClimateControlContent(
     }
     var editedDefogging by rememberSaveable { mutableStateOf(false) }
     var editedOutletName by rememberSaveable { mutableStateOf(AirOutlet.ALL.name) }
+    var editedCircle by rememberSaveable {
+        mutableStateOf(AirCircle.fromTelemetryValue(status?.recirculationMode) ?: AirCircle.INNER)
+    }
     var settingsDirty by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(
         status?.acSetting,
         status?.acAirVolume,
         status?.windshieldDefrost,
+        status?.recirculationMode,
         hvacCapability
     ) {
         if (!settingsDirty) {
@@ -4881,28 +4885,27 @@ fun ClimateControlContent(
                 ?.coerceIn(fanRange)
                 ?: 3.coerceIn(fanRange)
             editedDefogging = status?.windshieldDefrost ?: false
+            AirCircle.fromTelemetryValue(status?.recirculationMode)?.let {
+                editedCircle = it
+            }
         }
     }
 
-    val currentCircle = AirCircle.fromTelemetryValue(status?.recirculationMode)
-    val detailedSettingsEnabled = actionsEnabled && currentCircle != null
-
-    fun currentCommand(operation: HvacOperation): AirConditioningCommand? {
-        val circle = currentCircle ?: return null
+    fun currentCommand(operation: HvacOperation): AirConditioningCommand {
         return AirConditioningCommand(
             operation = operation,
             temperatureC = editedTemperature,
             capability = hvacCapability,
             windLevel = editedWindLevel,
-            circle = circle,
+            circle = editedCircle,
             windshieldDefogging = editedDefogging,
             outlet = AirOutlet.valueOf(editedOutletName)
         )
     }
 
     fun submitSettings(operation: HvacOperation) {
-        if (!detailedSettingsEnabled) return
-        val command = currentCommand(operation) ?: return
+        if (!actionsEnabled) return
+        val command = currentCommand(operation)
         settingsDirty = false
         onApplyClimateSettings(command)
     }
@@ -4926,22 +4929,29 @@ fun ClimateControlContent(
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.glassSurface,
                 contentColor = MaterialTheme.colorScheme.onSurface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
                 shadowElevation = 0.dp
             ) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        val tempLabel = if (status?.acSettingRight != null) {
+                            "主 ${status.acSetting ?: "--"} · 副 ${status.acSettingRight}"
+                        } else {
+                            climateWholeNumber(status?.acSetting)?.let(::displayClimateTemperature) ?: "--"
+                        }
                         ClimateStatusItem(
-                            "当前设定温度",
-                            climateWholeNumber(status?.acSetting)?.let(::displayClimateTemperature) ?: "--",
+                            "设定温度",
+                            tempLabel,
                             Modifier.weight(1f)
                         )
                         ClimateStatusItem("车内温度", status?.indoorTemp ?: "--", Modifier.weight(1f))
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        ClimateStatusItem("风量", displayClimateFanLevel(status?.acAirVolume), Modifier.fillMaxWidth())
+                        ClimateStatusItem("当前风量", displayClimateFanLevel(status?.acAirVolume), Modifier.weight(1f))
+                        ClimateStatusItem("当前循环", AirCircle.fromTelemetryValue(status?.recirculationMode)?.displayLabel ?: "--", Modifier.weight(1f))
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        ClimateStatusItem("空调开关", climateBooleanLabel(status?.acSwitch), Modifier.weight(1f))
+                        ClimateStatusItem("空调总开关", climateBooleanLabel(status?.acSwitch), Modifier.weight(1f))
                         ClimateStatusItem("后窗加热", when (status?.rearWindowHeating) {
                             true -> "已开启"
                             false -> "未开启"
@@ -4956,9 +4966,11 @@ fun ClimateControlContent(
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.glassSurface,
                 contentColor = MaterialTheme.colorScheme.onSurface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
                 shadowElevation = 0.dp
             ) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                    // 1. 温度滑块
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("温度设定", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -4971,12 +4983,14 @@ fun ClimateControlContent(
                                 settingsDirty = true
                             },
                             onValueChangeFinished = {},
-                            enabled = detailedSettingsEnabled,
+                            enabled = actionsEnabled,
                             valueRange = hvacCapability.temperatureMinC.toFloat()..hvacCapability.temperatureMaxC.toFloat(),
                             steps = (hvacCapability.temperatureMaxC - hvacCapability.temperatureMinC - 1).coerceAtLeast(0),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
+
+                    // 2. 风量滑块
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("风量", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -4990,7 +5004,7 @@ fun ClimateControlContent(
                                     settingsDirty = true
                                 },
                                 onValueChangeFinished = {},
-                                enabled = detailedSettingsEnabled,
+                                enabled = actionsEnabled,
                                 valueRange = fanRange.first.toFloat()..fanRange.last.toFloat(),
                                 steps = (fanRange.last - fanRange.first - 1).coerceAtLeast(0),
                                 modifier = Modifier.fillMaxWidth()
@@ -4999,15 +5013,85 @@ fun ClimateControlContent(
                             Text("当前车型仅支持该风量挡位", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+
+                    // 3. 内外循环分段切换
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("循环模式", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                if (editedCircle == AirCircle.INNER) "内循环" else "外循环",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (editedCircle == AirCircle.INNER) MaterialTheme.colorScheme.primary else MaterialTheme.statusWarn
+                            )
+                        }
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                selected = editedCircle == AirCircle.INNER,
+                                onClick = {
+                                    editedCircle = AirCircle.INNER
+                                    settingsDirty = true
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                label = { Text("内循环 (速冷/隔绝尾气)", style = MaterialTheme.typography.labelSmall) }
+                            )
+                            SegmentedButton(
+                                selected = editedCircle == AirCircle.OUTER,
+                                onClick = {
+                                    editedCircle = AirCircle.OUTER
+                                    settingsDirty = true
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                label = { Text("外循环 (引入新风)", style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+
+                    // 4. 出风方向分段切换
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("出风方向", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                if (editedOutletName == AirOutlet.ALL.name) "全车出风" else "前风挡除雾出风",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                selected = editedOutletName == AirOutlet.ALL.name,
+                                onClick = {
+                                    editedOutletName = AirOutlet.ALL.name
+                                    editedDefogging = false
+                                    settingsDirty = true
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                label = { Text("全车环绕出风", style = MaterialTheme.typography.labelSmall) }
+                            )
+                            SegmentedButton(
+                                selected = editedOutletName == AirOutlet.WINDSHIELD.name,
+                                onClick = {
+                                    editedOutletName = AirOutlet.WINDSHIELD.name
+                                    editedDefogging = true
+                                    settingsDirty = true
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                label = { Text("前风挡除雾", style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+
                     if (settingsDirty) {
                         Button(
                             onClick = { submitSettings(HvacOperation.ON) },
-                            enabled = detailedSettingsEnabled,
+                            enabled = actionsEnabled,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("应用设置")
+                            Text("应用空调设置")
                         }
                     }
+
                     ClimateSegmentedSetting(
                         title = "快捷预设",
                         options = listOf(
@@ -5030,6 +5114,124 @@ fun ClimateControlContent(
                         }
                     )
                 }
+            }
+
+            // ====== 座舱舒适状态面板 (座椅与方向盘遥测) ======
+            val hasComfortTelemetry = status?.driverSeatHeating != null ||
+                status?.driverSeatVentilation != null ||
+                status?.passengerSeatHeating != null ||
+                status?.passengerSeatVentilation != null ||
+                status?.steeringWheelHeating != null
+
+            if (hasComfortTelemetry) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.glassSurface,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                    shadowElevation = 0.dp
+                ) {
+                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text("座舱舒适状态", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            ComfortSeatStatusItem(
+                                seatLabel = "主驾座椅",
+                                heatLevel = status?.driverSeatHeating,
+                                ventLevel = status?.driverSeatVentilation,
+                                modifier = Modifier.weight(1f)
+                            )
+                            ComfortSeatStatusItem(
+                                seatLabel = "副驾座椅",
+                                heatLevel = status?.passengerSeatHeating,
+                                ventLevel = status?.passengerSeatVentilation,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (status?.steeringWheelHeating != null) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.glassInsetSurface)
+                                    .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("方向盘加热", style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    if (status.steeringWheelHeating == true) "♨️ 加热中" else "未开启",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (status.steeringWheelHeating == true) MaterialTheme.statusWarn else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComfortSeatStatusItem(
+    seatLabel: String,
+    heatLevel: Int?,
+    ventLevel: Int?,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.glassInsetSurface,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(seatLabel, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("♨️ 加热", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = when (heatLevel) {
+                        null -> "--"
+                        0 -> "关闭"
+                        1 -> "1 挡"
+                        2 -> "2 挡"
+                        3 -> "3 挡"
+                        else -> "$heatLevel 挡"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (heatLevel != null && heatLevel > 0) MaterialTheme.statusWarn else MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("❄️ 通风", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = when (ventLevel) {
+                        null -> "--"
+                        0 -> "关闭"
+                        1 -> "1 挡"
+                        2 -> "2 挡"
+                        3 -> "3 挡"
+                        else -> "$ventLevel 挡"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (ventLevel != null && ventLevel > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
             }
         }
     }

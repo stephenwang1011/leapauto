@@ -75,7 +75,13 @@ data class VehicleStatus(
     val passengerDoorOpen: Boolean = false,
     val leftRearDoorOpen: Boolean = false,
     val rightRearDoorOpen: Boolean = false,
-    val anyDoorOpen: Boolean = false
+    val anyDoorOpen: Boolean = false,
+    val driverSeatHeating: Int? = null,
+    val driverSeatVentilation: Int? = null,
+    val passengerSeatHeating: Int? = null,
+    val passengerSeatVentilation: Int? = null,
+    val steeringWheelHeating: Boolean? = null,
+    val acSettingRight: String? = null
 )
 
 data class TireStatus(
@@ -1681,6 +1687,7 @@ class MainActivity : ComponentActivity() {
             locked = m.optBool("driverDoorLockStatus"),
             acSwitch = m.optBool("acSwitch"),
             acSetting = formatClimateSetting(m.opt("acSetting")),
+            acSettingRight = formatClimateSetting(m.opt("acSettingRight")),
             acCoolingAndHeating = m.opt("acCoolingAndHeating")?.toString()?.toIntOrNull(),
             climateMode = m.opt("climateMode")?.toString()?.toIntOrNull(),
             acOperateMode = m.opt("acOperateMode")?.toString()?.toIntOrNull(),
@@ -1707,7 +1714,12 @@ class MainActivity : ComponentActivity() {
             anyDoorOpen = (m.optBool("lbcmDriverDoorStatus") == true) ||
                 (m.optBool("rbcmDriverDoorStatus") == true) ||
                 (m.optBool("lbcmLeftRearDoorStatus") == true) ||
-                (m.optBool("rbcmRightRearDoorStatus") == true)
+                (m.optBool("rbcmRightRearDoorStatus") == true),
+            driverSeatHeating = m.opt("driverSeatHeating")?.toString()?.toIntOrNull(),
+            driverSeatVentilation = m.opt("driverSeatVentilation")?.toString()?.toIntOrNull(),
+            passengerSeatHeating = m.opt("passengerSeatHeating")?.toString()?.toIntOrNull(),
+            passengerSeatVentilation = m.opt("passengerSeatVentilation")?.toString()?.toIntOrNull(),
+            steeringWheelHeating = m.optBool("steeringWheelHeating")
         )
     }
 
