@@ -767,23 +767,67 @@ class MainActivity : ComponentActivity() {
         val vin = session.selectedVin
         sessionStore.saveHealthyChargeLimit(vin, targetSoc)
         healthyChargeLimitSoc = targetSoc
+        val started = System.currentTimeMillis()
         worker.execute {
             try {
                 val api = LeapmotorApi(session)
                 val resp = api.setHealthyCharging(enabled, targetSoc)
+                val elapsed = System.currentTimeMillis() - started
                 val code = resp.optInt("code", resp.optInt("result", -1))
                 val msg = resp.optString("msg", resp.optString("message", ""))
+
+                ErrorLogs.repository.record(
+                    ErrorLogEntry(
+                        timestampMs = System.currentTimeMillis(),
+                        category = if (code == 200 || code == 0) ErrorLogCategory.API_FAILURE else ErrorLogCategory.CONTROL_FAILURE,
+                        stage = "healthy_charging_control",
+                        httpStatus = if (code != -1) code else null,
+                        durationMs = elapsed,
+                        retryCount = 0,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        message = buildString {
+                            appendLine("接口调用: setHealthyCharging")
+                            appendLine("VIN: $vin")
+                            appendLine("下发参数: enabled=$enabled, targetSoc=$targetSoc")
+                            appendLine("状态码: code=$code, msg=$msg")
+                            appendLine("服务端完整返回:")
+                            append(resp.toString(2))
+                        }
+                    )
+                )
+
                 mainHandler.post {
                     if (code == 200 || code == 0) {
                         Toast.makeText(this@MainActivity, "健康充电已下发：限额 ${targetSoc}%", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(this@MainActivity, "已保存到本地 (${msg.ifBlank { "已同步网关" }})", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "发生错误: ${msg.ifBlank { "code=$code" }} (已记录诊断日志)", Toast.LENGTH_LONG).show()
                     }
                     refreshStatus()
                 }
             } catch (e: Exception) {
+                val elapsed = System.currentTimeMillis() - started
+                val apiError = e as? ApiException
+                ErrorLogs.repository.record(
+                    ErrorLogEntry(
+                        timestampMs = System.currentTimeMillis(),
+                        category = ErrorLogCategory.API_FAILURE,
+                        stage = "healthy_charging_control",
+                        httpStatus = apiError?.httpStatus,
+                        durationMs = elapsed,
+                        retryCount = 0,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        message = buildString {
+                            appendLine("接口调用异常: setHealthyCharging")
+                            appendLine("VIN: $vin")
+                            appendLine("下发参数: enabled=$enabled, targetSoc=$targetSoc")
+                            appendLine("异常信息: ${e.message ?: e.toString()}")
+                            appendLine("异常类型: ${e.javaClass.name}")
+                            appendLine("异常堆栈:\n${e.stackTraceToString().take(1200)}")
+                        }
+                    )
+                )
                 mainHandler.post {
-                    Toast.makeText(this@MainActivity, "已保存在本地 (网关: ${e.message ?: "离线"})", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "发生错误: ${e.message ?: "网络异常"} (已写入诊断日志)", Toast.LENGTH_LONG).show()
                 }
             }
         }

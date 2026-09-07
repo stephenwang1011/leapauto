@@ -6,7 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 新增【健康充电上限与电池健康管理】底部毛玻璃抽屉：点击主页续航电量或充电卡片即刻弹出\n" +
-        "2. 支持50%~100%滑块与80%/90%/100%常用档位快捷点选，结合健康充电开关一键下发到车辆\n" +
-        "3. 主界面排版架构零变动，新增实时动力电池工况透视与官方三元锂/磷酸铁锂养护指南"
+        "1. 增强健康充电控制接口诊断日志追踪：发生异常或响应失败时自动记录入【设置 -> 诊断日志】\n" +
+        "2. 记录请求参数、HTTP状态码与服务端原始完整返回，支持一键复制分析"
 }
