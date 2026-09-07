@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<animated-rotate xmlns:android="http://schemas.android.com/apk/res/android"
-    android:drawable="@drawable/ic_widget_ac_snowflake_heating"
-    android:pivotX="50%"
-    android:pivotY="50%" />
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_widget_ac_snowflake_heating">
+    <target
+        android:name="snowflakeGroup"
+        android:animation="@animator/snowflake_rotation_3000" />
+</animated-vector>
