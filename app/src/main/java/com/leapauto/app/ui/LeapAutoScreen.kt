@@ -4591,19 +4591,6 @@ fun ClimateOverviewCard(
     controlBusy: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val isAcRunning = status?.acSwitch == true
-    val infiniteTransition = rememberInfiniteTransition(label = "acRunningRotation")
-    val animatedAngle by infiniteTransition.animateFloat(
-        initialValue = ClimateIconRotationSpec.START_DEGREES,
-        targetValue = ClimateIconRotationSpec.END_DEGREES,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = ClimateIconRotationSpec.ROTATION_DURATION_MS, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "acRotationAngle"
-    )
-    val rotationAngle = ClimateIconRotationSpec.rotationAngle(isAcRunning, animatedAngle)
-
     val temperatureTarget = Commands.acTemperatureTarget(status?.acSetting)
     val quickToggle = HomeClimateTogglePresentationMapper.from(status?.acSwitch, controlBusy)
     val quickToggleCommand = quickToggle.command
@@ -4616,8 +4603,23 @@ fun ClimateOverviewCard(
     val temperatureColor = when (climateTone) {
         ClimateTemperatureTone.COOLING -> MaterialTheme.colorScheme.primary
         ClimateTemperatureTone.HEATING -> MaterialTheme.statusWarn
+        ClimateTemperatureTone.VENTILATION -> MaterialTheme.statusGood
         ClimateTemperatureTone.DEFAULT -> MaterialTheme.colorScheme.onSurface
     }
+
+    val isAcRunning = status?.acSwitch == true && climateTone != ClimateTemperatureTone.DEFAULT
+    val infiniteTransition = rememberInfiniteTransition(label = "acRunningRotation")
+    val animatedAngle by infiniteTransition.animateFloat(
+        initialValue = ClimateIconRotationSpec.START_DEGREES,
+        targetValue = ClimateIconRotationSpec.END_DEGREES,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = ClimateIconRotationSpec.ROTATION_DURATION_MS, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "acRotationAngle"
+    )
+    val rotationAngle = ClimateIconRotationSpec.rotationAngle(isAcRunning, animatedAngle)
+
     val acStateLabel = when (status?.acSwitch) {
         true -> "ON"
         false -> "OFF"
@@ -4650,6 +4652,12 @@ fun ClimateOverviewCard(
             ClimateTemperatureTone.HEATING -> Brush.horizontalGradient(
                 listOf(
                     MaterialTheme.statusWarn.copy(alpha = 0.06f),
+                    Color.Transparent
+                )
+            )
+            ClimateTemperatureTone.VENTILATION -> Brush.horizontalGradient(
+                listOf(
+                    MaterialTheme.statusGood.copy(alpha = 0.06f),
                     Color.Transparent
                 )
             )

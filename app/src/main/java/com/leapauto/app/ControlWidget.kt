@@ -34,15 +34,15 @@ class ControlWidget : AppWidgetProvider() {
 
     companion object {
         /** 在不重建布局的前提下，把控车进度回写到所有桌面插件实例。 */
-        fun showControlStatus(context: Context, text: String, acEnabled: Boolean? = null) {
-            CompactControlWidget.showControlStatus(context, acEnabled)
+        fun showControlStatus(context: Context, text: String, acEnabled: Boolean? = null, acTone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT) {
+            CompactControlWidget.showControlStatus(context, acEnabled, acTone)
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, ControlWidget::class.java))
             if (ids.isEmpty()) return
             val update = baseViews(context).apply {
                 setTextViewText(R.id.txtWUpdated, text)
                 if (acEnabled != null) {
-                    applyAcPresentation(context, this, acEnabled)
+                    applyAcPresentation(context, this, acEnabled, acTone)
                 }
             }
             manager.partiallyUpdateAppWidget(ids, update)
@@ -212,7 +212,7 @@ class ControlWidget : AppWidgetProvider() {
             }
             setOnClickPendingIntent(R.id.widgetRoot, openAppPendingIntent(context))
             applyLockPresentation(context, this, snapshot?.locked)
-            applyAcPresentation(context, this, snapshot?.acEnabled)
+            applyAcPresentation(context, this, snapshot?.acEnabled, snapshot?.acTone ?: ClimateTemperatureTone.DEFAULT)
             applyTrunkPresentation(context, this, snapshot?.trunkState ?: TrunkState.UNKNOWN)
             applySentryPresentation(context, this, snapshot?.sentryEnabled)
         }
@@ -249,7 +249,14 @@ class ControlWidget : AppWidgetProvider() {
             applyPureRangeTone(context, views, soc, config.powerType)
             setWidgetStatusText(context, views, WidgetStatusMapper.presentation(displayStatus, carType))
             applyLockPresentation(context, views, WidgetStatusMapper.locked(displayStatus))
-            applyAcPresentation(context, views, WidgetAcMapper.state(displayStatus))
+            val acEnabled = WidgetAcMapper.state(displayStatus)
+            val acTone = ClimateTemperatureToneResolver.tone(
+                acEnabled = acEnabled,
+                coolingAndHeating = displayStatus.optInt("acCoolingAndHeating", displayStatus.optInt("coolingAndHeating", -1)).takeIf { it != -1 },
+                climateMode = displayStatus.optInt("climateMode", -1).takeIf { it != -1 },
+                targetTemperature = displayStatus.opt("acSetting")?.toString()?.toIntOrNull()
+            )
+            applyAcPresentation(context, views, acEnabled, acTone)
             applyTrunkPresentation(context, views, TrunkStateMapper.fromSignal(displayStatus.opt("bbcmBackDoorStatus")))
             applySentryPresentation(context, views, WidgetSentryMapper.state(displayStatus))
         }
@@ -295,14 +302,19 @@ class ControlWidget : AppWidgetProvider() {
             )
             views.setTextViewText(R.id.txtWUpdated, snapshot.updated)
             applyLockPresentation(context, views, snapshot.locked)
-            applyAcPresentation(context, views, snapshot.acEnabled)
+            applyAcPresentation(context, views, snapshot.acEnabled, snapshot.acTone)
             applyTrunkPresentation(context, views, snapshot.trunkState)
             applySentryPresentation(context, views, snapshot.sentryEnabled)
         }
 
         /** Unknown telemetry must not be treated as a safe state for a control command. */
-        private fun applyAcPresentation(context: Context, views: RemoteViews, acEnabled: Boolean?) {
-            val presentation = WidgetAcMapper.presentation(acEnabled)
+        private fun applyAcPresentation(
+            context: Context,
+            views: RemoteViews,
+            acEnabled: Boolean?,
+            tone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT
+        ) {
+            val presentation = WidgetAcMapper.presentation(acEnabled, tone)
             val themeContext = widgetThemeContext(context)
             val actionColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
             views.setInt(R.id.imgWAcOff, "setColorFilter", actionColor)
@@ -311,14 +323,17 @@ class ControlWidget : AppWidgetProvider() {
                 "setBackgroundResource",
                 widgetActionBackgroundResource(widgetUsesDarkAppearance(context))
             )
-            views.setViewVisibility(
-                R.id.imgWAcOn,
-                if (presentation.showEnabledIcon) View.VISIBLE else View.GONE
-            )
-            views.setViewVisibility(
-                R.id.imgWAcOff,
-                if (presentation.showEnabledIcon) View.GONE else View.VISIBLE
-            )
+
+            val showCooling = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.COOLING
+            val showHeating = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.HEATING
+            val showVent = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.VENTILATION
+            val showOff = !presentation.showEnabledIcon
+
+            views.setViewVisibility(R.id.imgWAcOff, if (showOff) View.VISIBLE else View.GONE)
+            views.setViewVisibility(R.id.imgWAcOn, if (showCooling) View.VISIBLE else View.GONE)
+            views.setViewVisibility(R.id.imgWAcOnHeating, if (showHeating) View.VISIBLE else View.GONE)
+            views.setViewVisibility(R.id.imgWAcOnVent, if (showVent) View.VISIBLE else View.GONE)
+
             views.setContentDescription(R.id.btnWAc, presentation.contentDescription)
             val pendingIntent = presentation.command
                 ?.let { command -> click(context, command) }
@@ -362,8 +377,14 @@ class ControlWidget : AppWidgetProvider() {
 
         private fun applySentryPresentation(context: Context, views: RemoteViews, sentryEnabled: Boolean?) {
             val presentation = WidgetSentryMapper.presentation(sentryEnabled)
+            val themeContext = widgetThemeContext(context)
+            val actionColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
             views.setImageViewResource(R.id.imgWSentryOff, R.drawable.ic_sentry)
             views.setImageViewResource(R.id.imgWSentryOn, R.drawable.ic_sentry)
+            views.setInt(R.id.imgWSentryOff, "setColorFilter", actionColor)
+            views.setInt(R.id.imgWSentryOn, "setColorFilter", ContextCompat.getColor(themeContext, R.color.energy_green))
+            val background = widgetActionBackgroundResource(widgetUsesDarkAppearance(context))
+            views.setInt(R.id.btnWSentry, "setBackgroundResource", background)
             views.setViewVisibility(
                 R.id.imgWSentryOff,
                 if (presentation.showEnabledIcon) View.GONE else View.VISIBLE

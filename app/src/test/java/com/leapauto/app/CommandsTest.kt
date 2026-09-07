@@ -121,7 +121,7 @@ class CommandsTest {
     fun climateTemperatureToneUsesTheVerifiedModeEnumNotTemperature() {
         assertEquals(ClimateTemperatureTone.COOLING, ClimateTemperatureToneResolver.tone(true, 1))
         assertEquals(ClimateTemperatureTone.HEATING, ClimateTemperatureToneResolver.tone(true, 0))
-        assertEquals(ClimateTemperatureTone.DEFAULT, ClimateTemperatureToneResolver.tone(true, 2))
+        assertEquals(ClimateTemperatureTone.VENTILATION, ClimateTemperatureToneResolver.tone(true, 2))
         assertEquals(ClimateTemperatureTone.DEFAULT, ClimateTemperatureToneResolver.tone(false, 1))
         assertEquals(ClimateTemperatureTone.DEFAULT, ClimateTemperatureToneResolver.tone(null, 0))
     }
@@ -130,7 +130,7 @@ class CommandsTest {
     fun climateTemperatureToneFallsBackToTheVerifiedClimateModeWhenNeeded() {
         assertEquals(ClimateTemperatureTone.COOLING, ClimateTemperatureToneResolver.tone(true, null, 1))
         assertEquals(ClimateTemperatureTone.HEATING, ClimateTemperatureToneResolver.tone(true, null, 3))
-        assertEquals(ClimateTemperatureTone.DEFAULT, ClimateTemperatureToneResolver.tone(true, null, 4))
+        assertEquals(ClimateTemperatureTone.VENTILATION, ClimateTemperatureToneResolver.tone(true, null, 4))
     }
 
     @Test

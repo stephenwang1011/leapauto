@@ -6,6 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 桌面插件(4x2与2x2)适配空调运行态灵动雪花旋转动效：开启空调时雪花图标持续自转，关闭时静止复位\n" +
-        "2. 保持全部组件排版结构与功能逻辑一致"
+        "1. 修复桌面插件雪花旋转畸变超限问题：固定24dp方形视口与中心旋转，彻底消除拉伸跑偏\n" +
+        "2. 空调雪花全场景三色旋转联动：制冷显示蓝色并旋转，制热显示橙黄色并旋转，通风显示绿色并旋转\n" +
+        "3. 关闭或未开启状态下雪花恢复端正静止，默认黑色展示"
 }

@@ -7,6 +7,7 @@ object WidgetAcMapper {
 
     data class Presentation(
         val showEnabledIcon: Boolean,
+        val tone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT,
         val command: String?,
         val contentDescription: String
     )
@@ -23,19 +24,28 @@ object WidgetAcMapper {
         else -> null
     }
 
-    fun presentation(state: Boolean?): Presentation = when (state) {
-        true -> Presentation(
-            showEnabledIcon = true,
-            command = "acOff",
-            contentDescription = "关闭空调"
-        )
+    fun presentation(
+        state: Boolean?,
+        tone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT
+    ): Presentation = when (state) {
+        true -> {
+            val effectiveTone = if (tone == ClimateTemperatureTone.DEFAULT) ClimateTemperatureTone.COOLING else tone
+            Presentation(
+                showEnabledIcon = true,
+                tone = effectiveTone,
+                command = "acOff",
+                contentDescription = "关闭空调"
+            )
+        }
         false -> Presentation(
             showEnabledIcon = false,
+            tone = ClimateTemperatureTone.DEFAULT,
             command = "acOn",
             contentDescription = "开启空调"
         )
         null -> Presentation(
             showEnabledIcon = false,
+            tone = ClimateTemperatureTone.DEFAULT,
             command = null,
             contentDescription = "空调状态未知，打开 App 查看"
         )

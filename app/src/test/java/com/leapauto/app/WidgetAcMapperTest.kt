@@ -9,6 +9,29 @@ import org.junit.Test
 class WidgetAcMapperTest {
 
     @Test
+    fun `enabled air conditioner preserves tone and defaults to cooling`() {
+        val defaultActive = WidgetAcMapper.presentation(true)
+        assertTrue(defaultActive.showEnabledIcon)
+        assertEquals(ClimateTemperatureTone.COOLING, defaultActive.tone)
+
+        val coolingActive = WidgetAcMapper.presentation(true, ClimateTemperatureTone.COOLING)
+        assertTrue(coolingActive.showEnabledIcon)
+        assertEquals(ClimateTemperatureTone.COOLING, coolingActive.tone)
+
+        val heatingActive = WidgetAcMapper.presentation(true, ClimateTemperatureTone.HEATING)
+        assertTrue(heatingActive.showEnabledIcon)
+        assertEquals(ClimateTemperatureTone.HEATING, heatingActive.tone)
+
+        val ventActive = WidgetAcMapper.presentation(true, ClimateTemperatureTone.VENTILATION)
+        assertTrue(ventActive.showEnabledIcon)
+        assertEquals(ClimateTemperatureTone.VENTILATION, ventActive.tone)
+
+        val off = WidgetAcMapper.presentation(false, ClimateTemperatureTone.COOLING)
+        assertFalse(off.showEnabledIcon)
+        assertEquals(ClimateTemperatureTone.DEFAULT, off.tone)
+    }
+
+    @Test
     fun `enabled air conditioner uses original active icon and turns off`() {
         val presentation = WidgetAcMapper.presentation(WidgetAcMapper.state(true))
 

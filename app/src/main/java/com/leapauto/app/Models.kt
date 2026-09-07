@@ -591,11 +591,15 @@ enum class ClimatePresetAction(val label: String) {
 enum class ClimateTemperatureTone {
     DEFAULT,
     COOLING,
-    HEATING
+    HEATING,
+    VENTILATION
 }
 
 object ClimateTemperatureToneResolver {
-    /** Verified telemetry enum: 1=cooling, 0=heating. Unknown/missing stays neutral. */
+    /**
+     * Verified telemetry enum: 1=cooling, 0=heating, 2=ventilation.
+     * climateMode: 1=cooling, 3=heating, 4=ventilation.
+     */
     fun tone(
         acEnabled: Boolean?,
         coolingAndHeating: Int?,
@@ -603,16 +607,18 @@ object ClimateTemperatureToneResolver {
         targetTemperature: Int? = null
     ): ClimateTemperatureTone {
         if (acEnabled != true) return ClimateTemperatureTone.DEFAULT
+        if (coolingAndHeating == 2 || climateMode == 4) return ClimateTemperatureTone.VENTILATION
         return when (coolingAndHeating) {
             1 -> ClimateTemperatureTone.COOLING
             0 -> ClimateTemperatureTone.HEATING
             else -> when (climateMode) {
                 1 -> ClimateTemperatureTone.COOLING
                 3 -> ClimateTemperatureTone.HEATING
+                4 -> ClimateTemperatureTone.VENTILATION
                 else -> when {
                     targetTemperature != null && targetTemperature >= 27 -> ClimateTemperatureTone.HEATING
                     targetTemperature != null && targetTemperature <= 26 -> ClimateTemperatureTone.COOLING
-                    else -> ClimateTemperatureTone.DEFAULT
+                    else -> ClimateTemperatureTone.COOLING
                 }
             }
         }

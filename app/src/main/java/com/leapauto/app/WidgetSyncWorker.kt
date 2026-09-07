@@ -60,6 +60,12 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                     statusLabel = WidgetStatusMapper.label(status, session.selectedCarType).orEmpty(),
                     locked = WidgetStatusMapper.locked(status),
                     acEnabled = WidgetAcMapper.state(status),
+                    acTone = ClimateTemperatureToneResolver.tone(
+                        acEnabled = WidgetAcMapper.state(status),
+                        coolingAndHeating = status.optInt("acCoolingAndHeating", status.optInt("coolingAndHeating", -1)).takeIf { it != -1 },
+                        climateMode = status.optInt("climateMode", -1).takeIf { it != -1 },
+                        targetTemperature = status.opt("acSetting")?.toString()?.toIntOrNull()
+                    ),
                     chargingPower = ChargeStatus.power(status),
                     chargeState = ChargeStatus.state(status),
                     chargeRemainTime = ChargeStatus.remainingTime(status.opt("chargeRemainTime")),

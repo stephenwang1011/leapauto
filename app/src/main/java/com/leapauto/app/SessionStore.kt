@@ -39,6 +39,7 @@ class SessionStore(context: Context) {
         val statusLabel: String = "",
         val locked: Boolean? = null,
         val acEnabled: Boolean? = null,
+        val acTone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT,
         val chargingPower: String? = null,
         val chargeState: Int? = null,
         val chargeRemainTime: String? = null,
@@ -277,6 +278,7 @@ class SessionStore(context: Context) {
         statusLabel: String,
         locked: Boolean?,
         acEnabled: Boolean?,
+        acTone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT,
         chargingPower: String?,
         chargeState: Int? = null,
         chargeRemainTime: String? = null,
@@ -333,6 +335,10 @@ class SessionStore(context: Context) {
             .apply {
                 if (acEnabled == null) remove("widget_snapshot_ac_enabled")
                 else putBoolean("widget_snapshot_ac_enabled", acEnabled)
+            }
+            .apply {
+                if (acTone == ClimateTemperatureTone.DEFAULT) remove("widget_snapshot_ac_tone")
+                else putString("widget_snapshot_ac_tone", acTone.name)
             }
             .putString("widget_snapshot_charging_power", chargingPower ?: "")
             .apply {
@@ -398,6 +404,9 @@ class SessionStore(context: Context) {
             } else {
                 null
             },
+            acTone = prefs.getString("widget_snapshot_ac_tone", null)?.let {
+                runCatching { ClimateTemperatureTone.valueOf(it) }.getOrNull()
+            } ?: ClimateTemperatureTone.DEFAULT,
             chargingPower = prefs.getString("widget_snapshot_charging_power", "")
                 ?.takeIf { it.isNotBlank() },
             chargeState = if (prefs.contains("widget_snapshot_charge_state")) {

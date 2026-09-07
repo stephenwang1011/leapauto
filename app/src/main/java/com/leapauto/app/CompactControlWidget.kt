@@ -54,7 +54,7 @@ class CompactControlWidget : AppWidgetProvider() {
                     highContrast = opacity == 25
                 )
                 applyLockPresentation(themeContext, this, snapshot?.locked)
-                applyAcPresentation(themeContext, this, snapshot?.acEnabled)
+                applyAcPresentation(themeContext, this, snapshot?.acEnabled, snapshot?.acTone ?: ClimateTemperatureTone.DEFAULT)
                 setOnClickPendingIntent(R.id.compactWidgetRoot, ControlWidget.openAppPendingIntent(context))
             }
 
@@ -73,13 +73,13 @@ class CompactControlWidget : AppWidgetProvider() {
             AppWidgetManager.getInstance(appContext).updateAppWidget(ids, baseViews(appContext))
         }
 
-        fun showControlStatus(context: Context, acEnabled: Boolean?) {
+        fun showControlStatus(context: Context, acEnabled: Boolean?, acTone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT) {
             val appContext = context.applicationContext
             val ids = widgetIds(appContext)
             if (ids.isEmpty()) return
             val views = baseViews(appContext)
             if (acEnabled != null) {
-                applyAcPresentation(appContext, views, acEnabled)
+                applyAcPresentation(appContext, views, acEnabled, acTone)
             }
             AppWidgetManager.getInstance(appContext).partiallyUpdateAppWidget(ids, views)
         }
@@ -260,25 +260,37 @@ class CompactControlWidget : AppWidgetProvider() {
             )
         }
 
-        private fun applyAcPresentation(context: Context, views: RemoteViews, acEnabled: Boolean?) {
-            val presentation = WidgetAcMapper.presentation(acEnabled)
+        private fun applyAcPresentation(
+            context: Context,
+            views: RemoteViews,
+            acEnabled: Boolean?,
+            tone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT
+        ) {
+            val presentation = WidgetAcMapper.presentation(acEnabled, tone)
             val themeContext = ControlWidget.widgetThemeContext(context)
-            views.setViewVisibility(
-                R.id.imgWCAcOn,
-                if (presentation.showEnabledIcon) View.VISIBLE else View.GONE
-            )
-            views.setViewVisibility(
-                R.id.imgWCAcOff,
-                if (presentation.showEnabledIcon) View.GONE else View.VISIBLE
-            )
+            val actionColor = ContextCompat.getColor(themeContext, R.color.widget_on_surface_variant)
+            views.setInt(R.id.imgWCAcOff, "setColorFilter", actionColor)
+
+            val showCooling = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.COOLING
+            val showHeating = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.HEATING
+            val showVent = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.VENTILATION
+            val showOff = !presentation.showEnabledIcon
+
+            views.setViewVisibility(R.id.imgWCAcOff, if (showOff) View.VISIBLE else View.GONE)
+            views.setViewVisibility(R.id.imgWCAcOn, if (showCooling) View.VISIBLE else View.GONE)
+            views.setViewVisibility(R.id.imgWCAcOnHeating, if (showHeating) View.VISIBLE else View.GONE)
+            views.setViewVisibility(R.id.imgWCAcOnVent, if (showVent) View.VISIBLE else View.GONE)
+
+            val backgroundTone = when {
+                !presentation.showEnabledIcon -> CompactActionTone.NEUTRAL
+                presentation.tone == ClimateTemperatureTone.HEATING -> CompactActionTone.SUCCESS
+                presentation.tone == ClimateTemperatureTone.VENTILATION -> CompactActionTone.SUCCESS
+                else -> CompactActionTone.PRIMARY
+            }
             views.setInt(
                 R.id.btnWCAc,
                 "setBackgroundResource",
-                if (presentation.showEnabledIcon) {
-                    compactActionBackgroundResource(themeContext, CompactActionTone.PRIMARY)
-                } else {
-                    compactActionBackgroundResource(themeContext, CompactActionTone.NEUTRAL)
-                }
+                compactActionBackgroundResource(themeContext, backgroundTone)
             )
             views.setViewVisibility(R.id.txtWCAc, View.GONE)
             views.setContentDescription(R.id.btnWCAc, presentation.contentDescription)

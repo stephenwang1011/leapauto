@@ -985,6 +985,12 @@ class MainActivity : ComponentActivity() {
                     statusLabel = WidgetStatusMapper.label(signalMap, session.selectedCarType).orEmpty(),
                     locked = WidgetStatusMapper.locked(signalMap),
                     acEnabled = WidgetAcMapper.state(signalMap),
+                    acTone = ClimateTemperatureToneResolver.tone(
+                        acEnabled = WidgetAcMapper.state(signalMap),
+                        coolingAndHeating = parsed.acCoolingAndHeating,
+                        climateMode = parsed.climateMode,
+                        targetTemperature = Commands.acTemperatureTarget(parsed.acSetting).value
+                    ),
                     chargingPower = parsed.chargingPower,
                     chargeState = ChargeStatus.state(signalMap),
                     chargeRemainTime = ChargeStatus.remainingTime(signalMap.opt("chargeRemainTime")),

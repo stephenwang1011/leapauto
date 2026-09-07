@@ -389,7 +389,31 @@
                         android:contentDescription="@null"
                         android:indeterminate="true"
                         android:indeterminateOnly="true"
-                        android:indeterminateDrawable="@drawable/widget_ac_spinning_snowflake"
+                        android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
+                        android:visibility="gone" />
+
+                    <ProgressBar
+                        android:id="@+id/imgWCAcOnHeating"
+                        style="@null"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:indeterminate="true"
+                        android:indeterminateOnly="true"
+                        android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
+                        android:visibility="gone" />
+
+                    <ProgressBar
+                        android:id="@+id/imgWCAcOnVent"
+                        style="@null"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:indeterminate="true"
+                        android:indeterminateOnly="true"
+                        android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
                         android:visibility="gone" />
                 </FrameLayout>
 
