@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 恢复纯电车型WLTC/CLTC模式标签的半透明微边框胶囊包裹质感\n" +
-        "2. 彻底消除纯电指标子群百分比底部裁切，紧凑行高自然贴齐大数字\n" +
-        "3. 保持续航条与百分比长度严格对齐km与WLTC，双车型完美适配"
+        "1. 状态告警胶囊彻底移至HUD右侧空白区，消灭机盖上方贴纸感\n" +
+        "2. 续航参数紧凑自然并列，彻底消除km与WLTC之间的拉扯空洞\n" +
+        "3. 车身高点上方100%纯净留白，左右对称平衡，豪车气场完全舒展"
 }
