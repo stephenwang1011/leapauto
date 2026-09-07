@@ -2398,14 +2398,15 @@ private fun VehicleHeroAlertBadge(
     val isCharging = status.chargeState == 1 || (!status.chargingPower.isNullOrBlank() && status.chargingPower != "--")
     val isUnlocked = status.locked == false
     val anyDoorOpen = status.anyDoorOpen
+    val errorColor = MaterialTheme.colorScheme.error
 
     when {
         trunkOpen -> {
             StatusOverlayChip(
-                icon = R.drawable.ic_phosphor_trunk_open,
+                emoji = "🚨",
                 label = "尾门未关",
                 actionLabel = if (onControl != null) "关尾门 >" else null,
-                tint = MaterialTheme.colorScheme.error,
+                tint = errorColor,
                 pulseAlpha = pulseAlpha,
                 onClick = onControl?.let { { it("trunkClose") } },
                 modifier = modifier
@@ -2413,10 +2414,10 @@ private fun VehicleHeroAlertBadge(
         }
         anyDoorOpen -> {
             StatusOverlayChip(
-                icon = R.drawable.ic_phosphor_warning,
+                emoji = "⚠️",
                 label = "车门未关",
                 actionLabel = null,
-                tint = MaterialTheme.colorScheme.error,
+                tint = errorColor,
                 pulseAlpha = pulseAlpha,
                 onClick = null,
                 modifier = modifier
@@ -2424,10 +2425,10 @@ private fun VehicleHeroAlertBadge(
         }
         hasOpenWindows -> {
             StatusOverlayChip(
-                icon = R.drawable.ic_phosphor_wind,
-                label = "车窗通风",
+                emoji = "🪟",
+                label = "车窗未关",
                 actionLabel = if (onControl != null) "关窗 >" else null,
-                tint = MaterialTheme.statusWarn,
+                tint = errorColor,
                 pulseAlpha = pulseAlpha,
                 onClick = onControl?.let { { it("windowClose") } },
                 modifier = modifier
@@ -2435,10 +2436,10 @@ private fun VehicleHeroAlertBadge(
         }
         isUnlocked -> {
             StatusOverlayChip(
-                icon = R.drawable.ic_phosphor_lock_open,
+                emoji = "🔓",
                 label = "未上锁",
                 actionLabel = if (onControl != null) "上锁 >" else null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = errorColor,
                 pulseAlpha = pulseAlpha,
                 onClick = onControl?.let { { it("lock") } },
                 modifier = modifier
@@ -2446,7 +2447,7 @@ private fun VehicleHeroAlertBadge(
         }
         isCharging -> {
             StatusOverlayChip(
-                icon = R.drawable.ic_widget_charging_bolt,
+                emoji = "⚡",
                 label = status.chargingPower?.let { "充电 $it" } ?: "正在充电",
                 actionLabel = null,
                 tint = MaterialTheme.statusGood,
@@ -2460,7 +2461,8 @@ private fun VehicleHeroAlertBadge(
 
 @Composable
 private fun StatusOverlayChip(
-    icon: Int,
+    icon: Int? = null,
+    emoji: String? = null,
     label: String,
     actionLabel: String?,
     tint: Color,
@@ -2468,30 +2470,43 @@ private fun StatusOverlayChip(
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
+    val isError = tint == MaterialTheme.colorScheme.error
+    val chipBg = if (isError) {
+        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+    } else {
+        MaterialTheme.glassInsetSurface.copy(alpha = 0.90f)
+    }
     Surface(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.glassInsetSurface.copy(alpha = 0.90f),
-        border = BorderStroke(1.dp, tint.copy(alpha = 0.50f * pulseAlpha)),
+        color = chipBg,
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.55f * pulseAlpha)),
         shadowElevation = 0.dp
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.5.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.5.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Icon(
-                painter = painterResource(icon),
-                contentDescription = null,
-                modifier = Modifier.size(12.dp),
-                tint = tint
-            )
+            if (emoji != null) {
+                Text(
+                    text = emoji,
+                    fontSize = 12.sp
+                )
+            } else if (icon != null) {
+                Icon(
+                    painter = painterResource(icon),
+                    contentDescription = null,
+                    modifier = Modifier.size(12.dp),
+                    tint = tint
+                )
+            }
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (isError) tint else MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Medium
             )
             if (actionLabel != null) {
