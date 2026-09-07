@@ -2315,9 +2315,9 @@ fun VehicleHero(
                             horizontalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_vehicle_location_marker),
+                                painter = painterResource(R.drawable.ic_location_pin),
                                 contentDescription = null,
-                                modifier = Modifier.size(10.dp),
+                                modifier = Modifier.size(11.dp),
                                 tint = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
