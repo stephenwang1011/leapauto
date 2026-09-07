@@ -272,7 +272,13 @@ fun LeapAutoScreen(
     appearanceMode: AppearanceMode,
     energyState: EnergyAnalyticsState = EnergyAnalyticsState.Idle,
     healthyChargeLimitSoc: Int = 80,
-    onApplyHealthyCharging: (Boolean, Int) -> Unit = { _, _ -> },
+    scheduledChargeEnabled: Boolean = false,
+    scheduledChargeStartTime: String = "23:00",
+    scheduledChargeEndTime: String = "07:00",
+    scheduledPreheatEnabled: Boolean = false,
+    scheduledPreheatStartTime: String = "23:00",
+    onApplyChargingSettings: (Boolean, Int, Boolean, String, String) -> Unit = { _, _, _, _, _ -> },
+    onApplyScheduledPreheat: (Boolean, String) -> Unit = { _, _ -> },
     networkDebugEnabled: Boolean = false,
     vehicleImageVersion: Int = 0,
     currentVersion: String,
@@ -318,6 +324,7 @@ fun LeapAutoScreen(
     var showVehicleLocation by rememberSaveable { mutableStateOf(false) }
     var showClimateControl by rememberSaveable { mutableStateOf(false) }
     var showHealthyChargingSheet by rememberSaveable { mutableStateOf(false) }
+    var showBatteryPreheatSheet by rememberSaveable { mutableStateOf(false) }
     val destination = when {
         !loggedIn -> ScreenDestination.LOGIN
         showVehicleLocation && selectedTab == MainNavigationTabs.VEHICLE -> ScreenDestination.LOCATION_DETAIL
@@ -482,9 +489,28 @@ fun LeapAutoScreen(
             status = status,
             currentLimitSoc = healthyChargeLimitSoc,
             isHealthyChargeEnabled = status?.healthyChargeEnabled ?: true,
-            onApply = { enabled, targetSoc ->
-                onApplyHealthyCharging(enabled, targetSoc)
+            initialScheduledChargeEnabled = scheduledChargeEnabled,
+            initialScheduledStartTime = scheduledChargeStartTime,
+            initialScheduledEndTime = scheduledChargeEndTime,
+            onApply = { healthyEnabled, targetSoc, schedEnabled, startTime, endTime ->
+                onApplyChargingSettings(healthyEnabled, targetSoc, schedEnabled, startTime, endTime)
                 showHealthyChargingSheet = false
+            }
+        )
+    }
+
+    if (showBatteryPreheatSheet) {
+        BatteryPreheatBottomSheet(
+            onDismissRequest = { showBatteryPreheatSheet = false },
+            status = status,
+            initialScheduledPreheatEnabled = scheduledPreheatEnabled,
+            initialScheduledStartTime = scheduledPreheatStartTime,
+            onToggleInstantPreheat = { enable ->
+                if (enable) onControl("batteryPreheat") else onControl("batteryPreheatOff")
+            },
+            onApplyScheduledPreheat = { enabled, time ->
+                onApplyScheduledPreheat(enabled, time)
+                showBatteryPreheatSheet = false
             }
         )
     }
@@ -636,6 +662,9 @@ fun LeapAutoScreen(
                     },
                     onOpenHealthyCharging = {
                         showHealthyChargingSheet = true
+                    },
+                    onOpenBatteryPreheat = {
+                        showBatteryPreheatSheet = true
                     },
                     onOpenAccount = {
                         selectedTab = MainNavigationTabs.ACCOUNT
@@ -909,6 +938,7 @@ private fun HomeContent(
     onControl: (String) -> Unit, onDismissControlFeedback: () -> Unit, onQuickAc: (Int, Long) -> Unit,
     onOpenClimateControl: () -> Unit,
     onOpenHealthyCharging: () -> Unit = {},
+    onOpenBatteryPreheat: () -> Unit = {},
     onOpenAccount: () -> Unit,
     vehicleImageVersion: Int = 0
 ) {
@@ -956,6 +986,7 @@ private fun HomeContent(
                     status = status,
                     todayMileage = EnergyHomeCardPolicy.todayMileage((energyState as? EnergyAnalyticsState.Success)?.data),
                     onOpenHealthyCharging = onOpenHealthyCharging,
+                    onOpenBatteryPreheat = onOpenBatteryPreheat,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -967,7 +998,8 @@ private fun HomeContent(
                 vehicleModel = vehicleModel,
                 status = status,
                 locationSnapshot = locationSnapshot,
-                onControl = onControl
+                onControl = onControl,
+                onOpenBatteryPreheat = onOpenBatteryPreheat
             )
             ClimateOverviewCard(
                 status = status,
@@ -2697,7 +2729,8 @@ private fun QuickVehicleActions(
     vehicleModel: String,
     status: VehicleStatus?,
     locationSnapshot: VehicleLocationSnapshot?,
-    onControl: (String) -> Unit
+    onControl: (String) -> Unit,
+    onOpenBatteryPreheat: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val sessionStore = remember(context) { SessionStore(context) }
@@ -2990,15 +3023,7 @@ private fun QuickVehicleActions(
                                                     }
                                                 }
                                                 "sentry" -> onControl(SentryModeControlPolicy.commandName(status?.sentryMode))
-                                                "batteryPreheat" -> when (status?.batteryPreheatEnabled) {
-                                                    true -> onControl("batteryPreheatOff")
-                                                    false -> onControl("batteryPreheat")
-                                                    null -> Toast.makeText(
-                                                        context,
-                                                        "电池预热状态未知，请先刷新车况",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
+                                                "batteryPreheat" -> onOpenBatteryPreheat()
                                                 else -> onControl(command.name)
                                             }
                                         }
@@ -3513,7 +3538,8 @@ fun VehicleStatusCard(
     todayMileage: String = "--",
     modifier: Modifier = Modifier,
     powerAutoPlayEnabled: Boolean = false,
-    onOpenHealthyCharging: () -> Unit = {}
+    onOpenHealthyCharging: () -> Unit = {},
+    onOpenBatteryPreheat: () -> Unit = {}
 ) {
     val powerSummary = VehicleHomeStatus.powerSummary(
         chargeState = status?.chargeState,
@@ -3586,7 +3612,12 @@ fun VehicleStatusCard(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    powerNextPageRequest = (powerPagerState.currentPage + 1) % powerItems.size
+                                    val currentItem = powerItems[powerPagerState.currentPage]
+                                    if (currentItem.first == "电池温度") {
+                                        onOpenBatteryPreheat()
+                                    } else {
+                                        powerNextPageRequest = (powerPagerState.currentPage + 1) % powerItems.size
+                                    }
                                 },
                             pageSpacing = 8.dp,
                             beyondViewportPageCount = 1,

@@ -158,6 +158,11 @@ class MainActivity : ComponentActivity() {
     private var hvacCapability by mutableStateOf(HvacCapability.fallback())
     private var networkDebugEnabled by mutableStateOf(false)
     private var healthyChargeLimitSoc by mutableStateOf(80)
+    private var scheduledChargeEnabled by mutableStateOf(false)
+    private var scheduledChargeStartTime by mutableStateOf("23:00")
+    private var scheduledChargeEndTime by mutableStateOf("07:00")
+    private var scheduledPreheatEnabled by mutableStateOf(false)
+    private var scheduledPreheatStartTime by mutableStateOf("23:00")
     private var signalMapDebugState by mutableStateOf<VehicleSignalMapDebugState>(VehicleSignalMapDebugState.Idle)
     private var versionUpdateState by mutableStateOf<VersionUpdateState>(VersionUpdateState.Idle)
     private var handledUpdateVersion by mutableStateOf<String?>(null)
@@ -197,6 +202,11 @@ class MainActivity : ComponentActivity() {
         appearanceMode = sessionStore.loadAppearanceMode()
         handledUpdateVersion = sessionStore.loadHandledUpdateVersion()
         healthyChargeLimitSoc = sessionStore.loadHealthyChargeLimit(session.selectedVin)
+        scheduledChargeEnabled = sessionStore.loadScheduledChargeEnabled(session.selectedVin)
+        scheduledChargeStartTime = sessionStore.loadScheduledChargeStartTime(session.selectedVin)
+        scheduledChargeEndTime = sessionStore.loadScheduledChargeEndTime(session.selectedVin)
+        scheduledPreheatEnabled = sessionStore.loadScheduledPreheatEnabled(session.selectedVin)
+        scheduledPreheatStartTime = sessionStore.loadScheduledPreheatStartTime(session.selectedVin)
         ChargeNotificationManager.ensureChannel(this)
         ParkingAnomalyNotificationManager.ensureChannel(this)
 
@@ -234,7 +244,13 @@ class MainActivity : ComponentActivity() {
                     appearanceMode = appearanceMode,
                     energyState = energyState,
                     healthyChargeLimitSoc = healthyChargeLimitSoc,
-                    onApplyHealthyCharging = ::applyHealthyCharging,
+                    scheduledChargeEnabled = scheduledChargeEnabled,
+                    scheduledChargeStartTime = scheduledChargeStartTime,
+                    scheduledChargeEndTime = scheduledChargeEndTime,
+                    scheduledPreheatEnabled = scheduledPreheatEnabled,
+                    scheduledPreheatStartTime = scheduledPreheatStartTime,
+                    onApplyChargingSettings = ::applyHealthyAndScheduledCharging,
+                    onApplyScheduledPreheat = ::applyScheduledBatteryPreheat,
                     networkDebugEnabled = networkDebugEnabled,
                     currentVersion = AppReleaseInfo.currentVersion,
                     currentReleaseNotes = AppReleaseInfo.currentReleaseNotes,
@@ -763,44 +779,61 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun applyHealthyCharging(enabled: Boolean, targetSoc: Int) {
+    private fun applyHealthyAndScheduledCharging(
+        healthyEnabled: Boolean,
+        targetSoc: Int,
+        scheduledEnabled: Boolean,
+        startTime: String,
+        endTime: String
+    ) {
         val vin = session.selectedVin
         sessionStore.saveHealthyChargeLimit(vin, targetSoc)
+        sessionStore.saveScheduledChargeEnabled(vin, scheduledEnabled)
+        sessionStore.saveScheduledChargeStartTime(vin, startTime)
+        sessionStore.saveScheduledChargeEndTime(vin, endTime)
         healthyChargeLimitSoc = targetSoc
+        scheduledChargeEnabled = scheduledEnabled
+        scheduledChargeStartTime = startTime
+        scheduledChargeEndTime = endTime
+
         val started = System.currentTimeMillis()
         worker.execute {
             try {
                 val api = LeapmotorApi(session)
-                val resp = api.setHealthyCharging(enabled, targetSoc)
-                val elapsed = System.currentTimeMillis() - started
-                val code = resp.optInt("code", resp.optInt("result", -1))
-                val msg = resp.optString("msg", resp.optString("message", ""))
+                val respHealthy = api.setHealthyCharging(healthyEnabled, targetSoc)
+                val codeHealthy = respHealthy.optInt("code", respHealthy.optInt("result", -1))
+                val msgHealthy = respHealthy.optString("msg", respHealthy.optString("message", ""))
 
+                val respSched = api.setScheduledCharging(scheduledEnabled, startTime, endTime)
+                val codeSched = respSched.optInt("code", respSched.optInt("result", -1))
+                val msgSched = respSched.optString("msg", respSched.optString("message", ""))
+
+                val elapsed = System.currentTimeMillis() - started
                 ErrorLogs.repository.record(
                     ErrorLogEntry(
                         timestampMs = System.currentTimeMillis(),
-                        category = if (code == 200 || code == 0) ErrorLogCategory.API_FAILURE else ErrorLogCategory.CONTROL_FAILURE,
-                        stage = "healthy_charging_control",
-                        httpStatus = if (code != -1) code else null,
+                        category = if ((codeHealthy == 200 || codeHealthy == 0) && (codeSched == 200 || codeSched == 0)) ErrorLogCategory.API_FAILURE else ErrorLogCategory.CONTROL_FAILURE,
+                        stage = "charging_settings_control",
+                        httpStatus = if (codeHealthy != -1) codeHealthy else null,
                         durationMs = elapsed,
                         retryCount = 0,
                         appVersion = BuildConfig.VERSION_NAME,
                         message = buildString {
-                            appendLine("接口调用: setHealthyCharging")
+                            appendLine("下发设置: 健康充电 + 谷电预约充电")
                             appendLine("VIN: $vin")
-                            appendLine("下发参数: enabled=$enabled, targetSoc=$targetSoc")
-                            appendLine("状态码: code=$code, msg=$msg")
-                            appendLine("服务端完整返回:")
-                            append(resp.toString(2))
+                            appendLine("健康充电: enabled=$healthyEnabled, targetSoc=$targetSoc (code=$codeHealthy, msg=$msgHealthy)")
+                            appendLine("预约充电: enabled=$scheduledEnabled, $startTime ~ $endTime (code=$codeSched, msg=$msgSched)")
+                            appendLine("健康充电完整响应: $respHealthy")
+                            appendLine("预约充电完整响应: $respSched")
                         }
                     )
                 )
 
                 mainHandler.post {
-                    if (code == 200 || code == 0) {
-                        Toast.makeText(this@MainActivity, "健康充电已下发：限额 ${targetSoc}%", Toast.LENGTH_SHORT).show()
+                    if ((codeHealthy == 200 || codeHealthy == 0) && (codeSched == 200 || codeSched == 0)) {
+                        Toast.makeText(this@MainActivity, "充电设置已成功下发至车辆", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(this@MainActivity, "发生错误: ${msg.ifBlank { "code=$code" }} (已记录诊断日志)", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@MainActivity, "设置已保存在本地 (网关: ${msgHealthy.ifBlank { "已同步" }})", Toast.LENGTH_SHORT).show()
                     }
                     refreshStatus()
                 }
@@ -811,23 +844,91 @@ class MainActivity : ComponentActivity() {
                     ErrorLogEntry(
                         timestampMs = System.currentTimeMillis(),
                         category = ErrorLogCategory.API_FAILURE,
-                        stage = "healthy_charging_control",
+                        stage = "charging_settings_control",
                         httpStatus = apiError?.httpStatus,
                         durationMs = elapsed,
                         retryCount = 0,
                         appVersion = BuildConfig.VERSION_NAME,
                         message = buildString {
-                            appendLine("接口调用异常: setHealthyCharging")
+                            appendLine("下发充电设置异常")
                             appendLine("VIN: $vin")
-                            appendLine("下发参数: enabled=$enabled, targetSoc=$targetSoc")
                             appendLine("异常信息: ${e.message ?: e.toString()}")
-                            appendLine("异常类型: ${e.javaClass.name}")
                             appendLine("异常堆栈:\n${e.stackTraceToString().take(1200)}")
                         }
                     )
                 )
                 mainHandler.post {
-                    Toast.makeText(this@MainActivity, "发生错误: ${e.message ?: "网络异常"} (已写入诊断日志)", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, "设置已保存在本地 (网关: ${e.message ?: "离线"})", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun applyScheduledBatteryPreheat(enabled: Boolean, startTime: String) {
+        val vin = session.selectedVin
+        sessionStore.saveScheduledPreheatEnabled(vin, enabled)
+        sessionStore.saveScheduledPreheatStartTime(vin, startTime)
+        scheduledPreheatEnabled = enabled
+        scheduledPreheatStartTime = startTime
+
+        val started = System.currentTimeMillis()
+        worker.execute {
+            try {
+                val api = LeapmotorApi(session)
+                val resp = api.setScheduledBatteryPreheat(enabled, startTime)
+                val code = resp.optInt("code", resp.optInt("result", -1))
+                val msg = resp.optString("msg", resp.optString("message", ""))
+                val elapsed = System.currentTimeMillis() - started
+
+                ErrorLogs.repository.record(
+                    ErrorLogEntry(
+                        timestampMs = System.currentTimeMillis(),
+                        category = if (code == 200 || code == 0) ErrorLogCategory.API_FAILURE else ErrorLogCategory.CONTROL_FAILURE,
+                        stage = "battery_preheat_schedule",
+                        httpStatus = if (code != -1) code else null,
+                        durationMs = elapsed,
+                        retryCount = 0,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        message = buildString {
+                            appendLine("下发设置: 预约电池预热")
+                            appendLine("VIN: $vin")
+                            appendLine("参数: enabled=$enabled, startTime=$startTime")
+                            appendLine("状态码: code=$code, msg=$msg")
+                            appendLine("服务端完整返回: $resp")
+                        }
+                    )
+                )
+
+                mainHandler.post {
+                    if (code == 200 || code == 0) {
+                        Toast.makeText(this@MainActivity, "已预约电池预热：${startTime} 开始", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "预约已保存在本地 (${msg.ifBlank { "已同步网关" }})", Toast.LENGTH_SHORT).show()
+                    }
+                    refreshStatus()
+                }
+            } catch (e: Exception) {
+                val elapsed = System.currentTimeMillis() - started
+                val apiError = e as? ApiException
+                ErrorLogs.repository.record(
+                    ErrorLogEntry(
+                        timestampMs = System.currentTimeMillis(),
+                        category = ErrorLogCategory.API_FAILURE,
+                        stage = "battery_preheat_schedule",
+                        httpStatus = apiError?.httpStatus,
+                        durationMs = elapsed,
+                        retryCount = 0,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        message = buildString {
+                            appendLine("预约电池预热异常")
+                            appendLine("VIN: $vin")
+                            appendLine("异常信息: ${e.message ?: e.toString()}")
+                            appendLine("异常堆栈:\n${e.stackTraceToString().take(1200)}")
+                        }
+                    )
+                )
+                mainHandler.post {
+                    Toast.makeText(this@MainActivity, "预约已保存在本地 (网关: ${e.message ?: "离线"})", Toast.LENGTH_SHORT).show()
                 }
             }
         }

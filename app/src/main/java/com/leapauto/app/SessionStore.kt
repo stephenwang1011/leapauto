@@ -154,6 +154,58 @@ class SessionStore(context: Context) {
         prefs.edit().putInt(key, soc.coerceIn(50, 100)).apply()
     }
 
+    // 预约充电设置（默认 23:00 开始，次日 07:00 结束）
+    fun loadScheduledChargeEnabled(vin: String): Boolean {
+        if (vin.isBlank()) return false
+        return prefs.getBoolean("scheduled_charge_enabled_$vin", false)
+    }
+
+    fun saveScheduledChargeEnabled(vin: String, enabled: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_charge_enabled_$vin", enabled).apply()
+    }
+
+    fun loadScheduledChargeStartTime(vin: String): String {
+        if (vin.isBlank()) return "23:00"
+        return prefs.getString("scheduled_charge_start_time_$vin", "23:00") ?: "23:00"
+    }
+
+    fun saveScheduledChargeStartTime(vin: String, time: String) {
+        if (vin.isBlank()) return
+        prefs.edit().putString("scheduled_charge_start_time_$vin", time).apply()
+    }
+
+    fun loadScheduledChargeEndTime(vin: String): String {
+        if (vin.isBlank()) return "07:00"
+        return prefs.getString("scheduled_charge_end_time_$vin", "07:00") ?: "07:00"
+    }
+
+    fun saveScheduledChargeEndTime(vin: String, time: String) {
+        if (vin.isBlank()) return
+        prefs.edit().putString("scheduled_charge_end_time_$vin", time).apply()
+    }
+
+    // 预约电池预热设置（默认 23:00 开始）
+    fun loadScheduledPreheatEnabled(vin: String): Boolean {
+        if (vin.isBlank()) return false
+        return prefs.getBoolean("scheduled_preheat_enabled_$vin", false)
+    }
+
+    fun saveScheduledPreheatEnabled(vin: String, enabled: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_preheat_enabled_$vin", enabled).apply()
+    }
+
+    fun loadScheduledPreheatStartTime(vin: String): String {
+        if (vin.isBlank()) return "23:00"
+        return prefs.getString("scheduled_preheat_start_time_$vin", "23:00") ?: "23:00"
+    }
+
+    fun saveScheduledPreheatStartTime(vin: String, time: String) {
+        if (vin.isBlank()) return
+        prefs.edit().putString("scheduled_preheat_start_time_$vin", time).apply()
+    }
+
     /** 用户确认的车型配置，按 VIN 隔离保存，避免多车续航规则串用。 */
     fun loadVehicleConfig(
         vin: String,

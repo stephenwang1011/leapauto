@@ -1127,6 +1127,45 @@ class LeapmotorApi(private val session: Session) {
         return gatewayFetch(url, method = "POST", params = params, query = params, jsonBody = JSONObject(params))
     }
 
+    /**
+     * 谷电预约充电控制（插枪后在设定起止时间段内执行充电）。
+     * 默认 23:00 开始至次日 07:00 结束。
+     */
+    fun setScheduledCharging(enabled: Boolean, startTime: String, endTime: String): JSONObject {
+        requireVin()
+        val route = ensureRoute()
+        val url = "${route.appRegion}/carownerservice/v3/api/appremotectl/appointment"
+        val stateInt = if (enabled) 1 else 0
+        val params = mapOf(
+            "carvin" to session.selectedVin,
+            "vin" to session.selectedVin,
+            "cmdid" to "361",
+            "state" to stateInt.toString(),
+            "startTime" to startTime,
+            "endTime" to endTime
+        )
+        return gatewayFetch(url, method = "POST", params = params, query = params, jsonBody = JSONObject(params))
+    }
+
+    /**
+     * 预约电池预热控制（设定时间自动唤醒加热动力电池）。
+     * 默认 23:00 开始预热。
+     */
+    fun setScheduledBatteryPreheat(enabled: Boolean, startTime: String): JSONObject {
+        requireVin()
+        val route = ensureRoute()
+        val url = "${route.appRegion}/carownerservice/v3/api/appremotectl/appointment"
+        val stateInt = if (enabled) 1 else 0
+        val params = mapOf(
+            "carvin" to session.selectedVin,
+            "vin" to session.selectedVin,
+            "cmdid" to "161",
+            "state" to stateInt.toString(),
+            "startTime" to startTime
+        )
+        return gatewayFetch(url, method = "POST", params = params, query = params, jsonBody = JSONObject(params))
+    }
+
     // ---------------------------------------------------------------- 内部
 
     private fun gatewayFetch(

@@ -62,11 +62,44 @@ fun HealthyChargingBottomSheet(
     status: VehicleStatus?,
     currentLimitSoc: Int,
     isHealthyChargeEnabled: Boolean,
-    onApply: (enabled: Boolean, targetSoc: Int) -> Unit
+    initialScheduledChargeEnabled: Boolean = false,
+    initialScheduledStartTime: String = "23:00",
+    initialScheduledEndTime: String = "07:00",
+    onApply: (healthyEnabled: Boolean, targetSoc: Int, scheduledEnabled: Boolean, startTime: String, endTime: String) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedSoc by remember(currentLimitSoc) { mutableFloatStateOf(currentLimitSoc.toFloat()) }
     var healthySwitchEnabled by remember(isHealthyChargeEnabled) { mutableStateOf(isHealthyChargeEnabled) }
+
+    var scheduledChargeEnabled by remember(initialScheduledChargeEnabled) { mutableStateOf(initialScheduledChargeEnabled) }
+    var scheduledStartTime by remember(initialScheduledStartTime) { mutableStateOf(initialScheduledStartTime) }
+    var scheduledEndTime by remember(initialScheduledEndTime) { mutableStateOf(initialScheduledEndTime) }
+    var showStartTimeDialog by remember { mutableStateOf(false) }
+    var showEndTimeDialog by remember { mutableStateOf(false) }
+
+    if (showStartTimeDialog) {
+        SimpleTimePickerDialog(
+            title = "设定充电开始时间",
+            initialTime = scheduledStartTime,
+            onDismissRequest = { showStartTimeDialog = false },
+            onConfirm = {
+                scheduledStartTime = it
+                showStartTimeDialog = false
+            }
+        )
+    }
+
+    if (showEndTimeDialog) {
+        SimpleTimePickerDialog(
+            title = "设定充电结束时间",
+            initialTime = scheduledEndTime,
+            onDismissRequest = { showEndTimeDialog = false },
+            onConfirm = {
+                scheduledEndTime = it
+                showEndTimeDialog = false
+            }
+        )
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -266,7 +299,86 @@ fun HealthyChargingBottomSheet(
                 }
             }
 
-            // 5. 官方电池养护科普指引
+            // 5. 谷电预约充电（按时段充电）
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.glassInsetSurface,
+                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "谷电预约充电",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "开启后插枪将自动在设定的谷电时间段内充电",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Switch(
+                            checked = scheduledChargeEnabled,
+                            onCheckedChange = { scheduledChargeEnabled = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = MaterialTheme.statusGood
+                            )
+                        )
+                    }
+
+                    if (scheduledChargeEnabled) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TimeSelectionBox(
+                                label = "开始充电",
+                                time = scheduledStartTime,
+                                onClick = { showStartTimeDialog = true },
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "至",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            TimeSelectionBox(
+                                label = "结束充电",
+                                time = scheduledEndTime,
+                                onClick = { showEndTimeDialog = true },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Text(
+                            text = "💡 默认匹配全国 23:00 ~ 次日 07:00 谷电低价时段，插枪后车辆保持待机，到点自动开充。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            }
+
+            // 6. 官方电池养护科普指引
             Surface(
                 shape = RoundedCornerShape(14.dp),
                 color = MaterialTheme.statusGood.copy(alpha = 0.08f),
@@ -292,9 +404,17 @@ fun HealthyChargingBottomSheet(
                 }
             }
 
-            // 6. 保存并下发按钮
+            // 7. 保存并下发按钮
             Button(
-                onClick = { onApply(healthySwitchEnabled, selectedSoc.roundToInt()) },
+                onClick = {
+                    onApply(
+                        healthySwitchEnabled,
+                        selectedSoc.roundToInt(),
+                        scheduledChargeEnabled,
+                        scheduledStartTime,
+                        scheduledEndTime
+                    )
+                },
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary
@@ -304,7 +424,7 @@ fun HealthyChargingBottomSheet(
                     .height(48.dp)
             ) {
                 Text(
-                    text = "保存并下发到车辆",
+                    text = "保存并下发设置",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -373,6 +493,40 @@ private fun QuickSocPresetChip(
                 style = MaterialTheme.typography.labelSmall,
                 color = if (selected) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimeSelectionBox(
+    label: String,
+    time: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.glassSurface,
+        border = BorderStroke(0.6.dp, MaterialTheme.statusGood.copy(alpha = 0.45f)),
+        modifier = modifier.clickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp
+            )
+            Text(
+                text = time,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.statusGood
             )
         }
     }
