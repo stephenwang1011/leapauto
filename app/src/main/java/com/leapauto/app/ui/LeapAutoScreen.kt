@@ -2314,15 +2314,16 @@ fun VehicleHero(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
-                            Image(
+                            Icon(
                                 painter = painterResource(R.drawable.ic_vehicle_location_marker),
                                 contentDescription = null,
-                                modifier = Modifier.size(10.dp)
+                                modifier = Modifier.size(10.dp),
+                                tint = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = address,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
