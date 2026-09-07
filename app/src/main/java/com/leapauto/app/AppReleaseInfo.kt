@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 优化车顶状态提示布局：增加车顶净空，消除胶囊与车窗前挡重叠\n" +
-        "2. 优化异常状态指示：精确定位异常小卡片变红，大卡片维持中性微边框\n" +
-        "3. 车模新增轻量化分层状态叠加与可点击部件快速控车热点"
+        "1. 恢复车图 100% 饱满大气原始比例，消除车身缩小与比例失调\n" +
+        "2. 状态胶囊重构至四周开阔留白区域（左上前挡/机盖、右上尾门、左下门锁、右下充电口），彻底杜绝遮挡车身\n" +
+        "3. 优化异常状态指示：精确定位异常小卡片变红，大卡片维持中性微边框"
 }

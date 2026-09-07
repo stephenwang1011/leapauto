@@ -2225,8 +2225,8 @@ fun VehicleHero(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp),
-                    contentAlignment = Alignment.BottomCenter
+                        .height(142.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     // 车轮地面接触微阴影 (Ground Contact Shadow)
                     Canvas(
@@ -2257,8 +2257,7 @@ fun VehicleHero(
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(130.dp)
-                                .align(Alignment.BottomCenter)
+                                .height(142.dp)
                                 .padding(horizontal = 20.dp)
                         )
                     } else {
@@ -2268,8 +2267,7 @@ fun VehicleHero(
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(130.dp)
-                                .align(Alignment.BottomCenter)
+                                .height(142.dp)
                                 .padding(horizontal = 20.dp)
                         )
                     }
@@ -2280,8 +2278,8 @@ fun VehicleHero(
                         onControl = onControl,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(160.dp)
-                            .padding(horizontal = 14.dp)
+                            .height(142.dp)
+                            .padding(horizontal = 12.dp)
                     )
                 }
             }
@@ -2338,7 +2336,7 @@ private fun VehicleStatusOverlay(
     val anyDoorOpen = status.anyDoorOpen
 
     Box(modifier = modifier) {
-        // 1. 车窗层 (车顶偏中上方)
+        // 1. 车窗层 (车身左上方开阔留白区，机盖上方)
         if (hasOpenWindows) {
             StatusOverlayChip(
                 icon = R.drawable.ic_phosphor_wind,
@@ -2348,12 +2346,12 @@ private fun VehicleStatusOverlay(
                 pulseAlpha = pulseAlpha,
                 onClick = onControl?.let { { it("windowClose") } },
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = 2.dp)
+                    .align(Alignment.TopStart)
+                    .offset(x = 6.dp, y = 4.dp)
             )
         }
 
-        // 2. 尾门层 (车尾右上位置)
+        // 2. 尾门层 (车身右上方开阔留白区，尾翼上方)
         if (trunkOpen) {
             StatusOverlayChip(
                 icon = R.drawable.ic_phosphor_trunk_open,
@@ -2364,11 +2362,11 @@ private fun VehicleStatusOverlay(
                 onClick = onControl?.let { { it("trunkClose") } },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset(x = (-4).dp, y = 14.dp)
+                    .offset(x = (-6).dp, y = 4.dp)
             )
         }
 
-        // 3. 车门/车锁层 (车身中左侧)
+        // 3. 车门/车锁层 (车身左下方，门锁位置)
         if (anyDoorOpen) {
             StatusOverlayChip(
                 icon = R.drawable.ic_phosphor_warning,
@@ -2378,8 +2376,8 @@ private fun VehicleStatusOverlay(
                 pulseAlpha = pulseAlpha,
                 onClick = null,
                 modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .offset(x = 10.dp, y = 16.dp)
+                    .align(Alignment.BottomStart)
+                    .offset(x = 6.dp, y = (-4).dp)
             )
         } else if (isUnlocked) {
             StatusOverlayChip(
@@ -2390,18 +2388,18 @@ private fun VehicleStatusOverlay(
                 pulseAlpha = pulseAlpha,
                 onClick = onControl?.let { { it("lock") } },
                 modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .offset(x = 10.dp, y = 16.dp)
+                    .align(Alignment.BottomStart)
+                    .offset(x = 6.dp, y = (-4).dp)
             )
         }
 
-        // 4. 充电状态层 (右下翼子板位置)
+        // 4. 充电状态层 (车身右下方，充电口位置)
         if (isCharging) {
             Canvas(
                 modifier = Modifier
-                    .size(24.dp)
+                    .size(22.dp)
                     .align(Alignment.BottomEnd)
-                    .offset(x = (-18).dp, y = (-18).dp)
+                    .offset(x = (-16).dp, y = (-16).dp)
             ) {
                 drawCircle(
                     brush = Brush.radialGradient(
@@ -2423,7 +2421,7 @@ private fun VehicleStatusOverlay(
                 onClick = null,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .offset(x = (-4).dp, y = (-2).dp)
+                    .offset(x = (-6).dp, y = (-4).dp)
             )
         }
     }
