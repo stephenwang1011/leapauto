@@ -881,7 +881,8 @@ private fun HomeContent(
                     }
                 },
                 vehicleVin = vehicleVin,
-                vehicleImageVersion = vehicleImageVersion
+                vehicleImageVersion = vehicleImageVersion,
+                onControl = onControl
             )
             Row(
                 Modifier.fillMaxWidth(),
@@ -1990,7 +1991,8 @@ fun VehicleHero(
     vehicleAddress: String? = null,
     onAddressClick: () -> Unit = {},
     vehicleVin: String = "",
-    vehicleImageVersion: Int = 0
+    vehicleImageVersion: Int = 0,
+    onControl: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val remoteBitmap = remember(vehicleVin, vehicleImageVersion) {
@@ -2223,7 +2225,7 @@ fun VehicleHero(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(142.dp),
+                        .height(146.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     // 车轮地面接触微阴影 (Ground Contact Shadow)
@@ -2269,6 +2271,16 @@ fun VehicleHero(
                                 .padding(horizontal = 20.dp)
                         )
                     }
+
+                    // 方案 B：轻量化分层状态叠加与交互热点 (Layered Vehicle Status Overlay)
+                    VehicleStatusOverlay(
+                        status = status,
+                        onControl = onControl,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(146.dp)
+                            .padding(horizontal = 14.dp)
+                    )
                 }
             }
             Box(
@@ -2293,6 +2305,171 @@ fun VehicleHero(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VehicleStatusOverlay(
+    status: VehicleStatus?,
+    onControl: ((String) -> Unit)?,
+    modifier: Modifier = Modifier
+) {
+    if (status == null) return
+
+    val infiniteTransition = rememberInfiniteTransition(label = "vehicle_status_pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
+    val hasOpenWindows = status.openWindows.isNotEmpty()
+    val trunkOpen = status.trunkState == TrunkState.OPEN
+    val isCharging = status.chargeState == 1 || (!status.chargingPower.isNullOrBlank() && status.chargingPower != "--")
+    val isUnlocked = status.locked == false
+    val anyDoorOpen = status.anyDoorOpen
+
+    Box(modifier = modifier) {
+        // 1. 车窗层 (车顶偏中上方)
+        if (hasOpenWindows) {
+            StatusOverlayChip(
+                icon = R.drawable.ic_phosphor_wind,
+                label = "车窗通风",
+                actionLabel = if (onControl != null) "关窗 >" else null,
+                tint = MaterialTheme.statusWarn,
+                pulseAlpha = pulseAlpha,
+                onClick = onControl?.let { { it("windowClose") } },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = 2.dp)
+            )
+        }
+
+        // 2. 尾门层 (车尾右上位置)
+        if (trunkOpen) {
+            StatusOverlayChip(
+                icon = R.drawable.ic_phosphor_trunk_open,
+                label = "尾门未关",
+                actionLabel = if (onControl != null) "关尾门 >" else null,
+                tint = MaterialTheme.colorScheme.error,
+                pulseAlpha = pulseAlpha,
+                onClick = onControl?.let { { it("trunkClose") } },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = (-4).dp, y = 8.dp)
+            )
+        }
+
+        // 3. 车门/车锁层 (车身中左侧)
+        if (anyDoorOpen) {
+            StatusOverlayChip(
+                icon = R.drawable.ic_phosphor_warning,
+                label = "车门未关",
+                actionLabel = null,
+                tint = MaterialTheme.colorScheme.error,
+                pulseAlpha = pulseAlpha,
+                onClick = null,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .offset(x = 10.dp, y = 6.dp)
+            )
+        } else if (isUnlocked) {
+            StatusOverlayChip(
+                icon = R.drawable.ic_phosphor_lock_open,
+                label = "未上锁",
+                actionLabel = if (onControl != null) "上锁 >" else null,
+                tint = MaterialTheme.colorScheme.primary,
+                pulseAlpha = pulseAlpha,
+                onClick = onControl?.let { { it("lock") } },
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .offset(x = 10.dp, y = 6.dp)
+            )
+        }
+
+        // 4. 充电状态层 (右下翼子板位置)
+        if (isCharging) {
+            Canvas(
+                modifier = Modifier
+                    .size(24.dp)
+                    .align(Alignment.BottomEnd)
+                    .offset(x = (-18).dp, y = (-18).dp)
+            ) {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFF00C853).copy(alpha = 0.45f * pulseAlpha),
+                            Color.Transparent
+                        )
+                    ),
+                    radius = size.minDimension / 2f
+                )
+            }
+
+            StatusOverlayChip(
+                icon = R.drawable.ic_widget_charging_bolt,
+                label = status.chargingPower?.let { "充电 $it" } ?: "正在充电",
+                actionLabel = null,
+                tint = MaterialTheme.statusGood,
+                pulseAlpha = pulseAlpha,
+                onClick = null,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = (-4).dp, y = (-2).dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusOverlayChip(
+    icon: Int,
+    label: String,
+    actionLabel: String?,
+    tint: Color,
+    pulseAlpha: Float,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.glassInsetSurface.copy(alpha = 0.90f),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.50f * pulseAlpha)),
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.5.dp)
+        ) {
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = null,
+                modifier = Modifier.size(12.dp),
+                tint = tint
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium
+            )
+            if (actionLabel != null) {
+                Text(
+                    text = actionLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = tint,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
@@ -3249,12 +3426,7 @@ private fun QuickVehicleButton(
 private fun HomeTirePressureCard(status: VehicleStatus?, modifier: Modifier = Modifier) {
     val tireByPosition = status?.tires.orEmpty().associateBy { it.position }
     val outlineVariant = MaterialTheme.colorScheme.outlineVariant
-    val hasWarning = status?.tires?.any { it.warning } == true
-    val cardBorder = if (hasWarning) {
-        BorderStroke(1.2.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.8f))
-    } else {
-        BorderStroke(1.dp, outlineVariant.copy(alpha = 0.45f))
-    }
+    val cardBorder = BorderStroke(1.dp, outlineVariant.copy(alpha = 0.45f))
     Surface(
         modifier = modifier.heightIn(min = 120.dp),
         shape = RoundedCornerShape(16.dp),
@@ -3313,12 +3485,17 @@ private fun HomeTirePressureCard(status: VehicleStatus?, modifier: Modifier = Mo
 @Composable
 fun HomeTireCell(position: String, tire: TireStatus?, modifier: Modifier = Modifier) {
     val warning = tire?.warning == true
+    val outlineVariant = MaterialTheme.colorScheme.outlineVariant
+    val cellBorder = if (warning) {
+        BorderStroke(1.2.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
+    } else {
+        BorderStroke(0.5.dp, outlineVariant.copy(alpha = 0.35f))
+    }
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        color = if (warning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.glassInsetSurface,
-        border = if (warning) BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
-                 else BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+        color = if (warning) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.30f) else MaterialTheme.glassInsetSurface,
+        border = cellBorder
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
@@ -3328,7 +3505,7 @@ fun HomeTireCell(position: String, tire: TireStatus?, modifier: Modifier = Modif
                 position,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = if (warning) MaterialTheme.colorScheme.error.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(2.dp))
             Text(
@@ -3378,13 +3555,8 @@ fun VehicleStatusCard(
     var powerNextPageRequest by rememberSaveable { mutableStateOf<Int?>(null) }
     val windowAlert = windowAvailable && openWindows.isNotEmpty()
     val lockAlert = status?.locked == false
-    val isSecure = status?.locked == true && (!windowAvailable || openWindows.isEmpty())
     val outlineVariant = MaterialTheme.colorScheme.outlineVariant
-    val cardBorder = when {
-        lockAlert || windowAlert -> BorderStroke(1.2.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.8f))
-        isSecure -> BorderStroke(1.2.dp, MaterialTheme.statusGood.copy(alpha = 0.8f))
-        else -> BorderStroke(1.dp, outlineVariant.copy(alpha = 0.45f))
-    }
+    val cardBorder = BorderStroke(1.dp, outlineVariant.copy(alpha = 0.45f))
     Surface(
         modifier = modifier.heightIn(min = 120.dp),
         shape = RoundedCornerShape(16.dp),
@@ -3527,11 +3699,17 @@ fun VehicleStatusCell(
     warning: Boolean = false,
     valueColor: Color? = null
 ) {
+    val outlineVariant = MaterialTheme.colorScheme.outlineVariant
+    val cellBorder = if (warning) {
+        BorderStroke(1.2.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
+    } else {
+        BorderStroke(0.5.dp, outlineVariant.copy(alpha = 0.35f))
+    }
     Surface(
         modifier = modifier.clickable(enabled = onClick != null, onClick = { onClick?.invoke() }),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.glassInsetSurface,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+        color = if (warning) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.30f) else MaterialTheme.glassInsetSurface,
+        border = cellBorder
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
@@ -3541,7 +3719,7 @@ fun VehicleStatusCell(
                 label,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = if (warning) MaterialTheme.colorScheme.error.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(2.dp))
             val finalColor = valueColor ?: when {

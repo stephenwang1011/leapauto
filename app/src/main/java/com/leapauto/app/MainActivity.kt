@@ -70,7 +70,12 @@ data class VehicleStatus(
     val chargeLabel: String,
     val chargeState: Int?,
     val locationSummary: VehicleLocationSummary? = null,
-    val trunkState: TrunkState = TrunkState.UNKNOWN
+    val trunkState: TrunkState = TrunkState.UNKNOWN,
+    val driverDoorOpen: Boolean = false,
+    val passengerDoorOpen: Boolean = false,
+    val leftRearDoorOpen: Boolean = false,
+    val rightRearDoorOpen: Boolean = false,
+    val anyDoorOpen: Boolean = false
 )
 
 data class TireStatus(
@@ -1694,7 +1699,15 @@ class MainActivity : ComponentActivity() {
             tires = tireList,
             chargeLabel = ChargeStatus.label(charge?.toString()?.toIntOrNull()),
             chargeState = charge?.toString()?.toIntOrNull(),
-            trunkState = TrunkStateMapper.fromSignal(m.opt("bbcmBackDoorStatus"))
+            trunkState = TrunkStateMapper.fromSignal(m.opt("bbcmBackDoorStatus")),
+            driverDoorOpen = m.optBool("lbcmDriverDoorStatus") == true,
+            passengerDoorOpen = m.optBool("rbcmDriverDoorStatus") == true,
+            leftRearDoorOpen = m.optBool("lbcmLeftRearDoorStatus") == true,
+            rightRearDoorOpen = m.optBool("rbcmRightRearDoorStatus") == true,
+            anyDoorOpen = (m.optBool("lbcmDriverDoorStatus") == true) ||
+                (m.optBool("rbcmDriverDoorStatus") == true) ||
+                (m.optBool("lbcmLeftRearDoorStatus") == true) ||
+                (m.optBool("rbcmRightRearDoorStatus") == true)
         )
     }
 

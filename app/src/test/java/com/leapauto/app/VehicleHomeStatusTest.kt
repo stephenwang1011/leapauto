@@ -152,4 +152,43 @@ class VehicleHomeStatusTest {
         assertEquals("状态更新 昨天 23:06", VehicleHomeStatus.updatedLabel(yesterday, now, zone))
         assertEquals("状态更新 8/12 08:09", VehicleHomeStatus.updatedLabel(earlier, now, zone))
     }
+
+    @Test
+    fun `vehicle status defaults all door open states to false`() {
+        val status = VehicleStatus(
+            soc = "80%",
+            preciseSoc = "80.0%",
+            mileage = "400km",
+            totalMileage = "12000km",
+            averageEnergyConsumption = "15.0",
+            chargingPower = null,
+            chargeRemainTime = null,
+            batteryVoltage = null,
+            batteryCurrent = null,
+            chargeType = null,
+            minBatteryTemp = null,
+            healthyChargeEnabled = null,
+            rangeMode = "0",
+            speed = null,
+            isDriving = false,
+            gearStatus = "P",
+            locked = true,
+            acSwitch = false,
+            acSetting = "24",
+            acCoolingAndHeating = null,
+            indoorTemp = "22",
+            acAirVolume = "2",
+            windshieldDefrost = false,
+            rearWindowHeating = false,
+            tires = emptyList(),
+            chargeLabel = "未充电",
+            chargeState = 0
+        )
+        assertEquals(false, status.driverDoorOpen)
+        assertEquals(false, status.passengerDoorOpen)
+        assertEquals(false, status.leftRearDoorOpen)
+        assertEquals(false, status.rightRearDoorOpen)
+        assertEquals(false, status.anyDoorOpen)
+        assertEquals(TrunkState.UNKNOWN, status.trunkState)
+    }
 }
