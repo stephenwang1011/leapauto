@@ -2186,9 +2186,11 @@ class MainActivity : ComponentActivity() {
             return
         }
         val sentryTarget = commandName?.let(SentryModeControlPolicy::targetEnabled)
+        val started = System.currentTimeMillis()
         busy { generation ->
             runOnMain(generation) {
                 controlFeedback = ControlFeedback("${command.label}：正在发送", ControlFeedbackKind.IN_PROGRESS)
+                Toast.makeText(this@MainActivity, "${command.label}：正在下发车机...", Toast.LENGTH_SHORT).show()
             }
             try {
                 val api = LeapmotorApi(session)
@@ -2208,6 +2210,7 @@ class MainActivity : ComponentActivity() {
                                 "${command.label}：车辆已处于目标状态",
                                 ControlFeedbackKind.SUCCESS
                             )
+                            Toast.makeText(this@MainActivity, "${command.label}：车辆已处于目标状态", Toast.LENGTH_SHORT).show()
                         }
                         refreshStatusAfterControl(generation)
                         return@busy
@@ -2222,6 +2225,7 @@ class MainActivity : ComponentActivity() {
                             "${command.label}：已发送，请稍后刷新车况确认",
                             ControlFeedbackKind.WARNING
                         )
+                        Toast.makeText(this@MainActivity, "${command.label}：已发送车机", Toast.LENGTH_SHORT).show()
                     }
                     refreshStatusAfterControl(generation)
                     if (commandName != null && ParkingAnomalyPolicy.shouldCheck(commandName, commandAccepted = true)) {
@@ -2267,6 +2271,7 @@ class MainActivity : ComponentActivity() {
                         finalText,
                         if (completed) ControlFeedbackKind.SUCCESS else ControlFeedbackKind.WARNING
                     )
+                    Toast.makeText(this@MainActivity, finalText, Toast.LENGTH_SHORT).show()
                 }
                 if (completed) {
                     refreshStatusAfterControl(generation)
@@ -2275,9 +2280,29 @@ class MainActivity : ComponentActivity() {
                     scheduleParkingAnomalyCheck(generation)
                 }
             } catch (e: Exception) {
+                val elapsed = System.currentTimeMillis() - started
+                val apiError = e as? ApiException
+                ErrorLogs.repository.record(
+                    ErrorLogEntry(
+                        timestampMs = System.currentTimeMillis(),
+                        category = ErrorLogCategory.CONTROL_FAILURE,
+                        stage = "control_${command.cmdid}",
+                        httpStatus = apiError?.httpStatus,
+                        durationMs = elapsed,
+                        retryCount = 0,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        message = buildString {
+                            appendLine("控车异常: ${command.label} (cmdid=${command.cmdid})")
+                            appendLine("载荷: ${command.stateJson}")
+                            appendLine("错误: ${e.message ?: e.toString()}")
+                        }
+                    )
+                )
                 runOnMain(generation) {
                     handleSessionFailure(e)
-                    controlFeedback = ControlFeedback(controlFailureMessage(command.label, e), ControlFeedbackKind.ERROR)
+                    val errMsg = controlFailureMessage(command.label, e)
+                    controlFeedback = ControlFeedback(errMsg, ControlFeedbackKind.ERROR)
+                    Toast.makeText(this@MainActivity, "${command.label}失败: ${e.message ?: errMsg}", Toast.LENGTH_LONG).show()
                 }
             }
         }

@@ -251,12 +251,12 @@ fun HealthyChargingBottomSheet(
                     )
                 }
 
-                // 最低电池温度、充电功率 与 充电剩余时间 精致卡片
+                // 电池温度、充电功率 与 充电剩余时间 精致卡片
                 val formattedRemainTime = formatChargeRemainTime(status?.chargeRemainTime, status?.chargeState)
                 val minTemp = status?.minBatteryTemp?.trim()?.takeIf { it.isNotBlank() && it != "--" } ?: "-- °C"
                 val chargingPowerText = when {
                     status?.chargeState == 1 -> status.chargingPower?.takeIf { it.isNotBlank() } ?: "充电中"
-                    else -> "0.0 kW"
+                    else -> "未充电"
                 }
 
                 Surface(
@@ -272,14 +272,14 @@ fun HealthyChargingBottomSheet(
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 1. 最低电池温度
+                        // 1. 电池温度
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(3.dp),
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = "最低电池温度",
+                                text = "电池温度",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -326,14 +326,14 @@ fun HealthyChargingBottomSheet(
                                 .background(cardBorderColor)
                         )
 
-                        // 3. 充电剩余时间
+                        // 3. 剩余时间
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(3.dp),
                             modifier = Modifier.weight(1.1f)
                         ) {
                             Text(
-                                text = "充电剩余时间",
+                                text = "剩余时间",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -353,71 +353,82 @@ fun HealthyChargingBottomSheet(
             val isCharging = status?.chargeState == 1
 
             if (isGunConnected) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
                     if (isCharging) {
+                        // 充电过程中：只要停止充电按钮，不显示解锁拔枪，按钮占满整行
                         Button(
-                            onClick = { onControl("stopCharging") },
+                            onClick = {
+                                onControl("stopCharging")
+                                onDismissRequest()
+                            },
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (isDark) Color(0xFF3E1E22) else Color(0xFFFFECEB),
                                 contentColor = Color(0xFFFF3B30)
                             ),
                             modifier = Modifier
-                                .weight(1f)
+                                .fillMaxWidth()
                                 .height(44.dp)
                         ) {
                             Text(
-                                text = "⏹ 停止充电",
-                                fontSize = 14.sp,
+                                text = "停止充电",
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFFF3B30)
                             )
                         }
                     } else {
-                        Button(
-                            onClick = { onControl("startCharging") },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.statusGood,
-                                contentColor = Color.White
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp)
+                        // 插枪未充电状态：展现“开始充电”与“解锁拔枪”
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "⚡ 立即开始充电",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                    }
+                            Button(
+                                onClick = {
+                                    onControl("startCharging")
+                                    onDismissRequest()
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.statusGood,
+                                    contentColor = Color.White
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                            ) {
+                                Text(
+                                    text = "开始充电",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
 
-                    // 辅助按键：解锁充电枪（cmdid=192）
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = cardBgColor,
-                        border = BorderStroke(0.6.dp, cardBorderColor),
-                        modifier = Modifier
-                            .height(44.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { onControl("unlockCharger") }
-                    ) {
-                        Box(
-                            modifier = Modifier.padding(horizontal = 14.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "🔓 解锁拔枪",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            // 辅助按键：解锁拔枪（cmdid=192）
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = cardBgColor,
+                                border = BorderStroke(0.6.dp, cardBorderColor),
+                                modifier = Modifier
+                                    .height(44.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        onControl("unlockCharger")
+                                        onDismissRequest()
+                                    }
+                            ) {
+                            Box(
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "解锁拔枪",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 }
@@ -442,23 +453,13 @@ fun HealthyChargingBottomSheet(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = "健康充电",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "打开后，将根据车辆电池状态，自动为您调整充电上限，以保持电池健康",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                                lineHeight = 17.sp
-                            )
-                        }
+                        Text(
+                            text = "健康充电",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
                         Spacer(Modifier.width(12.dp))
                         Switch(
                             checked = healthySwitchEnabled,
@@ -525,9 +526,9 @@ fun HealthyChargingBottomSheet(
                                     Surface(
                                         shape = CircleShape,
                                         color = Color.White,
-                                        shadowElevation = 3.dp,
-                                        border = BorderStroke(1.dp, Color(0xFFE2E2E8)),
-                                        modifier = Modifier.size(20.dp)
+                                        shadowElevation = 2.dp,
+                                        border = BorderStroke(1.dp, if (isDark) Color(0xFF55555A) else Color(0xFFD0D0D6)),
+                                        modifier = Modifier.size(12.dp)
                                     ) {}
                                 },
                                 track = { sliderState ->
@@ -551,25 +552,28 @@ fun HealthyChargingBottomSheet(
                             )
                         }
 
-                        // 90% 最佳限值提示标记
+                        // 90% 最佳限值提示标记（上移且箭头清晰明显）
                         BoxWithConstraints(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 38.dp)
+                                .offset(y = (-8).dp)
                         ) {
                             val xPos = maxWidth * 0.80f
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(0.dp),
                                 modifier = Modifier.offset(x = xPos - 30.dp)
                             ) {
                                 Text(
                                     text = "▲",
-                                    fontSize = 7.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.50f)
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.80f)
                                 )
                                 Text(
                                     text = "最佳限值90%",
                                     fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -688,23 +692,13 @@ fun HealthyChargingBottomSheet(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = "预约电池预热",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "寒冷天气时，电池系统会自动调节电池温度，以提升电池续航和性能。达到理想温度时自动停止预热。",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                                lineHeight = 16.sp
-                            )
-                        }
+                        Text(
+                            text = "电池预热",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
                         Spacer(Modifier.width(12.dp))
                         Switch(
                             checked = scheduledPreheatEnabled,
@@ -1054,10 +1048,10 @@ private fun ScheduledPreheatDialog(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 顶栏：标题“预约电池预热”与右上角关闭叉号
+            // 顶栏：标题“电池预热”与右上角关闭叉号
             Box(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "预约电池预热",
+                    text = "电池预热",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -1396,11 +1390,11 @@ private fun formatChargeRemainTime(remainTime: String?, chargeState: Int?): Stri
 
     return when {
         totalMinutes <= 0 -> "已充满"
-        totalMinutes < 60 -> "剩余${totalMinutes}分钟"
+        totalMinutes < 60 -> "${totalMinutes}分"
         else -> {
             val hours = totalMinutes / 60
             val mins = totalMinutes % 60
-            if (mins > 0) "剩余${hours}小时${mins}分钟" else "剩余${hours}小时"
+            if (mins > 0) "${hours}时${mins}分" else "${hours}时"
         }
     }
 }
