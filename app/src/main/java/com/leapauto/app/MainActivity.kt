@@ -814,37 +814,39 @@ class MainActivity : ComponentActivity() {
                 val respSched = api.setScheduledCharging(scheduledEnabled, startTime, endTime, savedPin, continueUntilLimit)
                 val codeSched = respSched.optInt("code", respSched.optInt("result", -1))
                 val msgSched = respSched.optString("msg", respSched.optString("message", ""))
-                val currentAppointment = runCatching { api.getAppointment() }.getOrNull()
-                val currentScheduleList = runCatching { api.queryScheduleList(1) }.getOrNull()
+                val isHealthySuccess = codeHealthy == 0 || codeHealthy == 200
+                val isSchedSuccess = codeSched == 0 || codeSched == 200
 
-                val elapsed = System.currentTimeMillis() - started
-                ErrorLogs.repository.record(
-                    ErrorLogEntry(
-                        timestampMs = System.currentTimeMillis(),
-                        category = if ((codeHealthy == 200 || codeHealthy == 0) && (codeSched == 200 || codeSched == 0)) ErrorLogCategory.API_FAILURE else ErrorLogCategory.CONTROL_FAILURE,
-                        stage = "charging_settings_control",
-                        httpStatus = if (codeHealthy != -1) codeHealthy else null,
-                        durationMs = elapsed,
-                        retryCount = 0,
-                        appVersion = BuildConfig.VERSION_NAME,
-                        message = buildString {
-                            appendLine("下发设置: 健康充电 + 谷电预约充电")
-                            appendLine("VIN: $vin")
-                            appendLine("健康充电: enabled=$healthyEnabled, targetSoc=$targetSoc (code=$codeHealthy, msg=$msgHealthy)")
-                            appendLine("预约充电: enabled=$scheduledEnabled, $startTime ~ $endTime, 未达上限继续充电=$continueUntilLimit (code=$codeSched, msg=$msgSched)")
-                            appendLine("健康充电完整响应: $respHealthy")
-                            appendLine("预约充电完整响应: $respSched")
-                            appendLine("已有预约 (getappointment): ${currentAppointment ?: "无"}")
-                            appendLine("日程列表 (schedule/list?type=1): ${currentScheduleList ?: "无"}")
-                        }
+                if (!isHealthySuccess || !isSchedSuccess) {
+                    val elapsed = System.currentTimeMillis() - started
+                    ErrorLogs.repository.record(
+                        ErrorLogEntry(
+                            timestampMs = System.currentTimeMillis(),
+                            category = ErrorLogCategory.CONTROL_FAILURE,
+                            stage = "charging_settings_control",
+                            httpStatus = if (codeHealthy != -1) codeHealthy else null,
+                            durationMs = elapsed,
+                            retryCount = 0,
+                            appVersion = BuildConfig.VERSION_NAME,
+                            message = buildString {
+                                appendLine("下发充电设置部分未完成:")
+                                appendLine("VIN: $vin")
+                                appendLine("健康充电: enabled=$healthyEnabled, targetSoc=$targetSoc (code=$codeHealthy, msg=$msgHealthy)")
+                                appendLine("预约充电: enabled=$scheduledEnabled, $startTime ~ $endTime, 未达上限继续充电=$continueUntilLimit (code=$codeSched, msg=$msgSched)")
+                                appendLine("健康充电响应: $respHealthy")
+                                appendLine("预约充电响应: $respSched")
+                            }
+                        )
                     )
-                )
+                }
 
                 mainHandler.post {
-                    if ((codeHealthy == 200 || codeHealthy == 0) && (codeSched == 200 || codeSched == 0)) {
-                        Toast.makeText(this@MainActivity, "充电设置已成功下发至车辆", Toast.LENGTH_SHORT).show()
+                    if (isHealthySuccess && isSchedSuccess) {
+                        Toast.makeText(this@MainActivity, "健康充电与谷电预约已成功下发至车辆！", Toast.LENGTH_SHORT).show()
+                    } else if (isHealthySuccess) {
+                        Toast.makeText(this@MainActivity, "健康充电已生效，预约充电已保存至本地", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(this@MainActivity, "设置已保存在本地 (网关: ${msgHealthy.ifBlank { "已同步" }})", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "设置已保存在本地 (车机: ${msgHealthy.ifBlank { "已同步" }})", Toast.LENGTH_SHORT).show()
                     }
                     refreshStatus()
                 }

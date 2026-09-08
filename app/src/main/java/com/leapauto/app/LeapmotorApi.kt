@@ -1157,31 +1157,7 @@ class LeapmotorApi(private val session: Session) {
             put("continueUntilFull", continueInt)
         }
 
-        // 1. 优先调用官方独立定时任务接口 (/schedule/operate)，携带车端必需的 model、type(Integer 1) 参数
-        val scheduleUrl = "${route.appRegion}/carownerservice/v3/api/schedule/operate"
-        val schedParams = linkedMapOf(
-            "carvin" to session.selectedVin,
-            "vin" to session.selectedVin,
-            "model" to model,
-            "type" to "1",
-            "state" to stateInt.toString(),
-            "status" to stateInt.toString(),
-            "startTime" to startTime,
-            "endTime" to endTime,
-            "repeat" to "1,2,3,4,5,6,7",
-            "cycle" to "1,2,3,4,5,6,7",
-            "continueCharge" to continueInt.toString(),
-            "continueUntilFull" to continueInt.toString()
-        )
-        try {
-            val resp = gatewayFetch(scheduleUrl, method = "POST", params = schedParams, formBody = schedParams)
-            val code = resp.optInt("code", resp.optInt("result", -1))
-            if (code == 0 || code == 200) {
-                return resp
-            }
-        } catch (_: Exception) {}
-
-        // 2. 备选：车控原语通道 (/appremotectl/appointment) 带 oldAppHeaders + oppwd
+        // 1. 优先尝试车控原语通道 (/appremotectl/appointment) 带 oldAppHeaders + oppwd
         val old = session.oldAuth
         if (old != null && opPassword.isNotBlank()) {
             val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
@@ -1205,7 +1181,7 @@ class LeapmotorApi(private val session: Session) {
             } catch (_: Exception) {}
         }
 
-        // 3. 最终尝试新网关 appointment
+        // 2. 新网关 appointment 签名通道
         val url = "${route.appRegion}/carownerservice/v3/api/appremotectl/appointment"
         val params = linkedMapOf(
             "carvin" to session.selectedVin,
@@ -1247,28 +1223,7 @@ class LeapmotorApi(private val session: Session) {
             put("model", model)
         }
 
-        // 1. 优先调用官方独立定时任务接口 (/schedule/operate)，type=3 (预热)
-        val scheduleUrl = "${route.appRegion}/carownerservice/v3/api/schedule/operate"
-        val schedParams = linkedMapOf(
-            "carvin" to session.selectedVin,
-            "vin" to session.selectedVin,
-            "model" to model,
-            "type" to "3",
-            "state" to stateInt.toString(),
-            "status" to stateInt.toString(),
-            "startTime" to startTime,
-            "repeat" to "1,2,3,4,5,6,7",
-            "cycle" to "1,2,3,4,5,6,7"
-        )
-        try {
-            val resp = gatewayFetch(scheduleUrl, method = "POST", params = schedParams, formBody = schedParams)
-            val code = resp.optInt("code", resp.optInt("result", -1))
-            if (code == 0 || code == 200) {
-                return resp
-            }
-        } catch (_: Exception) {}
-
-        // 2. 备选车控原语通道 (/appremotectl/appointment)
+        // 1. 优先尝试车控原语通道 (/appremotectl/appointment)
         val old = session.oldAuth
         if (old != null && opPassword.isNotBlank()) {
             val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
@@ -1291,6 +1246,7 @@ class LeapmotorApi(private val session: Session) {
             } catch (_: Exception) {}
         }
 
+        // 2. 新网关 appointment 签名通道
         val url = "${route.appRegion}/carownerservice/v3/api/appremotectl/appointment"
         val params = linkedMapOf(
             "carvin" to session.selectedVin,
