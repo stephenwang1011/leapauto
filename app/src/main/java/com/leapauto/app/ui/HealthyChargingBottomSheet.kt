@@ -35,14 +35,17 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -108,10 +111,15 @@ fun HealthyChargingBottomSheet(
     ) -> Unit = { _, _, _ -> }
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val context = LocalContext.current
+    var lastToastTime by remember { mutableLongStateOf(0L) }
 
     // 1. 健康充电状态
     var healthySwitchEnabled by remember(isHealthyChargeEnabled) { mutableStateOf(isHealthyChargeEnabled) }
-    var selectedSoc by remember(currentLimitSoc) { mutableFloatStateOf(currentLimitSoc.toFloat().coerceIn(50f, 100f)) }
+    var selectedSoc by remember(currentLimitSoc, isHealthyChargeEnabled) {
+        val base = currentLimitSoc.toFloat().coerceIn(50f, 100f)
+        mutableFloatStateOf(if (isHealthyChargeEnabled && base >= 100f) 90f else base)
+    }
 
     // 2. 预约充电状态
     var scheduledChargeEnabled by remember(initialScheduledChargeEnabled) { mutableStateOf(initialScheduledChargeEnabled) }
@@ -280,7 +288,13 @@ fun HealthyChargingBottomSheet(
                         Spacer(Modifier.width(12.dp))
                         Switch(
                             checked = healthySwitchEnabled,
-                            onCheckedChange = { healthySwitchEnabled = it },
+                            onCheckedChange = { isChecked ->
+                                healthySwitchEnabled = isChecked
+                                if (isChecked && selectedSoc >= 100f) {
+                                    selectedSoc = 90f
+                                    Toast.makeText(context, "开启健康充电，充电上限已自动调整至最佳限值 90%", Toast.LENGTH_SHORT).show()
+                                }
+                            },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.White,
                                 checkedTrackColor = MaterialTheme.statusGood
@@ -313,7 +327,19 @@ fun HealthyChargingBottomSheet(
                             )
                             Slider(
                                 value = selectedSoc,
-                                onValueChange = { selectedSoc = (it / 5).roundToInt() * 5f },
+                                onValueChange = { targetVal ->
+                                    val snapped = (targetVal / 5).roundToInt() * 5f
+                                    if (healthySwitchEnabled && snapped >= 100f) {
+                                        selectedSoc = 95f
+                                        val now = System.currentTimeMillis()
+                                        if (now - lastToastTime > 1800L) {
+                                            lastToastTime = now
+                                            Toast.makeText(context, "健康充电开启时不可设置为 100%，以保护动力电池寿命", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } else {
+                                        selectedSoc = snapped
+                                    }
+                                },
                                 valueRange = 50f..100f,
                                 steps = 9,
                                 colors = SliderDefaults.colors(
