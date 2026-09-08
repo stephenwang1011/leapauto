@@ -2079,10 +2079,10 @@ private fun DrivingBreathingDot(modifier: Modifier = Modifier) {
 @Composable
 private fun glassCardBorder(): BorderStroke {
     val isDark = LocalAppDarkTheme.current
-    val topLeftColor = if (isDark) Color.White.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.95f)
-    val bottomRightColor = if (isDark) Color.White.copy(alpha = 0.06f) else Color.White.copy(alpha = 0.25f)
+    val topLeftColor = if (isDark) Color.White.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.78f)
+    val bottomRightColor = if (isDark) Color.White.copy(alpha = 0.04f) else Color.White.copy(alpha = 0.18f)
     return BorderStroke(
-        1.2.dp,
+        1.0.dp,
         Brush.linearGradient(
             colors = listOf(topLeftColor, bottomRightColor),
             start = Offset.Zero,
@@ -2095,10 +2095,10 @@ private fun glassCardBorder(): BorderStroke {
 private fun glassInsetBorder(warning: Boolean = false): BorderStroke {
     if (warning) return BorderStroke(1.2.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
     val isDark = LocalAppDarkTheme.current
-    val topLeftColor = if (isDark) Color.White.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.85f)
-    val bottomRightColor = if (isDark) Color.White.copy(alpha = 0.05f) else Color.White.copy(alpha = 0.20f)
+    val topLeftColor = if (isDark) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.70f)
+    val bottomRightColor = if (isDark) Color.White.copy(alpha = 0.03f) else Color.White.copy(alpha = 0.14f)
     return BorderStroke(
-        0.8.dp,
+        0.6.dp,
         Brush.linearGradient(
             colors = listOf(topLeftColor, bottomRightColor),
             start = Offset.Zero,

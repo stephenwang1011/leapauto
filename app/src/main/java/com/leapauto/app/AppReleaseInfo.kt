@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 彻底移除车身下方额外绘制的暗色椭圆阴影，恢复零跑官方原版PNG纯净通透光影\n" +
-        "2. 消除阴影脏污感，车身与曜石冷钛液态玻璃底板更清爽融合"
+        "1. 柔化45°液态玻璃倒角边框：描边精细收缩至1.0dp，受光强度柔化至78%，消除生硬白线感\n" +
+        "2. 呈现流动润泽的水晶微折射质感，与冷钛底板浑然天成"
 }
