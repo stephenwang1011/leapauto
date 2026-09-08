@@ -804,7 +804,8 @@ class MainActivity : ComponentActivity() {
                 val codeHealthy = respHealthy.optInt("code", respHealthy.optInt("result", -1))
                 val msgHealthy = respHealthy.optString("msg", respHealthy.optString("message", ""))
 
-                val respSched = api.setScheduledCharging(scheduledEnabled, startTime, endTime)
+                val savedPin = sessionStore.loadOpPassword().orEmpty()
+                val respSched = api.setScheduledCharging(scheduledEnabled, startTime, endTime, savedPin)
                 val codeSched = respSched.optInt("code", respSched.optInt("result", -1))
                 val msgSched = respSched.optString("msg", respSched.optString("message", ""))
                 val currentAppointment = runCatching { api.getAppointment() }.getOrNull()
@@ -877,7 +878,8 @@ class MainActivity : ComponentActivity() {
         worker.execute {
             try {
                 val api = LeapmotorApi(session)
-                val resp = api.setScheduledBatteryPreheat(enabled, startTime)
+                val savedPin = sessionStore.loadOpPassword().orEmpty()
+                val resp = api.setScheduledBatteryPreheat(enabled, startTime, savedPin)
                 val code = resp.optInt("code", resp.optInt("result", -1))
                 val msg = resp.optString("msg", resp.optString("message", ""))
                 val elapsed = System.currentTimeMillis() - started

@@ -1131,7 +1131,12 @@ class LeapmotorApi(private val session: Session) {
      * 谷电预约充电控制（插枪后在设定起止时间段内执行充电）。
      * 默认 23:00 开始至次日 07:00 结束。
      */
-    fun setScheduledCharging(enabled: Boolean, startTime: String, endTime: String): JSONObject {
+    fun setScheduledCharging(
+        enabled: Boolean,
+        startTime: String,
+        endTime: String,
+        opPassword: String = ""
+    ): JSONObject {
         requireVin()
         val route = ensureRoute()
         val url = "${route.appRegion}/carownerservice/v3/api/appremotectl/appointment"
@@ -1139,11 +1144,14 @@ class LeapmotorApi(private val session: Session) {
         val stateJson = JSONObject().apply {
             put("startTime", startTime)
             put("endTime", endTime)
+            put("start", startTime)
+            put("end", endTime)
             put("state", stateInt)
             put("status", stateInt)
+            put("value", if (enabled) "1" else "0")
             put("repeat", "1,2,3,4,5,6,7")
         }
-        val params = mapOf(
+        val params = linkedMapOf(
             "carvin" to session.selectedVin,
             "vin" to session.selectedVin,
             "cmdid" to "361",
@@ -1151,6 +1159,10 @@ class LeapmotorApi(private val session: Session) {
             "startTime" to startTime,
             "endTime" to endTime
         )
+        val old = session.oldAuth
+        if (old != null && opPassword.isNotBlank()) {
+            params["oppwd"] = Crypto.encryptOperationPassword(opPassword, old.token)
+        }
         return gatewayFetch(url, method = "POST", params = params, formBody = params)
     }
 
@@ -1158,24 +1170,34 @@ class LeapmotorApi(private val session: Session) {
      * 预约电池预热控制（设定时间自动唤醒加热动力电池）。
      * 默认 23:00 开始预热。
      */
-    fun setScheduledBatteryPreheat(enabled: Boolean, startTime: String): JSONObject {
+    fun setScheduledBatteryPreheat(
+        enabled: Boolean,
+        startTime: String,
+        opPassword: String = ""
+    ): JSONObject {
         requireVin()
         val route = ensureRoute()
         val url = "${route.appRegion}/carownerservice/v3/api/appremotectl/appointment"
         val stateInt = if (enabled) 1 else 0
         val stateJson = JSONObject().apply {
             put("startTime", startTime)
+            put("start", startTime)
             put("state", stateInt)
             put("status", stateInt)
+            put("value", if (enabled) "1" else "0")
             put("repeat", "1,2,3,4,5,6,7")
         }
-        val params = mapOf(
+        val params = linkedMapOf(
             "carvin" to session.selectedVin,
             "vin" to session.selectedVin,
             "cmdid" to "161",
             "state" to stateJson.toString(),
             "startTime" to startTime
         )
+        val old = session.oldAuth
+        if (old != null && opPassword.isNotBlank()) {
+            params["oppwd"] = Crypto.encryptOperationPassword(opPassword, old.token)
+        }
         return gatewayFetch(url, method = "POST", params = params, formBody = params)
     }
 

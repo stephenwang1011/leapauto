@@ -112,7 +112,7 @@
                     android:textSize="10sp" />
             </LinearLayout>
 
-            <View
+            <FrameLayout
                 android:layout_width="1dp"
                 android:layout_height="10dp"
                 android:layout_marginStart="4dp"
