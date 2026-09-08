@@ -8,11 +8,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -173,11 +175,16 @@ fun HealthyChargingBottomSheet(
         )
     }
 
+    val isDark = LocalAppDarkTheme.current
+    val pageBgColor = if (isDark) Color(0xFF141416) else Color(0xFFF7F8FA)
+    val cardBgColor = if (isDark) Color(0xFF1E1E22) else Color.White
+    val cardBorderColor = if (isDark) Color(0xFF2C2C30) else Color(0xFFEBECEF)
+
     // 图 1: 充电中心主界面
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = pageBgColor,
         contentColor = MaterialTheme.colorScheme.onSurface,
         dragHandle = { BottomSheetDefaults.DragHandle() },
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -185,9 +192,9 @@ fun HealthyChargingBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 4.dp)
+                .padding(horizontal = 16.dp, vertical = 4.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // 顶栏：返回按钮与标题“充电中心”
             Row(
@@ -209,7 +216,7 @@ fun HealthyChargingBottomSheet(
                 Text(
                     text = "充电中心",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.size(36.dp))
@@ -229,28 +236,28 @@ fun HealthyChargingBottomSheet(
                 ) {
                     Text(
                         text = "$normalizedSoc",
-                        fontSize = 50.sp,
+                        fontSize = 48.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
-                        lineHeight = 52.sp
+                        lineHeight = 48.sp
                     )
                     Text(
                         text = "%",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(bottom = 6.dp, start = 2.dp)
                     )
                 }
 
-                // 最低电池温度 与 充电剩余时间 卡片
+                // 最低电池温度 与 充电剩余时间 精致卡片
                 val formattedRemainTime = formatChargeRemainTime(status?.chargeRemainTime, status?.chargeState)
                 val minTemp = status?.minBatteryTemp?.trim()?.takeIf { it.isNotBlank() && it != "--" } ?: "-- °C"
 
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                    shape = RoundedCornerShape(14.dp),
+                    color = cardBgColor,
+                    border = BorderStroke(0.6.dp, cardBorderColor),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -263,17 +270,17 @@ fun HealthyChargingBottomSheet(
                         // 最低电池温度
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
                                 text = "最低电池温度",
-                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
                                 text = minTemp,
-                                style = MaterialTheme.typography.titleMedium,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -282,25 +289,25 @@ fun HealthyChargingBottomSheet(
                         // 分割线
                         Box(
                             modifier = Modifier
-                                .height(26.dp)
+                                .height(22.dp)
                                 .width(0.8.dp)
-                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f))
+                                .background(cardBorderColor)
                         )
 
                         // 充电剩余时间
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
                                 text = "充电剩余时间",
-                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
                                 text = formattedRemainTime,
-                                style = MaterialTheme.typography.titleMedium,
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (status?.chargeState == 1) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurface
                             )
@@ -312,8 +319,8 @@ fun HealthyChargingBottomSheet(
             // 卡片 1: 健康充电（参考图 1）
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                color = cardBgColor,
+                border = BorderStroke(0.6.dp, cardBorderColor),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -335,14 +342,14 @@ fun HealthyChargingBottomSheet(
                             Text(
                                 text = "健康充电",
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "打开后，将根据车辆电池状态，自动为您调整充电上限，以保持电池健康",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                lineHeight = 16.sp
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                                lineHeight = 17.sp
                             )
                         }
                         Spacer(Modifier.width(12.dp))
@@ -365,23 +372,23 @@ fun HealthyChargingBottomSheet(
                     // 充电上限滑块与最佳限值90%标记
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
                             text = "充电上限${selectedSoc.roundToInt()}%",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
 
-                        // 滑块本体（带左右 50% 与 100% 刻度）
+                        // 滑块本体（平滑纯净无粗糙白点）
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = "50%",
-                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(end = 8.dp)
                             )
@@ -401,36 +408,46 @@ fun HealthyChargingBottomSheet(
                                     }
                                 },
                                 valueRange = 50f..100f,
-                                steps = 9,
+                                steps = 0,
                                 colors = SliderDefaults.colors(
                                     thumbColor = Color.White,
                                     activeTrackColor = MaterialTheme.statusGood,
-                                    inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f)
+                                    inactiveTrackColor = if (isDark) Color(0xFF2C2C30) else Color(0xFFEBECEF)
                                 ),
+                                thumb = {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = Color.White,
+                                        shadowElevation = 3.dp,
+                                        border = BorderStroke(1.dp, Color(0xFFE2E2E8)),
+                                        modifier = Modifier.size(20.dp)
+                                    ) {}
+                                },
                                 modifier = Modifier.weight(1f)
                             )
                             Text(
                                 text = "100%",
-                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(start = 8.dp)
                             )
                         }
 
                         // 90% 最佳限值提示标记
-                        Box(
+                        BoxWithConstraints(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 32.dp)
+                                .padding(horizontal = 38.dp)
                         ) {
+                            val xPos = maxWidth * 0.80f
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp)
+                                modifier = Modifier.offset(x = xPos - 30.dp)
                             ) {
                                 Text(
                                     text = "▲",
-                                    fontSize = 8.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.60f)
+                                    fontSize = 7.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.50f)
                                 )
                                 Text(
                                     text = "最佳限值90%",
@@ -446,8 +463,8 @@ fun HealthyChargingBottomSheet(
             // 卡片 2: 预约充电（参考图 1）
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                color = cardBgColor,
+                border = BorderStroke(0.6.dp, cardBorderColor),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -468,13 +485,13 @@ fun HealthyChargingBottomSheet(
                             Text(
                                 text = "预约充电",
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "插枪后会根据设定时间充电，仅支持慢充",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                                 lineHeight = 16.sp
                             )
                         }
@@ -495,7 +512,7 @@ fun HealthyChargingBottomSheet(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(0.6.dp)
-                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                                .background(cardBorderColor)
                         )
 
                         val timeRangeText = formatScheduleTimeRange(scheduledStartTime, scheduledEndTime)
@@ -514,21 +531,21 @@ fun HealthyChargingBottomSheet(
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text(
                                     text = "时段",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
                                     text = summaryText,
-                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 13.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Icon(
                                 painter = painterResource(R.drawable.ic_phosphor_caret_right),
                                 contentDescription = "设置时段",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
@@ -538,8 +555,8 @@ fun HealthyChargingBottomSheet(
             // 卡片 3: 预约电池预热（参考图 1 底部）
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                color = cardBgColor,
+                border = BorderStroke(0.6.dp, cardBorderColor),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -560,13 +577,13 @@ fun HealthyChargingBottomSheet(
                             Text(
                                 text = "预约电池预热",
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "寒冷天气时，电池系统会自动调节电池温度，以提升电池续航和性能。达到理想温度时自动停止预热。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                                 lineHeight = 16.sp
                             )
                         }
@@ -587,7 +604,7 @@ fun HealthyChargingBottomSheet(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(0.6.dp)
-                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                                .background(cardBorderColor)
                         )
 
                         val preheatDaysText = ChargePlanCyclesHelper.formatSummary(preheatDays).substringBefore(" (")
@@ -605,21 +622,21 @@ fun HealthyChargingBottomSheet(
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text(
                                     text = "时段",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
                                     text = preheatSummaryText,
-                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 13.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Icon(
                                 painter = painterResource(R.drawable.ic_phosphor_caret_right),
                                 contentDescription = "设置时段",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
@@ -667,7 +684,7 @@ fun HealthyChargingBottomSheet(
                 },
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF222222)
+                    containerColor = if (isDark) Color(0xFF2C2C30) else Color(0xFF1E1E20)
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
