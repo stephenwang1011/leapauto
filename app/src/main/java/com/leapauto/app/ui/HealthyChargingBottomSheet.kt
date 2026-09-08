@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -49,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -56,6 +58,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -112,11 +115,23 @@ fun HealthyChargingBottomSheet(
         startTime: String,
         days: String
     ) -> Unit = { _, _, _ -> },
-    onControl: (String) -> Unit = {}
+    onControl: (String) -> Unit = {},
+    onRefreshStatus: () -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
     var lastToastTime by remember { mutableLongStateOf(0L) }
+
+    // 充电中每 1 秒自动静默刷新车况，实时同步电量、功率与倒计时
+    val isChargingState = status?.chargeState == 1
+    LaunchedEffect(isChargingState) {
+        if (isChargingState) {
+            while (true) {
+                delay(1000L)
+                onRefreshStatus()
+            }
+        }
+    }
 
     // 1. 健康充电状态
     var healthySwitchEnabled by remember(isHealthyChargeEnabled) { mutableStateOf(isHealthyChargeEnabled) }
@@ -574,29 +589,40 @@ fun HealthyChargingBottomSheet(
                             )
                         }
 
-                        // 90% 最佳限值提示标记（紧贴轨道正下方，箭头清晰突出）
+                        // 90% 最佳限值提示标记（与上方滑块保持 3dp 间隙，箭头与文字保持精准 2dp 间距）
                         BoxWithConstraints(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 38.dp)
-                                .offset(y = (-6).dp)
+                                .offset(y = (-4).dp)
                         ) {
                             val xPos = maxWidth * 0.80f
+                            val triangleColor = if (isDark) Color(0xFF8E8E93) else Color(0xFFA0A0A5)
+                            val labelColor = if (isDark) Color(0xFF8E8E93) else Color(0xFF7A7A80)
+
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(0.dp),
                                 modifier = Modifier.offset(x = xPos - 30.dp)
                             ) {
-                                Text(
-                                    text = "▲",
-                                    fontSize = 8.sp,
-                                    color = Color(0xFFA0A0A5)
-                                )
+                                // 纯几何三角形绘制，消除中文字符字体自带的虚高下边距
+                                Canvas(modifier = Modifier.size(width = 8.dp, height = 5.dp)) {
+                                    val path = Path().apply {
+                                        moveTo(size.width / 2f, 0f)
+                                        lineTo(size.width, size.height)
+                                        lineTo(0f, size.height)
+                                        close()
+                                    }
+                                    drawPath(path, color = triangleColor)
+                                }
+
+                                Spacer(Modifier.height(2.dp))
+
                                 Text(
                                     text = "最佳限值90%",
                                     fontSize = 11.sp,
+                                    lineHeight = 12.sp,
                                     fontWeight = FontWeight.Normal,
-                                    color = if (isDark) Color(0xFF8E8E93) else Color(0xFF7A7A80)
+                                    color = labelColor
                                 )
                             }
                         }

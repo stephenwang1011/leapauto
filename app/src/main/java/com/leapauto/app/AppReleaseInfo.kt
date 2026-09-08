@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 充电上限滑块与官方设计像素级对齐：浅薄荷绿微轨内置白色垂直细柱，立体白旋钮比例协调\n" +
-        "2. 最佳限值90%紧凑上移，插枪按键严格对齐解锁充电枪(白线框)+结束充电(深色实心)官方样式"
+        "1. 充电中心充电状态高频刷新：充电时界面每1秒自动同步一次最新电量、功率与倒计时\n" +
+        "2. 退出充电中心或停止充电时自动恢复节能巡检，兼顾极致流畅与低功耗"
 }

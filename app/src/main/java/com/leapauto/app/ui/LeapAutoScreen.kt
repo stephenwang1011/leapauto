@@ -517,7 +517,8 @@ fun LeapAutoScreen(
             onApplyScheduledPreheat = { preheatEnabled, startTime, days ->
                 onApplyScheduledPreheat(preheatEnabled, startTime, days)
             },
-            onControl = onControl
+            onControl = onControl,
+            onRefreshStatus = onRefresh
         )
     }
 
