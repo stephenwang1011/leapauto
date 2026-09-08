@@ -21,6 +21,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.leapauto.app.ui.LeapAutoScreen
@@ -162,6 +163,8 @@ class MainActivity : ComponentActivity() {
     private var scheduledChargeStartTime by mutableStateOf("23:00")
     private var scheduledChargeEndTime by mutableStateOf("07:00")
     private var scheduledChargeContinueUntilLimit by mutableStateOf(true)
+    private var scheduledChargeCirculation by mutableIntStateOf(1)
+    private var scheduledChargeCycles by mutableStateOf("1,2,3,4,5,6,7")
     private var scheduledPreheatEnabled by mutableStateOf(false)
     private var scheduledPreheatStartTime by mutableStateOf("23:00")
     private var signalMapDebugState by mutableStateOf<VehicleSignalMapDebugState>(VehicleSignalMapDebugState.Idle)
@@ -207,6 +210,8 @@ class MainActivity : ComponentActivity() {
         scheduledChargeStartTime = sessionStore.loadScheduledChargeStartTime(session.selectedVin)
         scheduledChargeEndTime = sessionStore.loadScheduledChargeEndTime(session.selectedVin)
         scheduledChargeContinueUntilLimit = sessionStore.loadScheduledChargeContinueUntilLimit(session.selectedVin)
+        scheduledChargeCirculation = sessionStore.loadScheduledChargeCirculation(session.selectedVin)
+        scheduledChargeCycles = sessionStore.loadScheduledChargeCycles(session.selectedVin)
         scheduledPreheatEnabled = sessionStore.loadScheduledPreheatEnabled(session.selectedVin)
         scheduledPreheatStartTime = sessionStore.loadScheduledPreheatStartTime(session.selectedVin)
         ChargeNotificationManager.ensureChannel(this)
@@ -250,6 +255,8 @@ class MainActivity : ComponentActivity() {
                     scheduledChargeStartTime = scheduledChargeStartTime,
                     scheduledChargeEndTime = scheduledChargeEndTime,
                     scheduledChargeContinueUntilLimit = scheduledChargeContinueUntilLimit,
+                    scheduledChargeCirculation = scheduledChargeCirculation,
+                    scheduledChargeCycles = scheduledChargeCycles,
                     scheduledPreheatEnabled = scheduledPreheatEnabled,
                     scheduledPreheatStartTime = scheduledPreheatStartTime,
                     onApplyChargingSettings = ::applyHealthyAndScheduledCharging,
@@ -788,7 +795,9 @@ class MainActivity : ComponentActivity() {
         scheduledEnabled: Boolean,
         startTime: String,
         endTime: String,
-        continueUntilLimit: Boolean
+        continueUntilLimit: Boolean,
+        circulation: Int = 1,
+        cycles: String = "1,2,3,4,5,6,7"
     ) {
         val vin = session.selectedVin
         sessionStore.saveHealthyChargeLimit(vin, targetSoc)
@@ -796,11 +805,15 @@ class MainActivity : ComponentActivity() {
         sessionStore.saveScheduledChargeStartTime(vin, startTime)
         sessionStore.saveScheduledChargeEndTime(vin, endTime)
         sessionStore.saveScheduledChargeContinueUntilLimit(vin, continueUntilLimit)
+        sessionStore.saveScheduledChargeCirculation(vin, circulation)
+        sessionStore.saveScheduledChargeCycles(vin, cycles)
         healthyChargeLimitSoc = targetSoc
         scheduledChargeEnabled = scheduledEnabled
         scheduledChargeStartTime = startTime
         scheduledChargeEndTime = endTime
         scheduledChargeContinueUntilLimit = continueUntilLimit
+        scheduledChargeCirculation = circulation
+        scheduledChargeCycles = cycles
 
         val started = System.currentTimeMillis()
         worker.execute {
@@ -811,7 +824,16 @@ class MainActivity : ComponentActivity() {
                 val msgHealthy = respHealthy.optString("msg", respHealthy.optString("message", ""))
 
                 val savedPin = sessionStore.loadOpPassword().orEmpty()
-                val respSched = api.setScheduledCharging(scheduledEnabled, startTime, endTime, targetSoc, savedPin, continueUntilLimit)
+                val respSched = api.setScheduledCharging(
+                    enabled = scheduledEnabled,
+                    startTime = startTime,
+                    endTime = endTime,
+                    targetSoc = targetSoc,
+                    opPassword = savedPin,
+                    continueUntilLimit = continueUntilLimit,
+                    circulation = circulation,
+                    cycles = cycles
+                )
                 val codeSched = respSched.optInt("code", respSched.optInt("result", -1))
                 val msgSched = respSched.optString("msg", respSched.optString("message", ""))
                 val isHealthySuccess = codeHealthy == 0 || codeHealthy == 200
@@ -833,7 +855,7 @@ class MainActivity : ComponentActivity() {
                                 appendLine("下发充电设置部分未完成:")
                                 appendLine("VIN: $vin")
                                 appendLine("健康充电: enabled=$healthyEnabled, targetSoc=$targetSoc (code=$codeHealthy, msg=$msgHealthy)")
-                                appendLine("预约充电: enabled=$scheduledEnabled, $startTime ~ $endTime, 未达上限继续充电=$continueUntilLimit (code=$codeSched, msg=$msgSched)")
+                                appendLine("预约充电: enabled=$scheduledEnabled, $startTime ~ $endTime, circulation=$circulation, cycles=$cycles, 未达上限继续充电=$continueUntilLimit (code=$codeSched, msg=$msgSched)")
                                 appendLine("健康充电响应: $respHealthy")
                                 appendLine("充电计划(190)响应: $respSched")
                             }

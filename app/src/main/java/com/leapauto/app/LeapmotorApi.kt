@@ -1148,7 +1148,9 @@ class LeapmotorApi(private val session: Session) {
         endTime: String,
         targetSoc: Int = 80,
         opPassword: String = "",
-        continueUntilLimit: Boolean = true
+        continueUntilLimit: Boolean = true,
+        circulation: Int = 1,
+        cycles: String = "1,2,3,4,5,6,7"
     ): JSONObject {
         requireVin()
         try {
@@ -1162,8 +1164,8 @@ class LeapmotorApi(private val session: Session) {
         val stateJson = JSONObject().apply {
             put("chargeEnable", chargeEnableInt)
             put("chargesoc", targetSoc.coerceIn(50, 100))
-            put("circulation", if (enabled) 1 else 0)
-            put("cycles", "1,2,3,4,5,6,7")
+            put("circulation", if (enabled) circulation else 0)
+            put("cycles", if (enabled && circulation == 1) cycles.ifBlank { "1,2,3,4,5,6,7" } else "")
             put("starttime", startTime)
             put("endtime", endTime)
             put("recharge", rechargeInt)

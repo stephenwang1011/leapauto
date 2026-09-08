@@ -35,6 +35,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -66,7 +67,18 @@ fun HealthyChargingBottomSheet(
     initialScheduledStartTime: String = "23:00",
     initialScheduledEndTime: String = "07:00",
     initialContinueUntilLimit: Boolean = true,
-    onApply: (healthyEnabled: Boolean, targetSoc: Int, scheduledEnabled: Boolean, startTime: String, endTime: String, continueUntilLimit: Boolean) -> Unit
+    initialScheduledCirculation: Int = 1,
+    initialScheduledCycles: String = "1,2,3,4,5,6,7",
+    onApply: (
+        healthyEnabled: Boolean,
+        targetSoc: Int,
+        scheduledEnabled: Boolean,
+        startTime: String,
+        endTime: String,
+        continueUntilLimit: Boolean,
+        circulation: Int,
+        cycles: String
+    ) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedSoc by remember(currentLimitSoc) { mutableFloatStateOf(currentLimitSoc.toFloat()) }
@@ -76,6 +88,8 @@ fun HealthyChargingBottomSheet(
     var scheduledStartTime by remember(initialScheduledStartTime) { mutableStateOf(initialScheduledStartTime) }
     var scheduledEndTime by remember(initialScheduledEndTime) { mutableStateOf(initialScheduledEndTime) }
     var continueUntilLimit by remember(initialContinueUntilLimit) { mutableStateOf(initialContinueUntilLimit) }
+    var scheduledCirculation by remember(initialScheduledCirculation) { mutableIntStateOf(initialScheduledCirculation) }
+    var scheduledCycles by remember(initialScheduledCycles) { mutableStateOf(initialScheduledCycles.ifBlank { "1,2,3,4,5,6,7" }) }
     var showStartTimeDialog by remember { mutableStateOf(false) }
     var showEndTimeDialog by remember { mutableStateOf(false) }
 
@@ -346,13 +360,125 @@ fun HealthyChargingBottomSheet(
                     }
 
                     if (scheduledChargeEnabled) {
+                        // 1) 循环方式切换 (circulation: 1=周期重复, 0=单次执行)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CirculationModeTab(
+                                title = "🔁 周期重复",
+                                subtitle = "按星期循环 (circulation=1)",
+                                selected = scheduledCirculation == 1,
+                                onClick = { scheduledCirculation = 1 },
+                                modifier = Modifier.weight(1f)
+                            )
+                            CirculationModeTab(
+                                title = "🔂 仅一次",
+                                subtitle = "仅下次生效 (circulation=0)",
+                                selected = scheduledCirculation == 0,
+                                onClick = { scheduledCirculation = 0 },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        // 2) 重复周期选择 (cycles: 星期1~7逗号分隔) - 仅在周期重复时呈现
+                        if (scheduledCirculation == 1) {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                val currentDays = remember(scheduledCycles) {
+                                    scheduledCycles.split(",")
+                                        .mapNotNull { it.trim().toIntOrNull() }
+                                        .filter { it in 1..7 }
+                                        .toSet()
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "重复周期 (cycles)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = formatCyclesSummary(scheduledCycles),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.statusGood,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                // 快捷预设：每天、工作日、周末
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    CyclePresetChip(
+                                        label = "每天",
+                                        selected = currentDays == setOf(1, 2, 3, 4, 5, 6, 7),
+                                        onClick = { scheduledCycles = "1,2,3,4,5,6,7" },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    CyclePresetChip(
+                                        label = "工作日",
+                                        selected = currentDays == setOf(1, 2, 3, 4, 5),
+                                        onClick = { scheduledCycles = "1,2,3,4,5" },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    CyclePresetChip(
+                                        label = "周末",
+                                        selected = currentDays == setOf(6, 7),
+                                        onClick = { scheduledCycles = "6,7" },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                // 周一到周日 7 颗独立多选按钮
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    val daysList = listOf(
+                                        1 to "一",
+                                        2 to "二",
+                                        3 to "三",
+                                        4 to "四",
+                                        5 to "五",
+                                        6 to "六",
+                                        7 to "日"
+                                    )
+                                    daysList.forEach { (dayIdx, dayName) ->
+                                        WeekDayChip(
+                                            dayName = dayName,
+                                            dayIndex = dayIdx,
+                                            selected = currentDays.contains(dayIdx),
+                                            onToggle = { idx ->
+                                                val updated = if (currentDays.contains(idx)) {
+                                                    if (currentDays.size > 1) currentDays - idx else currentDays
+                                                } else {
+                                                    currentDays + idx
+                                                }
+                                                scheduledCycles = updated.sorted().joinToString(",")
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 3) 开始时间与结束时间 (starttime, endtime)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             TimeSelectionBox(
-                                label = "开始充电",
+                                label = "开始充电 (starttime)",
                                 time = scheduledStartTime,
                                 onClick = { showStartTimeDialog = true },
                                 modifier = Modifier.weight(1f)
@@ -364,14 +490,14 @@ fun HealthyChargingBottomSheet(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             TimeSelectionBox(
-                                label = "结束充电",
+                                label = "结束充电 (endtime)",
                                 time = scheduledEndTime,
                                 onClick = { showEndTimeDialog = true },
                                 modifier = Modifier.weight(1f)
                             )
                         }
 
-                        // 未达上限继续充电开关
+                        // 4) 未达上限继续充电开关 (recharge)
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = MaterialTheme.colorScheme.surface,
@@ -390,7 +516,7 @@ fun HealthyChargingBottomSheet(
                                     verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
                                     Text(
-                                        text = "未达上限继续充电",
+                                        text = "未达上限继续充电 (recharge)",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -424,7 +550,83 @@ fun HealthyChargingBottomSheet(
                 }
             }
 
-            // 6. 官方电池养护科普指引
+            // 6. 协议参数实时预览（与车机 T-Box cmdid=190 原生字段 100% 对齐）
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                border = BorderStroke(0.6.dp, MaterialTheme.statusGood.copy(alpha = 0.35f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "📋 充电计划协议参数 (cmdid=190)",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.statusGood
+                        )
+                        Text(
+                            text = if (scheduledChargeEnabled) "预约就绪" else "预约关闭",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (scheduledChargeEnabled) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "• chargeEnable: ${if (scheduledChargeEnabled) 1 else 0}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "• chargesoc: ${selectedSoc.roundToInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.statusGood,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "• recharge: ${if (continueUntilLimit) 1 else 0}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "• circulation: ${if (scheduledChargeEnabled) scheduledCirculation else 0} (${if (scheduledCirculation == 1 && scheduledChargeEnabled) "周期" else "单次"})",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "• cycles: \"${if (scheduledChargeEnabled && scheduledCirculation == 1) scheduledCycles else ""}\"",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Text(
+                        text = "• 时段: $scheduledStartTime ~ $scheduledEndTime (starttime / endtime)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // 7. 官方电池养护科普指引
             Surface(
                 shape = RoundedCornerShape(14.dp),
                 color = MaterialTheme.statusGood.copy(alpha = 0.08f),
@@ -450,7 +652,7 @@ fun HealthyChargingBottomSheet(
                 }
             }
 
-            // 7. 保存并下发按钮
+            // 8. 保存并下发按钮
             Button(
                 onClick = {
                     onApply(
@@ -459,7 +661,9 @@ fun HealthyChargingBottomSheet(
                         scheduledChargeEnabled,
                         scheduledStartTime,
                         scheduledEndTime,
-                        continueUntilLimit
+                        continueUntilLimit,
+                        scheduledCirculation,
+                        scheduledCycles
                     )
                 },
                 shape = RoundedCornerShape(14.dp),
@@ -576,5 +780,120 @@ private fun TimeSelectionBox(
                 color = MaterialTheme.statusGood
             )
         }
+    }
+}
+
+private fun formatCyclesSummary(cycles: String): String {
+    val days = cycles.split(",").mapNotNull { it.trim().toIntOrNull() }.filter { it in 1..7 }.toSet()
+    return when {
+        days == setOf(1, 2, 3, 4, 5, 6, 7) -> "每天"
+        days == setOf(1, 2, 3, 4, 5) -> "工作日 (周一至周五)"
+        days == setOf(6, 7) -> "周末 (周六、周日)"
+        days.isEmpty() -> "未选择"
+        else -> {
+            val names = mapOf(1 to "一", 2 to "二", 3 to "三", 4 to "四", 5 to "五", 6 to "六", 7 to "日")
+            "周" + days.sorted().mapNotNull { names[it] }.joinToString("、")
+        }
+    }
+}
+
+@Composable
+private fun CirculationModeTab(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val borderColor = if (selected) MaterialTheme.statusGood else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+    val bgColor = if (selected) MaterialTheme.statusGood.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface
+    val titleColor = if (selected) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurface
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(bgColor)
+            .border(if (selected) 1.2.dp else 0.6.dp, borderColor, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold,
+                color = titleColor
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (selected) MaterialTheme.statusGood.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun CyclePresetChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val bgColor = if (selected) MaterialTheme.statusGood.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
+    val contentColor = if (selected) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant
+    val borderColor = if (selected) MaterialTheme.statusGood else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(bgColor)
+            .border(if (selected) 1.dp else 0.6.dp, borderColor, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = contentColor
+        )
+    }
+}
+
+@Composable
+private fun WeekDayChip(
+    dayName: String,
+    dayIndex: Int,
+    selected: Boolean,
+    onToggle: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val bgColor = if (selected) MaterialTheme.statusGood else MaterialTheme.colorScheme.surface
+    val contentColor = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+    val borderColor = if (selected) MaterialTheme.statusGood else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
+
+    Box(
+        modifier = modifier
+            .height(34.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(bgColor)
+            .border(0.6.dp, borderColor, RoundedCornerShape(8.dp))
+            .clickable { onToggle(dayIndex) },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = dayName,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = contentColor
+        )
     }
 }
