@@ -530,13 +530,13 @@ fun LeapAutoScreen(
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             if (!isAppDark) {
-                // 浅色模式：方案2【轻奢暖钛羊绒灰】，温润、典雅、扎实耐看，极具车规内饰高级感
+                // 浅色模式：方案1【曜石冷钛 · 晶透液态玻璃】，背景沉降拉开景深，衬托通透水晶卡片
                 drawRect(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFFE4E7E2),
-                            Color(0xFFE7EAE5),
-                            Color(0xFFEAECE8)
+                            Color(0xFFCED4DC),
+                            Color(0xFFD6DCE4),
+                            Color(0xFFDFE5ED)
                         ),
                         startY = 0f,
                         endY = size.height
@@ -545,8 +545,8 @@ fun LeapAutoScreen(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFEDEFEA).copy(alpha = 0.65f),
-                            Color(0xFFE7EAE4).copy(alpha = 0.30f),
+                            Color(0xFFE8EEF7).copy(alpha = 0.60f),
+                            Color(0xFFDCE2EC).copy(alpha = 0.25f),
                             Color.Transparent
                         ),
                         center = Offset(size.width * 0.5f, size.height * 0.22f),
@@ -2079,11 +2079,15 @@ private fun DrivingBreathingDot(modifier: Modifier = Modifier) {
 @Composable
 private fun glassCardBorder(): BorderStroke {
     val isDark = LocalAppDarkTheme.current
-    val topColor = if (isDark) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.80f)
-    val bottomColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.35f else 0.40f)
+    val topLeftColor = if (isDark) Color.White.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.95f)
+    val bottomRightColor = if (isDark) Color.White.copy(alpha = 0.06f) else Color.White.copy(alpha = 0.25f)
     return BorderStroke(
-        1.dp,
-        Brush.verticalGradient(listOf(topColor, bottomColor))
+        1.2.dp,
+        Brush.linearGradient(
+            colors = listOf(topLeftColor, bottomRightColor),
+            start = Offset.Zero,
+            end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+        )
     )
 }
 
@@ -2091,11 +2095,15 @@ private fun glassCardBorder(): BorderStroke {
 private fun glassInsetBorder(warning: Boolean = false): BorderStroke {
     if (warning) return BorderStroke(1.2.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
     val isDark = LocalAppDarkTheme.current
-    val topColor = if (isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.60f)
-    val bottomColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.30f else 0.35f)
+    val topLeftColor = if (isDark) Color.White.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.85f)
+    val bottomRightColor = if (isDark) Color.White.copy(alpha = 0.05f) else Color.White.copy(alpha = 0.20f)
     return BorderStroke(
-        0.5.dp,
-        Brush.verticalGradient(listOf(topColor, bottomColor))
+        0.8.dp,
+        Brush.linearGradient(
+            colors = listOf(topLeftColor, bottomRightColor),
+            start = Offset.Zero,
+            end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+        )
     )
 }
 

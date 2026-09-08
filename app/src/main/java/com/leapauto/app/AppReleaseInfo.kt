@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 精确校准最佳限值90%间距：向上偏移16dp消除系统触控盒空隙，小三角精准贴合滑块旋钮正下方\n" +
-        "2. 纯几何矢量绘制三角形消除字体行高虚空，保持2dp车规级黄金排版"
+        "1. 主界面质感蜕变升级方案1【曜石冷钛·晶透液态玻璃】：背景沉降为科技冷钛灰渐变，彻底解决泛白平光感\n" +
+        "2. 引入45°斜向高光折射微倒角与72%晶莹水晶毛玻璃透光率，拉开多级车规级空间景深"
 }
