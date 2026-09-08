@@ -589,12 +589,12 @@ fun HealthyChargingBottomSheet(
                             )
                         }
 
-                        // 90% 最佳限值提示标记（与上方滑块保持 3dp 间隙，箭头与文字保持精准 2dp 间距）
+                        // 90% 最佳限值提示标记（向上偏移 16dp 抵消 Slider 触控盒空白，让箭头紧贴圆钮正下方 2~3dp）
                         BoxWithConstraints(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 38.dp)
-                                .offset(y = (-4).dp)
+                                .offset(y = (-16).dp)
                         ) {
                             val xPos = maxWidth * 0.80f
                             val triangleColor = if (isDark) Color(0xFF8E8E93) else Color(0xFFA0A0A5)

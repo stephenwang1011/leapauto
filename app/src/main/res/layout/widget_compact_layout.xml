@@ -58,22 +58,20 @@
                 android:src="@drawable/vehicle_lafa5_liquid_silver" />
         </FrameLayout>
 
-        <!-- 3. 中间部：纯净双能源数据胶囊/指示行 (告别生硬横条) -->
-        <!-- 增程版：左右并排双能源 -->
+        <!-- 3. 中间部：增程双能源数据（上下双行排列，纯电+燃油各占一行） -->
         <LinearLayout
             android:id="@+id/compactHybridRange"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="6dp"
-            android:gravity="center"
-            android:orientation="horizontal">
+            android:layout_marginBottom="4dp"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
 
-            <!-- 纯电微卡 -->
+            <!-- 纯电行 -->
             <LinearLayout
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="center"
+                android:gravity="center_vertical"
                 android:orientation="horizontal">
 
                 <ImageView
@@ -107,24 +105,21 @@
                     android:layout_marginStart="2dp"
                     android:includeFontPadding="false"
                     android:maxLines="1"
+                    android:shadowColor="@color/widget_text_shadow"
+                    android:shadowDx="0"
+                    android:shadowDy="0"
+                    android:shadowRadius="1.5"
                     android:text="· --%"
                     android:textColor="@color/widget_range_good"
-                    android:textSize="10sp" />
+                    android:textSize="11sp" />
             </LinearLayout>
 
-            <FrameLayout
-                android:layout_width="1dp"
-                android:layout_height="10dp"
-                android:layout_marginStart="4dp"
-                android:layout_marginEnd="4dp"
-                android:background="@color/widget_range_track" />
-
-            <!-- 燃油微卡 -->
+            <!-- 燃油行 -->
             <LinearLayout
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="center"
+                android:layout_marginTop="2dp"
+                android:gravity="center_vertical"
                 android:orientation="horizontal">
 
                 <ImageView
@@ -158,9 +153,13 @@
                     android:layout_marginStart="2dp"
                     android:includeFontPadding="false"
                     android:maxLines="1"
+                    android:shadowColor="@color/widget_text_shadow"
+                    android:shadowDx="0"
+                    android:shadowDy="0"
+                    android:shadowRadius="1.5"
                     android:text="· --%"
                     android:textColor="@color/widget_range_warning"
-                    android:textSize="10sp" />
+                    android:textSize="11sp" />
             </LinearLayout>
         </LinearLayout>
 

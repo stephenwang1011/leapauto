@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
@@ -67,11 +68,10 @@ class CompactControlWidget : AppWidgetProvider() {
         }
 
         fun refreshAppearance(context: Context) {
-            val appContext = context.applicationContext
-            val ids = widgetIds(appContext)
+            val ids = widgetIds(context)
             if (ids.isEmpty()) return
             // Re-render the complete tree so values-night text/icon resources are rebound too.
-            AppWidgetManager.getInstance(appContext).updateAppWidget(ids, baseViews(appContext))
+            AppWidgetManager.getInstance(context).updateAppWidget(ids, baseViews(context))
         }
 
         fun showControlStatus(context: Context, acEnabled: Boolean?, acTone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT) {
@@ -218,7 +218,7 @@ class CompactControlWidget : AppWidgetProvider() {
             }
             val colorResource = when (presentation.locked) {
                 true, false -> R.color.energy_green
-                null -> R.color.widget_on_surface_variant
+                null -> R.color.widget_action_icon
             }
             views.setImageViewResource(R.id.imgWCLock, iconResource)
             views.setInt(
@@ -248,7 +248,7 @@ class CompactControlWidget : AppWidgetProvider() {
         ) {
             val presentation = WidgetAcMapper.presentation(acEnabled, tone)
             val themeContext = ControlWidget.widgetThemeContext(context)
-            val actionColor = ContextCompat.getColor(themeContext, R.color.widget_on_surface_variant)
+            val actionColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
             views.setInt(R.id.imgWCAcOff, "setColorFilter", actionColor)
 
             val showCooling = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.COOLING
@@ -284,14 +284,25 @@ class CompactControlWidget : AppWidgetProvider() {
         private fun applyStaticAppearance(context: Context, views: RemoteViews, opacity: Int) {
             val onSurface = ContextCompat.getColor(context, R.color.widget_on_surface)
             val onSurfaceVariant = ContextCompat.getColor(context, R.color.widget_on_surface_variant)
+            val actionIcon = ContextCompat.getColor(context, R.color.widget_action_icon)
             listOf(R.id.txtWCTitle, R.id.txtWCSocValue, R.id.txtWCSocUnit).forEach { id ->
                 views.setTextColor(id, onSurface)
             }
             views.setTextColor(R.id.txtWCRange, onSurfaceVariant)
             views.setViewVisibility(R.id.txtWCLock, View.GONE)
             views.setViewVisibility(R.id.txtWCAc, View.GONE)
-            views.setInt(R.id.imgWCLock, "setColorFilter", onSurfaceVariant)
-            views.setInt(R.id.imgWCAcOff, "setColorFilter", onSurfaceVariant)
+            views.setInt(R.id.imgWCLock, "setColorFilter", actionIcon)
+            views.setInt(R.id.imgWCAcOff, "setColorFilter", actionIcon)
+            views.setInt(
+                R.id.btnWCLock,
+                "setBackgroundResource",
+                compactActionBackgroundResource(context, CompactActionTone.NEUTRAL)
+            )
+            views.setInt(
+                R.id.btnWCAc,
+                "setBackgroundResource",
+                compactActionBackgroundResource(context, CompactActionTone.NEUTRAL)
+            )
             applyProgressAppearance(context, views, opacity == 25)
         }
 
@@ -306,8 +317,7 @@ class CompactControlWidget : AppWidgetProvider() {
         }
 
         private fun compactActionBackgroundResource(context: Context, tone: CompactActionTone): Int {
-            val darkTheme = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
-                Configuration.UI_MODE_NIGHT_YES
+            val darkTheme = ControlWidget.widgetUsesDarkAppearance(context)
             return when (tone) {
                 CompactActionTone.NEUTRAL -> if (darkTheme) {
                     R.drawable.widget_compact_action_neutral_dark
@@ -346,6 +356,14 @@ class CompactControlWidget : AppWidgetProvider() {
             ControlWidget.updateSyncCadence(context, null)
         }
         super.onDisabled(context)
+    }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == Intent.ACTION_CONFIGURATION_CHANGED) {
+            refreshAppearance(context)
+            return
+        }
+        super.onReceive(context, intent)
     }
 
     override fun onUpdate(

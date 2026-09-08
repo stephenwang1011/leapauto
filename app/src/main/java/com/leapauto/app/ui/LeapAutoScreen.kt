@@ -2359,8 +2359,7 @@ fun VehicleHero(
 
                 // 右侧列：设置按钮 + 位置信息 (放在设置按钮正下方)
                 Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                    horizontalAlignment = Alignment.End
                 ) {
                     TooltipBox(
                         positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
@@ -2380,6 +2379,7 @@ fun VehicleHero(
                     }
                     val address = vehicleAddress?.takeIf { it.isNotBlank() }
                     if (address != null) {
+                        Spacer(Modifier.height(2.dp))
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
@@ -2418,7 +2418,7 @@ fun VehicleHero(
                         isDriving = status?.isDriving
                     )
                     detailedDrivingState?.let { drivingState ->
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(if (address != null) 4.dp else 2.dp))
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = if (drivingState.isMoving) {
@@ -2965,7 +2965,6 @@ private fun QuickVehicleActions(
                                     QuickVehicleButton(
                                         label = label,
                                         iconRes = command.iconRes,
-                                        active = trunkOpen,
                                         warning = trunkOpen,
                                         onClick = {
                                             if (!editing) {
@@ -2995,20 +2994,9 @@ private fun QuickVehicleActions(
                                     "windowOpen" -> windowOpen
                                     else -> false
                                 }
-                                val isActiveCmd = when (command.name) {
-                                    "unlock" -> false
-                                    "lock" -> status?.locked == true
-                                    "windowVent" -> false
-                                    "windowOpen" -> false
-                                    "windowClose" -> !windowOpen
-                                    "trunk" -> false
-                                    "sentry" -> status?.sentryMode == true
-                                    else -> false
-                                }
                                 QuickVehicleButton(
                                     label = label,
                                     iconRes = command.iconRes,
-                                    active = isActiveCmd,
                                     warning = isWarningCmd,
                                     onClick = {
                                         if (!editing) {
@@ -3268,21 +3256,12 @@ private fun QuickVehicleActions(
 private fun QuickVehicleButton(
     label: String,
     iconRes: Int,
-    active: Boolean = false,
     warning: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier,
     onLongClick: (() -> Unit)? = null,
-    iconTint: Color = when {
-        warning -> MaterialTheme.colorScheme.error
-        active -> MaterialTheme.statusGood
-        else -> MaterialTheme.colorScheme.onSurface
-    },
-    labelTint: Color = when {
-        warning -> MaterialTheme.colorScheme.error
-        active -> MaterialTheme.statusGood
-        else -> MaterialTheme.colorScheme.onSurface
-    }
+    iconTint: Color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+    labelTint: Color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -3299,13 +3278,11 @@ private fun QuickVehicleButton(
     val isWarning = warning || iconTint == MaterialTheme.colorScheme.error
     val circleBg = when {
         isWarning -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.30f)
-        active -> iconTint.copy(alpha = 0.10f)
         isPressed -> MaterialTheme.colorScheme.surfaceContainerHighest
         else -> MaterialTheme.colorScheme.surfaceContainerHigh
     }
     val circleBorder = when {
         isWarning -> BorderStroke(0.8.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
-        active -> BorderStroke(0.8.dp, iconTint.copy(alpha = 0.40f))
         else -> BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isPressed) 0.6f else 0.35f))
     }
 
@@ -3352,7 +3329,7 @@ private fun QuickVehicleButton(
             label,
             style = MaterialTheme.typography.labelSmall,
             color = labelTint,
-            fontWeight = if (active || isWarning) FontWeight.Bold else FontWeight.Medium,
+            fontWeight = if (isWarning) FontWeight.Bold else FontWeight.Medium,
             maxLines = 1
         )
     }
@@ -3632,11 +3609,11 @@ fun VehicleStatusCell(
     warning: Boolean = false,
     valueColor: Color? = null
 ) {
-    val cellBorder = glassInsetBorder(warning)
+    val cellBorder = glassInsetBorder()
     Surface(
         modifier = modifier.clickable(enabled = onClick != null, onClick = { onClick?.invoke() }),
         shape = RoundedCornerShape(12.dp),
-        color = if (warning) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.30f) else MaterialTheme.glassInsetSurface,
+        color = MaterialTheme.glassInsetSurface,
         border = cellBorder
     ) {
         Column(
@@ -3647,7 +3624,7 @@ fun VehicleStatusCell(
                 label,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Normal,
-                color = if (warning) MaterialTheme.colorScheme.error.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(2.dp))
             val finalColor = valueColor ?: when {

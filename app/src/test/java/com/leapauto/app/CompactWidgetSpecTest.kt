@@ -21,6 +21,7 @@ class CompactWidgetSpecTest {
 
         assertTrue(manifest.contains("android:name=\".CompactControlWidget\""))
         assertTrue(manifest.contains("android:resource=\"@xml/compact_appwidget_provider_info\""))
+        assertTrue(manifest.contains("android:name=\"android.intent.action.CONFIGURATION_CHANGED\""))
         assertTrue(provider.contains("android:resizeMode=\"none\""))
         assertTrue(provider.contains("android:initialLayout=\"@layout/widget_compact_layout\""))
         assertTrue(provider31.contains("android:targetCellWidth=\"2\""))
@@ -45,7 +46,9 @@ class CompactWidgetSpecTest {
         assertTrue(layout.contains("android:id=\"@+id/txtWCTitle\""))
         assertTrue(layout.contains("android:id=\"@+id/compactHybridRange\""))
         assertTrue(layout.contains("android:id=\"@+id/txtWCElectricRange\""))
+        assertTrue(layout.contains("android:id=\"@+id/txtWCElectricSoc\""))
         assertTrue(layout.contains("android:id=\"@+id/txtWCFuelRange\""))
+        assertTrue(layout.contains("android:id=\"@+id/txtWCFuelSoc\""))
         assertTrue(!layout.contains("android:id=\"@+id/progressWCElectric\""))
         assertTrue(!layout.contains("android:id=\"@+id/progressWCFuel\""))
         assertTrue(!layout.contains("android:id=\"@+id/progressWCNormal\""))
@@ -133,7 +136,7 @@ class CompactWidgetSpecTest {
 
         assertTrue(activity.contains("sessionStore.saveAppearanceMode(mode)\n        ControlWidget.refreshAppearance(this)"))
         assertTrue(wideWidget.contains("SessionStore(context).loadAppearanceMode().resolvesToDark(systemDark)"))
-        assertTrue(wideWidget.contains("CompactControlWidget.refreshAppearance(appContext)"))
+        assertTrue(wideWidget.contains("CompactControlWidget.refreshAppearance(context)"))
         assertTrue(wideWidget.contains("widget_card_background_light"))
         assertTrue(wideWidget.contains("widget_card_background_dark"))
         assertTrue(wideWidget.contains("widget_action_background_light"))
@@ -141,6 +144,9 @@ class CompactWidgetSpecTest {
         assertTrue(compactWidget.contains("ControlWidget.widgetThemeContext(context)"))
         assertTrue(compactWidget.contains("widget_compact_action_neutral_light"))
         assertTrue(compactWidget.contains("widget_compact_action_neutral_dark"))
+        assertTrue(wideWidget.contains("views.setInt(R.id.btnWTrunk, \"setColorFilter\", iconColor)"))
+        assertTrue(wideWidget.contains("views.setInt(R.id.btnWTrunk, \"setBackgroundResource\", background)"))
+        assertTrue(compactWidget.contains("views.setInt(R.id.imgWCAcOff, \"setColorFilter\", actionColor)"))
     }
 
     @Test

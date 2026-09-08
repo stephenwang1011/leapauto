@@ -50,13 +50,12 @@ class ControlWidget : AppWidgetProvider() {
 
         /** 立即把本机保存的外观应用到所有已添加的小组件。 */
         fun refreshAppearance(context: Context) {
-            val appContext = context.applicationContext
-            CompactControlWidget.refreshAppearance(appContext)
-            val manager = AppWidgetManager.getInstance(appContext)
-            val ids = manager.getAppWidgetIds(ComponentName(appContext, ControlWidget::class.java))
+            CompactControlWidget.refreshAppearance(context)
+            val manager = AppWidgetManager.getInstance(context)
+            val ids = manager.getAppWidgetIds(ComponentName(context, ControlWidget::class.java))
             if (ids.isEmpty()) return
             // Re-render the complete tree so values-night text/icon resources are rebound too.
-            manager.updateAppWidget(ids, baseViews(appContext))
+            manager.updateAppWidget(ids, baseViews(context))
         }
 
         fun enqueueSync(context: Context) {
@@ -219,6 +218,11 @@ class ControlWidget : AppWidgetProvider() {
 
         internal fun renderStatus(context: Context, views: RemoteViews, status: JSONObject, carType: String) {
             val store = SessionStore(context)
+            val opacity = store.loadWidgetOpacity()
+            val themeContext = widgetThemeContext(context)
+            val darkTheme = widgetUsesDarkAppearance(context)
+            applyWidgetOpacity(views, opacity, darkTheme)
+            applyStaticAppearance(themeContext, views, opacity)
             val session = store.load()
             val config = store.loadVehicleConfig(session.selectedVin, carType)
             val displayStatus = VehicleStatusMapper.withFuelMock(
@@ -263,6 +267,11 @@ class ControlWidget : AppWidgetProvider() {
 
         internal fun renderSnapshot(context: Context, views: RemoteViews, snapshot: SessionStore.WidgetSnapshot) {
             val store = SessionStore(context)
+            val opacity = store.loadWidgetOpacity()
+            val themeContext = widgetThemeContext(context)
+            val darkTheme = widgetUsesDarkAppearance(context)
+            applyWidgetOpacity(views, opacity, darkTheme)
+            applyStaticAppearance(themeContext, views, opacity)
             val session = store.load()
             val configVin = session.selectedVin.ifBlank { snapshot.vin }
             val config = store.loadVehicleConfig(configVin, snapshot.carType)
@@ -366,7 +375,12 @@ class ControlWidget : AppWidgetProvider() {
         /** Binds the trunk action to confirmed telemetry; unknown never guesses a direction. */
         private fun applyTrunkPresentation(context: Context, views: RemoteViews, trunkState: TrunkState) {
             val presentation = TrunkControlPresentationMapper.fromState(trunkState)
+            val themeContext = widgetThemeContext(context)
+            val iconColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
             views.setImageViewResource(R.id.btnWTrunk, R.drawable.ic_phosphor_trunk_open)
+            views.setInt(R.id.btnWTrunk, "setColorFilter", iconColor)
+            val background = widgetActionBackgroundResource(widgetUsesDarkAppearance(context))
+            views.setInt(R.id.btnWTrunk, "setBackgroundResource", background)
             views.setContentDescription(R.id.btnWTrunk, presentation.contentDescription)
             views.setFloat(R.id.btnWTrunk, "setAlpha", if (trunkState == TrunkState.UNKNOWN) 0.65f else 1f)
             views.setOnClickPendingIntent(
