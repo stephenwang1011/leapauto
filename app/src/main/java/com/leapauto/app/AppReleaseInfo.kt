@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 谷电预约充电新增【未达上限继续充电】智能开关：到达停止时间若未达预设上限，继续充电直至达到目标电量\n" +
-        "2. 深度闭环预约充电多重参数，支持电费优先与续航保障双模式自选"
+        "1. 全部弹窗与抽屉去透明化重构：预约充电抽屉、电池预热抽屉、时间选择器及快捷菜单全部升级为100%纯色不透明容器\n" +
+        "2. 彻底杜绝底层界面文字与车模透光穿帮，质感扎实纯正，深浅色模式均保持高对比阅读体验"
 }

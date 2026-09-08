@@ -68,7 +68,7 @@ fun SimpleTimePickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
-        containerColor = MaterialTheme.glassSurface,
+        containerColor = MaterialTheme.colorScheme.surface,
         titleContentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(20.dp),
         title = {
@@ -87,7 +87,7 @@ fun SimpleTimePickerDialog(
                 // 1. 大字体数字微调调节器
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.glassInsetSurface,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
                     border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -233,7 +233,7 @@ private fun PresetTimePill(
     modifier: Modifier = Modifier
 ) {
     val borderColor = if (selected) MaterialTheme.statusGood else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f)
-    val bgColor = if (selected) MaterialTheme.statusGood.copy(alpha = 0.12f) else Color.Transparent
+    val bgColor = if (selected) MaterialTheme.statusGood.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
     val textColor = if (selected) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurface
 
     Box(

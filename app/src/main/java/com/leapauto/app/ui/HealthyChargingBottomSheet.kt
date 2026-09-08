@@ -106,7 +106,7 @@ fun HealthyChargingBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
-        containerColor = MaterialTheme.glassSurface,
+        containerColor = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
         dragHandle = { BottomSheetDefaults.DragHandle() },
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -166,7 +166,7 @@ fun HealthyChargingBottomSheet(
 
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.glassInsetSurface,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -187,7 +187,7 @@ fun HealthyChargingBottomSheet(
             // 3. 目标电量上限调节
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.glassInsetSurface,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -262,7 +262,7 @@ fun HealthyChargingBottomSheet(
             // 4. 健康充电自动保护开关
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.glassInsetSurface,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -304,7 +304,7 @@ fun HealthyChargingBottomSheet(
             // 5. 谷电预约充电（按时段充电）
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.glassInsetSurface,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -374,7 +374,7 @@ fun HealthyChargingBottomSheet(
                         // 未达上限继续充电开关
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.glassSurface,
+                            color = MaterialTheme.colorScheme.surface,
                             border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -516,7 +516,7 @@ private fun QuickSocPresetChip(
     modifier: Modifier = Modifier
 ) {
     val borderColor = if (selected) MaterialTheme.statusGood else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f)
-    val bgColor = if (selected) MaterialTheme.statusGood.copy(alpha = 0.12f) else Color.Transparent
+    val bgColor = if (selected) MaterialTheme.statusGood.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
     val textColor = if (selected) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurface
 
     Box(
@@ -554,7 +554,7 @@ private fun TimeSelectionBox(
 ) {
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.glassSurface,
+        color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(0.6.dp, MaterialTheme.statusGood.copy(alpha = 0.45f)),
         modifier = modifier.clickable(onClick = onClick)
     ) {

@@ -3101,9 +3101,10 @@ private fun QuickVehicleActions(
                 Surface(
                     modifier = Modifier.widthIn(min = 120.dp, max = 160.dp),
                     shape = RoundedCornerShape(18.dp),
-                    tonalElevation = 2.dp,
-                    shadowElevation = 8.dp,
-                    color = MaterialTheme.glassSurface
+                    tonalElevation = 4.dp,
+                    shadowElevation = 10.dp,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f))
                 ) {
                     Column {
                         QuickMenuAction(
@@ -3178,9 +3179,10 @@ private fun QuickVehicleActions(
                 Surface(
                     modifier = Modifier.widthIn(min = 120.dp, max = 160.dp),
                     shape = RoundedCornerShape(18.dp),
-                    tonalElevation = 2.dp,
-                    shadowElevation = 8.dp,
-                    color = MaterialTheme.glassSurface
+                    tonalElevation = 4.dp,
+                    shadowElevation = 10.dp,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f))
                 ) {
                     Column {
                         QuickMenuAction(

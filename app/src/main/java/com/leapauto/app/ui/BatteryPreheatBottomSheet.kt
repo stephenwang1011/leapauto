@@ -80,7 +80,7 @@ fun BatteryPreheatBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
-        containerColor = MaterialTheme.glassSurface,
+        containerColor = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
         dragHandle = { BottomSheetDefaults.DragHandle() },
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -131,7 +131,7 @@ fun BatteryPreheatBottomSheet(
             val isPreheating = status?.batteryPreheatEnabled == true
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.glassInsetSurface,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -174,7 +174,7 @@ fun BatteryPreheatBottomSheet(
             // 3. 即时电池预热开关
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.glassInsetSurface,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -213,7 +213,7 @@ fun BatteryPreheatBottomSheet(
             // 4. 预约电池预热设置
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.glassInsetSurface,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -256,7 +256,7 @@ fun BatteryPreheatBottomSheet(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.glassSurface)
+                                .background(MaterialTheme.colorScheme.surface)
                                 .border(0.6.dp, MaterialTheme.statusGood.copy(alpha = 0.40f), RoundedCornerShape(10.dp))
                                 .clickable { showTimeDialog = true }
                                 .padding(horizontal = 14.dp, vertical = 12.dp),
