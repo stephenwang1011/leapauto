@@ -930,6 +930,8 @@ class MainActivity : ComponentActivity() {
         val started = System.currentTimeMillis()
         worker.execute {
             try {
+                // 间隔 1.5 秒避开可能的并发控车锁，杜绝网关“系统繁忙”冲突
+                Thread.sleep(1500)
                 val api = LeapmotorApi(session)
                 val savedPin = sessionStore.loadOpPassword().orEmpty()
                 val resp = api.setScheduledBatteryPreheat(enabled, startTime, savedPin, vehicleMask)
@@ -959,10 +961,11 @@ class MainActivity : ComponentActivity() {
                 }
 
                 mainHandler.post {
-                    if (code == 200 || code == 0) {
-                        Toast.makeText(this@MainActivity, "已预约电池预热：${startTime} 开始", Toast.LENGTH_SHORT).show()
+                    if (isPreheatSuccess) {
+                        Toast.makeText(this@MainActivity, "预约电池预热已下发车机：${startTime} 开始", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(this@MainActivity, "预约已保存在本地 (${msg.ifBlank { "已同步网关" }})", Toast.LENGTH_SHORT).show()
+                        val tip = if (msg.contains("繁忙")) "车控网关繁忙，设置已保存在本地" else "预热设置已保存至本地 (${msg.ifBlank { "已同步网关" }})"
+                        Toast.makeText(this@MainActivity, tip, Toast.LENGTH_SHORT).show()
                     }
                     refreshStatus()
                 }

@@ -540,55 +540,43 @@ fun HealthyChargingBottomSheet(
                 }
             }
 
-            // 底部协议参数状态预览面板
             val vehicleCyclesMask = ChargePlanCyclesHelper.toVehicleMask(scheduledDays)
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(0.6.dp, MaterialTheme.statusGood.copy(alpha = 0.30f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = "📋 车载 T-Box 原生协议参数就绪 (cmdid=190 / 161)",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.statusGood
-                    )
-                    Text(
-                        text = "• 预约充电: ${if (scheduledChargeEnabled) "开启" else "关闭"} | 上限: ${selectedSoc.roundToInt()}% | 掩码: \"$vehicleCyclesMask\" | $scheduledStartTime ~ $scheduledEndTime",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "• 预约预热: ${if (scheduledPreheatEnabled) "开启" else "关闭"} | 开始: $scheduledPreheatStartTime | 掩码: \"${ChargePlanCyclesHelper.toVehicleMask(preheatDays)}\"",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
 
             // 保存并下发按钮
             Button(
                 onClick = {
-                    onApplyChargingSettings(
-                        healthySwitchEnabled,
-                        selectedSoc.roundToInt(),
-                        scheduledChargeEnabled,
-                        scheduledStartTime,
-                        scheduledEndTime,
-                        continueUntilLimit,
-                        if (scheduledDays.size == 7 && scheduledChargeEnabled) 1 else 1,
-                        vehicleCyclesMask
-                    )
-                    onApplyScheduledPreheat(
-                        scheduledPreheatEnabled,
-                        scheduledPreheatStartTime,
-                        ChargePlanCyclesHelper.toVehicleMask(preheatDays)
-                    )
+                    val chargingChanged = healthySwitchEnabled != isHealthyChargeEnabled ||
+                        selectedSoc.roundToInt() != currentLimitSoc ||
+                        scheduledChargeEnabled != initialScheduledChargeEnabled ||
+                        scheduledStartTime != initialScheduledStartTime ||
+                        scheduledEndTime != initialScheduledEndTime ||
+                        continueUntilLimit != initialContinueUntilLimit ||
+                        ChargePlanCyclesHelper.toVehicleMask(scheduledDays) != ChargePlanCyclesHelper.toVehicleMask(initialScheduledCycles)
+
+                    val preheatChanged = scheduledPreheatEnabled != initialScheduledPreheatEnabled ||
+                        scheduledPreheatStartTime != initialScheduledPreheatStartTime ||
+                        ChargePlanCyclesHelper.toVehicleMask(preheatDays) != ChargePlanCyclesHelper.toVehicleMask(initialScheduledPreheatDays)
+
+                    if (chargingChanged || !preheatChanged) {
+                        onApplyChargingSettings(
+                            healthySwitchEnabled,
+                            selectedSoc.roundToInt(),
+                            scheduledChargeEnabled,
+                            scheduledStartTime,
+                            scheduledEndTime,
+                            continueUntilLimit,
+                            if (scheduledDays.size == 7 && scheduledChargeEnabled) 1 else 1,
+                            vehicleCyclesMask
+                        )
+                    }
+
+                    if (preheatChanged) {
+                        onApplyScheduledPreheat(
+                            scheduledPreheatEnabled,
+                            scheduledPreheatStartTime,
+                            ChargePlanCyclesHelper.toVehicleMask(preheatDays)
+                        )
+                    }
                     onDismissRequest()
                 },
                 shape = RoundedCornerShape(12.dp),

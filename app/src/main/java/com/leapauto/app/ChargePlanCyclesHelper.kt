@@ -29,6 +29,16 @@ object ChargePlanCyclesHelper {
     }
 
     /**
+     * 将周一至周日选中天数转换为预约类指令 (161/171/361) controls 数组中的 days 整数列表。
+     * 官方规范：0=周日, 1=周一, 2=周二 ... 6=周六。
+     */
+    fun toScheduleDaysIntList(daySet: Set<Int>): List<Int> {
+        val days = daySet.ifEmpty { (1..7).toSet() }
+        // 7 对应周日 -> 映射为 0
+        return days.map { if (it == 7) 0 else it }.sorted()
+    }
+
+    /**
      * 将选中的星期集合（1..7）转换为零跑车端 T-Box 识别的原生 7 位 0/1 掩码。
      * 例如工作日 -> "1,1,1,1,1,0,0"，全周 -> "1,1,1,1,1,1,1"，周末 -> "0,0,0,0,0,1,1"。
      */

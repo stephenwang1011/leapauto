@@ -1273,15 +1273,22 @@ class LeapmotorApi(private val session: Session) {
         val route = ensureRoute()
         val old = session.oldAuth ?: throw ApiException("未登录（缺少旧凭证）")
 
-        val vehicleMask = ChargePlanCyclesHelper.toVehicleMask(days)
+        val daySet = ChargePlanCyclesHelper.parseToDaySet(days)
+        val daysArray = JSONArray().apply {
+            ChargePlanCyclesHelper.toScheduleDaysIntList(daySet).forEach { put(it) }
+        }
+
+        val todayStr = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        val fullStartTime = if (startTime.length == 5) "$todayStr $startTime:00" else startTime
+
         val stateJson = JSONObject().apply {
             if (enabled) {
                 val item = JSONObject().apply {
                     put("on", "1")
-                    put("set_id", "ptc_${System.currentTimeMillis()}")
-                    put("start_time", startTime)
+                    put("set_id", "ptc_set_${System.currentTimeMillis()}")
+                    put("start_time", fullStartTime)
                     put("update_time", System.currentTimeMillis().toString())
-                    put("days", vehicleMask)
+                    put("days", daysArray)
                 }
                 put("controls", JSONArray().put(item))
             } else {
@@ -1297,18 +1304,7 @@ class LeapmotorApi(private val session: Session) {
             params["oppwd"] = Crypto.encryptOperationPassword(opPassword, old.token)
         }
 
-        val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
-        val apptUrl = "$host/carownerservice/v3/api/appremotectl/appointment"
-        val respAppt = try {
-            http(apptUrl, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
-        } catch (e: Exception) {
-            null
-        }
-        val codeAppt = respAppt?.optInt("code", respAppt.optInt("result", -1)) ?: -1
-        if (codeAppt == 0 || codeAppt == 200) {
-            return respAppt!!
-        }
-
+        // 直接走车控核心通道 (/app/app-control-service/v3/api/appremotectl)
         val controlUrl = "${route.appRegion}/app/app-control-service/v3/api/appremotectl"
         return http(controlUrl, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
     }
