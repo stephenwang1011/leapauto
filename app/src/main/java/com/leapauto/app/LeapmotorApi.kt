@@ -1131,63 +1131,100 @@ class LeapmotorApi(private val session: Session) {
      * 谷电预约充电控制（插枪后在设定起止时间段内执行充电）。
      * 默认 23:00 开始至次日 07:00 结束。
      */
+    /**
+     * 充电计划 / 谷电预约充电控制（cmdid=190，RemoteActionCtlChargePlan）。
+     * 字段与零跑车联网底层完全对齐：
+     * chargeEnable: 是否启用（0/1）
+     * chargesoc: 目标限额百分比
+     * circulation: 循环模式（1=重复，0=单次）
+     * cycles: 星期几重复（"1,2,3,4,5,6,7"）
+     * starttime: 开始时间（"HH:mm"）
+     * endtime: 结束时间（"HH:mm"）
+     * recharge: 未达上限继续充电 / 自动再充（0/1）
+     */
     fun setScheduledCharging(
         enabled: Boolean,
         startTime: String,
         endTime: String,
+        targetSoc: Int = 80,
         opPassword: String = "",
         continueUntilLimit: Boolean = true
     ): JSONObject {
         requireVin()
+        try {
+            ensureFreshOldToken()
+        } catch (_: Exception) {}
         val route = ensureRoute()
-        val model = session.selectedCarType.ifBlank { "C16" }
-        val stateInt = if (enabled) 1 else 0
-        val continueInt = if (continueUntilLimit) 1 else 0
+        val old = session.oldAuth ?: throw ApiException("未登录（缺少旧凭证）")
 
-        // 1. 调用官方独立日程服务 (/schedule/operate)
+        val chargeEnableInt = if (enabled) 1 else 0
+        val rechargeInt = if (continueUntilLimit) 1 else 0
+        val stateJson = JSONObject().apply {
+            put("chargeEnable", chargeEnableInt)
+            put("chargesoc", targetSoc.coerceIn(50, 100))
+            put("circulation", if (enabled) 1 else 0)
+            put("cycles", "1,2,3,4,5,6,7")
+            put("starttime", startTime)
+            put("endtime", endTime)
+            put("recharge", rechargeInt)
+        }
+
+        val params = LinkedHashMap<String, String>()
+        params["cmdid"] = "190"
+        params["state"] = stateJson.toString()
+        params["carvin"] = session.selectedVin
+        if (opPassword.isNotBlank()) {
+            params["oppwd"] = Crypto.encryptOperationPassword(opPassword, old.token)
+        }
+
+        // 1. 优先通道：走车控核心通道 (/app/app-control-service/v3/api/appremotectl) 带旧会话Token与加密码
+        val controlUrl = "${route.appRegion}/app/app-control-service/v3/api/appremotectl"
+        val respControl = try {
+            http(controlUrl, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
+        } catch (e: Exception) {
+            null
+        }
+        val codeCtrl = respControl?.optInt("code", respControl.optInt("result", -1)) ?: -1
+        if (codeCtrl == 0 || codeCtrl == 200) {
+            return respControl!!
+        }
+
+        // 2. 备选通道：走预约通道 (/carownerservice/v3/api/appremotectl/appointment)
+        val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
+        val apptUrl = "$host/carownerservice/v3/api/appremotectl/appointment"
+        val respAppt = try {
+            http(apptUrl, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
+        } catch (e: Exception) {
+            null
+        }
+        val codeAppt = respAppt?.optInt("code", respAppt.optInt("result", -1)) ?: -1
+        if (codeAppt == 0 || codeAppt == 200) {
+            return respAppt!!
+        }
+
+        // 3. 独立日程服务同步兜底 (/schedule/operate)
+        val model = session.selectedCarType.ifBlank { "C16" }
         val scheduleUrl = "${route.appRegion}/carownerservice/v3/api/schedule/operate"
         val schedParams = linkedMapOf(
             "carvin" to session.selectedVin,
             "vin" to session.selectedVin,
             "model" to model,
             "type" to "1",
-            "state" to stateInt.toString(),
-            "status" to stateInt.toString(),
+            "state" to chargeEnableInt.toString(),
+            "status" to chargeEnableInt.toString(),
             "startTime" to startTime,
             "endTime" to endTime,
             "repeat" to "1,2,3,4,5,6,7",
             "cycle" to "1,2,3,4,5,6,7",
-            "continueCharge" to continueInt.toString(),
-            "continueUntilFull" to continueInt.toString()
+            "continueCharge" to rechargeInt.toString(),
+            "continueUntilFull" to rechargeInt.toString()
         )
-        val respOperate = try {
-            gatewayFetch(scheduleUrl, method = "POST", params = schedParams, formBody = schedParams)
-        } catch (e: Exception) {
-            JSONObject().put("error", e.message ?: e.toString())
-        }
-
-        // 2. 紧接着调用 syncCode 下发车机同步码
-        val syncUrl = "${route.appRegion}/carownerservice/v3/api/schedule/syncCode"
-        val syncParams = mapOf(
-            "carvin" to session.selectedVin,
-            "vin" to session.selectedVin,
-            "model" to model,
-            "type" to "1"
-        )
-        val respSync = try {
-            gatewayFetch(syncUrl, method = "POST", params = syncParams, formBody = syncParams)
-        } catch (e: Exception) {
-            JSONObject().put("error", e.message ?: e.toString())
-        }
-
-        return respOperate.apply {
-            if (respSync != null) put("syncCodeResp", respSync)
-        }
+        return gatewayFetch(scheduleUrl, method = "POST", params = schedParams, formBody = schedParams)
     }
 
     /**
-     * 预约电池预热控制（设定时间自动唤醒加热动力电池）。
-     * 默认 23:00 开始预热。
+     * 预约电池预热控制（cmdid=161，PTC Battery Heating Schedule）。
+     * controls 数组包装：on, set_id, start_time, update_time, days。
      */
     fun setScheduledBatteryPreheat(
         enabled: Boolean,
@@ -1195,58 +1232,83 @@ class LeapmotorApi(private val session: Session) {
         opPassword: String = ""
     ): JSONObject {
         requireVin()
+        try {
+            ensureFreshOldToken()
+        } catch (_: Exception) {}
         val route = ensureRoute()
-        val model = session.selectedCarType.ifBlank { "C16" }
-        val stateInt = if (enabled) 1 else 0
+        val old = session.oldAuth ?: throw ApiException("未登录（缺少旧凭证）")
 
-        val scheduleUrl = "${route.appRegion}/carownerservice/v3/api/schedule/operate"
-        val schedParams = linkedMapOf(
-            "carvin" to session.selectedVin,
-            "vin" to session.selectedVin,
-            "model" to model,
-            "type" to "3",
-            "state" to stateInt.toString(),
-            "status" to stateInt.toString(),
-            "startTime" to startTime,
-            "repeat" to "1,2,3,4,5,6,7",
-            "cycle" to "1,2,3,4,5,6,7"
-        )
-        val respOperate = try {
-            gatewayFetch(scheduleUrl, method = "POST", params = schedParams, formBody = schedParams)
-        } catch (e: Exception) {
-            JSONObject().put("error", e.message ?: e.toString())
+        val stateJson = JSONObject().apply {
+            if (enabled) {
+                val item = JSONObject().apply {
+                    put("on", "1")
+                    put("set_id", "ptc_${System.currentTimeMillis()}")
+                    put("start_time", startTime)
+                    put("update_time", System.currentTimeMillis().toString())
+                    put("days", "1,2,3,4,5,6,7")
+                }
+                put("controls", JSONArray().put(item))
+            } else {
+                put("controls", JSONArray())
+            }
         }
 
-        val syncUrl = "${route.appRegion}/carownerservice/v3/api/schedule/syncCode"
-        val syncParams = mapOf(
-            "carvin" to session.selectedVin,
-            "vin" to session.selectedVin,
-            "model" to model,
-            "type" to "3"
-        )
-        val respSync = try {
-            gatewayFetch(syncUrl, method = "POST", params = syncParams, formBody = syncParams)
-        } catch (e: Exception) {
-            JSONObject().put("error", e.message ?: e.toString())
+        val params = LinkedHashMap<String, String>()
+        params["cmdid"] = "161"
+        params["state"] = stateJson.toString()
+        params["carvin"] = session.selectedVin
+        if (opPassword.isNotBlank()) {
+            params["oppwd"] = Crypto.encryptOperationPassword(opPassword, old.token)
         }
 
-        return respOperate.apply {
-            if (respSync != null) put("syncCodeResp", respSync)
+        val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
+        val apptUrl = "$host/carownerservice/v3/api/appremotectl/appointment"
+        val respAppt = try {
+            http(apptUrl, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
+        } catch (e: Exception) {
+            null
+        }
+        val codeAppt = respAppt?.optInt("code", respAppt.optInt("result", -1)) ?: -1
+        if (codeAppt == 0 || codeAppt == 200) {
+            return respAppt!!
+        }
+
+        val controlUrl = "${route.appRegion}/app/app-control-service/v3/api/appremotectl"
+        return http(controlUrl, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
+    }
+
+    /** 查询车辆当前已设置的充电计划（cmdId=190）。 */
+    fun getChargeSchedule(): JSONObject {
+        requireVin()
+        val route = ensureRoute()
+        val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
+        val url = "$host/carownerservice/v3/api/appremotectl/getappointment"
+        val params = LinkedHashMap<String, String>()
+        params["carvin"] = session.selectedVin
+        params["vin"] = session.selectedVin
+        params["cmdId"] = "190"
+        return try {
+            http(url, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
+        } catch (e: Exception) {
+            JSONObject().put("error", e.message ?: e.toString())
         }
     }
 
-    /** 查询车辆当前已设置的预约任务。 */
-    fun getAppointment(): JSONObject {
+    /** 查询车辆当前已设置的电池预热预约（cmdId=161）。 */
+    fun getPtcHeatingSchedule(): JSONObject {
         requireVin()
         val route = ensureRoute()
-        val model = session.selectedCarType.ifBlank { "C16" }
-        val url = "${route.appRegion}/carownerservice/v3/api/appremotectl/getappointment"
-        val params = mapOf(
-            "carvin" to session.selectedVin,
-            "vin" to session.selectedVin,
-            "model" to model
-        )
-        return gatewayFetch(url, method = "POST", params = params, formBody = params)
+        val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
+        val url = "$host/carownerservice/v3/api/appremotectl/getappointment"
+        val params = LinkedHashMap<String, String>()
+        params["carvin"] = session.selectedVin
+        params["vin"] = session.selectedVin
+        params["cmdId"] = "161"
+        return try {
+            http(url, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
+        } catch (e: Exception) {
+            JSONObject().put("error", e.message ?: e.toString())
+        }
     }
 
     /** 查询车辆定时日程列表（/schedule/list），必需包含 type (Integer, 如 1=充电日程)。 */

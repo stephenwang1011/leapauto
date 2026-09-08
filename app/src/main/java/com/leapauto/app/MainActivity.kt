@@ -811,34 +811,35 @@ class MainActivity : ComponentActivity() {
                 val msgHealthy = respHealthy.optString("msg", respHealthy.optString("message", ""))
 
                 val savedPin = sessionStore.loadOpPassword().orEmpty()
-                val respSched = api.setScheduledCharging(scheduledEnabled, startTime, endTime, savedPin, continueUntilLimit)
+                val respSched = api.setScheduledCharging(scheduledEnabled, startTime, endTime, targetSoc, savedPin, continueUntilLimit)
                 val codeSched = respSched.optInt("code", respSched.optInt("result", -1))
                 val msgSched = respSched.optString("msg", respSched.optString("message", ""))
+                val chargeQuery = runCatching { api.getChargeSchedule() }.getOrNull()
                 val isHealthySuccess = codeHealthy == 0 || codeHealthy == 200
                 val isSchedSuccess = codeSched == 0 || codeSched == 200
 
-                if (!isHealthySuccess || !isSchedSuccess) {
-                    val elapsed = System.currentTimeMillis() - started
-                    ErrorLogs.repository.record(
-                        ErrorLogEntry(
-                            timestampMs = System.currentTimeMillis(),
-                            category = ErrorLogCategory.CONTROL_FAILURE,
-                            stage = "charging_settings_control",
-                            httpStatus = if (codeHealthy != -1) codeHealthy else null,
-                            durationMs = elapsed,
-                            retryCount = 0,
-                            appVersion = BuildConfig.VERSION_NAME,
-                            message = buildString {
-                                appendLine("下发充电设置部分未完成:")
-                                appendLine("VIN: $vin")
-                                appendLine("健康充电: enabled=$healthyEnabled, targetSoc=$targetSoc (code=$codeHealthy, msg=$msgHealthy)")
-                                appendLine("预约充电: enabled=$scheduledEnabled, $startTime ~ $endTime, 未达上限继续充电=$continueUntilLimit (code=$codeSched, msg=$msgSched)")
-                                appendLine("健康充电响应: $respHealthy")
-                                appendLine("预约充电响应: $respSched")
-                            }
-                        )
+                // 记录完整调试日志，方便随时在设置中查看车端真实返回
+                val elapsed = System.currentTimeMillis() - started
+                ErrorLogs.repository.record(
+                    ErrorLogEntry(
+                        timestampMs = System.currentTimeMillis(),
+                        category = if (isHealthySuccess && isSchedSuccess) ErrorLogCategory.API_FAILURE else ErrorLogCategory.CONTROL_FAILURE,
+                        stage = "charging_settings_control",
+                        httpStatus = if (codeHealthy != -1) codeHealthy else null,
+                        durationMs = elapsed,
+                        retryCount = 0,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        message = buildString {
+                            appendLine("下发充电设置 (健康充电 + 充电计划cmdid=190):")
+                            appendLine("VIN: $vin")
+                            appendLine("健康充电: enabled=$healthyEnabled, targetSoc=$targetSoc (code=$codeHealthy, msg=$msgHealthy)")
+                            appendLine("预约充电: enabled=$scheduledEnabled, $startTime ~ $endTime, 未达上限继续充电=$continueUntilLimit (code=$codeSched, msg=$msgSched)")
+                            appendLine("健康充电响应: $respHealthy")
+                            appendLine("充电计划(190)响应: $respSched")
+                            appendLine("车端充电计划反查: ${chargeQuery ?: "无"}")
+                        }
                     )
-                }
+                )
 
                 mainHandler.post {
                     if (isHealthySuccess && isSchedSuccess) {
@@ -892,6 +893,7 @@ class MainActivity : ComponentActivity() {
                 val resp = api.setScheduledBatteryPreheat(enabled, startTime, savedPin)
                 val code = resp.optInt("code", resp.optInt("result", -1))
                 val msg = resp.optString("msg", resp.optString("message", ""))
+                val preheatQuery = runCatching { api.getPtcHeatingSchedule() }.getOrNull()
                 val elapsed = System.currentTimeMillis() - started
 
                 ErrorLogs.repository.record(
@@ -904,11 +906,12 @@ class MainActivity : ComponentActivity() {
                         retryCount = 0,
                         appVersion = BuildConfig.VERSION_NAME,
                         message = buildString {
-                            appendLine("下发设置: 预约电池预热")
+                            appendLine("下发设置: 预约电池预热 (cmdid=161)")
                             appendLine("VIN: $vin")
                             appendLine("参数: enabled=$enabled, startTime=$startTime")
                             appendLine("状态码: code=$code, msg=$msg")
                             appendLine("服务端完整返回: $resp")
+                            appendLine("车端预热计划反查: ${preheatQuery ?: "无"}")
                         }
                     )
                 )
