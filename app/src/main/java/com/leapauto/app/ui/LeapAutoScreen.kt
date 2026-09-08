@@ -2464,35 +2464,13 @@ fun VehicleHero(
                 }
             }
 
-            // ====== 2. 100% 原始饱满比例车身主图 (纯净无遮挡) ======
+            // ====== 2. 100% 原始饱满比例车身主图 (纯净无额外阴影) ======
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(142.dp),
                 contentAlignment = Alignment.Center
             ) {
-                // 车轮地面接触微阴影 (Ground Contact Shadow)
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth(0.80f)
-                        .height(14.dp)
-                        .align(Alignment.BottomCenter)
-                        .offset(y = (-2).dp)
-                ) {
-                    drawOval(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color.Black.copy(alpha = 0.16f),
-                                Color.Black.copy(alpha = 0.05f),
-                                Color.Transparent
-                            ),
-                            center = center,
-                            radius = size.width / 2f
-                        ),
-                        size = size
-                    )
-                }
-
                 if (remoteBitmap != null) {
                     Image(
                         bitmap = remoteBitmap,
