@@ -1139,7 +1139,6 @@ class LeapmotorApi(private val session: Session) {
     ): JSONObject {
         requireVin()
         val route = ensureRoute()
-        val url = "${route.appRegion}/carownerservice/v3/api/appremotectl/appointment"
         val stateInt = if (enabled) 1 else 0
         val stateJson = JSONObject().apply {
             put("startTime", startTime)
@@ -1151,19 +1150,56 @@ class LeapmotorApi(private val session: Session) {
             put("value", if (enabled) "1" else "0")
             put("repeat", "1,2,3,4,5,6,7")
         }
-        val params = linkedMapOf(
-            "carvin" to session.selectedVin,
-            "vin" to session.selectedVin,
-            "cmdid" to "361",
-            "state" to stateJson.toString(),
-            "startTime" to startTime,
-            "endTime" to endTime
-        )
+
+        // 1. 优先尝试：使用车控原语通道 (appremotectl/appointment) + oldAppHeaders(true) + oppwd (与旧控车鉴权闭环对齐)
         val old = session.oldAuth
         if (old != null && opPassword.isNotBlank()) {
+            val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
+            val url = "$host/carownerservice/v3/api/appremotectl/appointment"
+            val params = LinkedHashMap<String, String>()
+            params["cmdid"] = "361"
+            params["state"] = stateJson.toString()
+            params["carvin"] = session.selectedVin
+            params["startTime"] = startTime
+            params["endTime"] = endTime
             params["oppwd"] = Crypto.encryptOperationPassword(opPassword, old.token)
+
+            try {
+                ensureFreshOldToken()
+                val resp = http(url, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
+                val code = resp.optInt("code", resp.optInt("result", -1))
+                if (code == 0 || code == 200) {
+                    return resp
+                }
+            } catch (_: Exception) {}
         }
-        return gatewayFetch(url, method = "POST", params = params, formBody = params)
+
+        // 2. 独立接口备选：尝试新网关定时任务通道 (/schedule/operate)
+        val scheduleUrl = "${route.appRegion}/carownerservice/v3/api/schedule/operate"
+        val schedParams = mapOf(
+            "carvin" to session.selectedVin,
+            "vin" to session.selectedVin,
+            "type" to "charge",
+            "state" to stateInt.toString(),
+            "status" to stateInt.toString(),
+            "startTime" to startTime,
+            "endTime" to endTime,
+            "repeat" to "1,2,3,4,5,6,7"
+        )
+        return try {
+            gatewayFetch(scheduleUrl, method = "POST", params = schedParams, formBody = schedParams)
+        } catch (_: Exception) {
+            val url = "${route.appRegion}/carownerservice/v3/api/appremotectl/appointment"
+            val params = linkedMapOf(
+                "carvin" to session.selectedVin,
+                "vin" to session.selectedVin,
+                "cmdid" to "361",
+                "state" to stateJson.toString(),
+                "startTime" to startTime,
+                "endTime" to endTime
+            )
+            gatewayFetch(url, method = "POST", params = params, formBody = params)
+        }
     }
 
     /**
@@ -1177,7 +1213,6 @@ class LeapmotorApi(private val session: Session) {
     ): JSONObject {
         requireVin()
         val route = ensureRoute()
-        val url = "${route.appRegion}/carownerservice/v3/api/appremotectl/appointment"
         val stateInt = if (enabled) 1 else 0
         val stateJson = JSONObject().apply {
             put("startTime", startTime)
@@ -1187,18 +1222,51 @@ class LeapmotorApi(private val session: Session) {
             put("value", if (enabled) "1" else "0")
             put("repeat", "1,2,3,4,5,6,7")
         }
-        val params = linkedMapOf(
-            "carvin" to session.selectedVin,
-            "vin" to session.selectedVin,
-            "cmdid" to "161",
-            "state" to stateJson.toString(),
-            "startTime" to startTime
-        )
+
         val old = session.oldAuth
         if (old != null && opPassword.isNotBlank()) {
+            val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
+            val url = "$host/carownerservice/v3/api/appremotectl/appointment"
+            val params = LinkedHashMap<String, String>()
+            params["cmdid"] = "161"
+            params["state"] = stateJson.toString()
+            params["carvin"] = session.selectedVin
+            params["startTime"] = startTime
             params["oppwd"] = Crypto.encryptOperationPassword(opPassword, old.token)
+
+            try {
+                ensureFreshOldToken()
+                val resp = http(url, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
+                val code = resp.optInt("code", resp.optInt("result", -1))
+                if (code == 0 || code == 200) {
+                    return resp
+                }
+            } catch (_: Exception) {}
         }
-        return gatewayFetch(url, method = "POST", params = params, formBody = params)
+
+        val scheduleUrl = "${route.appRegion}/carownerservice/v3/api/schedule/operate"
+        val schedParams = mapOf(
+            "carvin" to session.selectedVin,
+            "vin" to session.selectedVin,
+            "type" to "preheat",
+            "state" to stateInt.toString(),
+            "status" to stateInt.toString(),
+            "startTime" to startTime,
+            "repeat" to "1,2,3,4,5,6,7"
+        )
+        return try {
+            gatewayFetch(scheduleUrl, method = "POST", params = schedParams, formBody = schedParams)
+        } catch (_: Exception) {
+            val url = "${route.appRegion}/carownerservice/v3/api/appremotectl/appointment"
+            val params = linkedMapOf(
+                "carvin" to session.selectedVin,
+                "vin" to session.selectedVin,
+                "cmdid" to "161",
+                "state" to stateJson.toString(),
+                "startTime" to startTime
+            )
+            gatewayFetch(url, method = "POST", params = params, formBody = params)
+        }
     }
 
     /** 查询车辆当前已设置的预约任务。 */
@@ -1211,6 +1279,22 @@ class LeapmotorApi(private val session: Session) {
             "vin" to session.selectedVin
         )
         return gatewayFetch(url, method = "POST", params = params, formBody = params)
+    }
+
+    /** 查询车辆定时日程列表（/schedule/list）。 */
+    fun queryScheduleList(): JSONObject {
+        requireVin()
+        val route = ensureRoute()
+        val url = "${route.appRegion}/carownerservice/v3/api/schedule/list"
+        val params = mapOf(
+            "carvin" to session.selectedVin,
+            "vin" to session.selectedVin
+        )
+        return try {
+            gatewayFetch(url, method = "POST", params = params, formBody = params)
+        } catch (e: Exception) {
+            JSONObject().put("error", e.message ?: e.toString())
+        }
     }
 
     // ---------------------------------------------------------------- 内部

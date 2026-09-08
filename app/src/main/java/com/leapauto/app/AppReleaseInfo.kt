@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 修复预约充电与预约电池预热操作密码鉴权：携带加密oppwd及完整起止时间规则，彻底解决参数不合法错误\n" +
-        "2. 桌面2x2小组件崩溃彻底修复，全新车模展厅与纯净双能源正常呈现"
+        "1. 升级预约充电与预热双通道调度：优先直通车控原语通道（对齐XFX-CDN-CROSS-NODE与oppwd解密），并提供schedule/operate独立通道备选\n" +
+        "2. 增加schedule/list与getappointment双重云端反查日志，确保鉴权与接口形态全链路透明可溯"
 }

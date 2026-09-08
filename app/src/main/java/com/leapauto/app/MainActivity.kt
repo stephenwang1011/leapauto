@@ -809,6 +809,7 @@ class MainActivity : ComponentActivity() {
                 val codeSched = respSched.optInt("code", respSched.optInt("result", -1))
                 val msgSched = respSched.optString("msg", respSched.optString("message", ""))
                 val currentAppointment = runCatching { api.getAppointment() }.getOrNull()
+                val currentScheduleList = runCatching { api.queryScheduleList() }.getOrNull()
 
                 val elapsed = System.currentTimeMillis() - started
                 ErrorLogs.repository.record(
@@ -827,7 +828,8 @@ class MainActivity : ComponentActivity() {
                             appendLine("预约充电: enabled=$scheduledEnabled, $startTime ~ $endTime (code=$codeSched, msg=$msgSched)")
                             appendLine("健康充电完整响应: $respHealthy")
                             appendLine("预约充电完整响应: $respSched")
-                            appendLine("当前已有预约查询: ${currentAppointment ?: "无"}")
+                            appendLine("已有预约 (getappointment): ${currentAppointment ?: "无"}")
+                            appendLine("日程列表 (schedule/list): ${currentScheduleList ?: "无"}")
                         }
                     )
                 )
