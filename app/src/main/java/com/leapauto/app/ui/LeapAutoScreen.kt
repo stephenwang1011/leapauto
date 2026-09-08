@@ -277,11 +277,12 @@ fun LeapAutoScreen(
     scheduledChargeEndTime: String = "07:00",
     scheduledChargeContinueUntilLimit: Boolean = true,
     scheduledChargeCirculation: Int = 1,
-    scheduledChargeCycles: String = "1,2,3,4,5,6,7",
+    scheduledChargeCycles: String = "1,1,1,1,1,1,1",
     scheduledPreheatEnabled: Boolean = false,
     scheduledPreheatStartTime: String = "23:00",
+    scheduledPreheatDays: String = "1,1,1,1,1,1,1",
     onApplyChargingSettings: (Boolean, Int, Boolean, String, String, Boolean, Int, String) -> Unit = { _, _, _, _, _, _, _, _ -> },
-    onApplyScheduledPreheat: (Boolean, String) -> Unit = { _, _ -> },
+    onApplyScheduledPreheat: (Boolean, String, String) -> Unit = { _, _, _ -> },
     networkDebugEnabled: Boolean = false,
     vehicleImageVersion: Int = 0,
     currentVersion: String,
@@ -498,7 +499,10 @@ fun LeapAutoScreen(
             initialContinueUntilLimit = scheduledChargeContinueUntilLimit,
             initialScheduledCirculation = scheduledChargeCirculation,
             initialScheduledCycles = scheduledChargeCycles,
-            onApply = { healthyEnabled, targetSoc, schedEnabled, startTime, endTime, continueUntilLimit, circulation, cycles ->
+            initialScheduledPreheatEnabled = scheduledPreheatEnabled,
+            initialScheduledPreheatStartTime = scheduledPreheatStartTime,
+            initialScheduledPreheatDays = scheduledPreheatDays,
+            onApplyChargingSettings = { healthyEnabled, targetSoc, schedEnabled, startTime, endTime, continueUntilLimit, circulation, cycles ->
                 onApplyChargingSettings(
                     healthyEnabled,
                     targetSoc,
@@ -510,6 +514,9 @@ fun LeapAutoScreen(
                     cycles
                 )
                 showHealthyChargingSheet = false
+            },
+            onApplyScheduledPreheat = { preheatEnabled, startTime, days ->
+                onApplyScheduledPreheat(preheatEnabled, startTime, days)
             }
         )
     }
@@ -524,7 +531,7 @@ fun LeapAutoScreen(
                 if (enable) onControl("batteryPreheat") else onControl("batteryPreheatOff")
             },
             onApplyScheduledPreheat = { enabled, time ->
-                onApplyScheduledPreheat(enabled, time)
+                onApplyScheduledPreheat(enabled, time, scheduledPreheatDays)
                 showBatteryPreheatSheet = false
             }
         )

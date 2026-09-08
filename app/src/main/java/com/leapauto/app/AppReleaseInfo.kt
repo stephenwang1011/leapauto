@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 修复重复周期协议格式：完全对齐零跑车端T-Box底层7位0/1掩码协议(如每天1,1,1,1,1,1,1、工作日1,1,1,1,1,0,0)\n" +
-        "2. 深度打通车端config.3充电计划遥测反显，支持车端实际计划双向同步"
+        "1. 参考零跑官方App全新重构充电中心(图1)：3D电池底盘透视模型与健康充电卡片、预约充电卡片、预约电池预热三卡合一\n" +
+        "2. 参考官方App全新重构预约充电与电池预热弹窗(图2、图3)：质感双轮盘时间滚轮、周日~周六7天独立胶囊与次日联动"
 }

@@ -239,6 +239,17 @@ class SessionStore(context: Context) {
         prefs.edit().putString("scheduled_preheat_start_time_$vin", time).apply()
     }
 
+    /** 预约电池预热重复周期：车端原生 7 位 0/1 掩码，如 "1,1,1,1,1,1,1"（默认全周）。 */
+    fun loadScheduledPreheatDays(vin: String): String {
+        if (vin.isBlank()) return "1,1,1,1,1,1,1"
+        return prefs.getString("scheduled_preheat_days_$vin", "1,1,1,1,1,1,1") ?: "1,1,1,1,1,1,1"
+    }
+
+    fun saveScheduledPreheatDays(vin: String, days: String) {
+        if (vin.isBlank()) return
+        prefs.edit().putString("scheduled_preheat_days_$vin", ChargePlanCyclesHelper.toVehicleMask(days)).apply()
+    }
+
     /** 用户确认的车型配置，按 VIN 隔离保存，避免多车续航规则串用。 */
     fun loadVehicleConfig(
         vin: String,

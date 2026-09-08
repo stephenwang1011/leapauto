@@ -171,9 +171,10 @@ class MainActivity : ComponentActivity() {
     private var scheduledChargeEndTime by mutableStateOf("07:00")
     private var scheduledChargeContinueUntilLimit by mutableStateOf(true)
     private var scheduledChargeCirculation by mutableIntStateOf(1)
-    private var scheduledChargeCycles by mutableStateOf("1,2,3,4,5,6,7")
+    private var scheduledChargeCycles by mutableStateOf("1,1,1,1,1,1,1")
     private var scheduledPreheatEnabled by mutableStateOf(false)
     private var scheduledPreheatStartTime by mutableStateOf("23:00")
+    private var scheduledPreheatDays by mutableStateOf("1,1,1,1,1,1,1")
     private var signalMapDebugState by mutableStateOf<VehicleSignalMapDebugState>(VehicleSignalMapDebugState.Idle)
     private var versionUpdateState by mutableStateOf<VersionUpdateState>(VersionUpdateState.Idle)
     private var handledUpdateVersion by mutableStateOf<String?>(null)
@@ -221,6 +222,7 @@ class MainActivity : ComponentActivity() {
         scheduledChargeCycles = sessionStore.loadScheduledChargeCycles(session.selectedVin)
         scheduledPreheatEnabled = sessionStore.loadScheduledPreheatEnabled(session.selectedVin)
         scheduledPreheatStartTime = sessionStore.loadScheduledPreheatStartTime(session.selectedVin)
+        scheduledPreheatDays = sessionStore.loadScheduledPreheatDays(session.selectedVin)
         ChargeNotificationManager.ensureChannel(this)
         ParkingAnomalyNotificationManager.ensureChannel(this)
 
@@ -266,6 +268,7 @@ class MainActivity : ComponentActivity() {
                     scheduledChargeCycles = scheduledChargeCycles,
                     scheduledPreheatEnabled = scheduledPreheatEnabled,
                     scheduledPreheatStartTime = scheduledPreheatStartTime,
+                    scheduledPreheatDays = scheduledPreheatDays,
                     onApplyChargingSettings = ::applyHealthyAndScheduledCharging,
                     onApplyScheduledPreheat = ::applyScheduledBatteryPreheat,
                     networkDebugEnabled = networkDebugEnabled,
@@ -910,19 +913,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun applyScheduledBatteryPreheat(enabled: Boolean, startTime: String) {
+    private fun applyScheduledBatteryPreheat(
+        enabled: Boolean,
+        startTime: String,
+        days: String = "1,1,1,1,1,1,1"
+    ) {
         val vin = session.selectedVin
+        val vehicleMask = ChargePlanCyclesHelper.toVehicleMask(days)
         sessionStore.saveScheduledPreheatEnabled(vin, enabled)
         sessionStore.saveScheduledPreheatStartTime(vin, startTime)
+        sessionStore.saveScheduledPreheatDays(vin, vehicleMask)
         scheduledPreheatEnabled = enabled
         scheduledPreheatStartTime = startTime
+        scheduledPreheatDays = vehicleMask
 
         val started = System.currentTimeMillis()
         worker.execute {
             try {
                 val api = LeapmotorApi(session)
                 val savedPin = sessionStore.loadOpPassword().orEmpty()
-                val resp = api.setScheduledBatteryPreheat(enabled, startTime, savedPin)
+                val resp = api.setScheduledBatteryPreheat(enabled, startTime, savedPin, vehicleMask)
                 val code = resp.optInt("code", resp.optInt("result", -1))
                 val msg = resp.optString("msg", resp.optString("message", ""))
                 val isPreheatSuccess = code == 200 || code == 0
@@ -940,7 +950,7 @@ class MainActivity : ComponentActivity() {
                             message = buildString {
                                 appendLine("下发预约电池预热未完成:")
                                 appendLine("VIN: $vin")
-                                appendLine("参数: enabled=$enabled, startTime=$startTime")
+                                appendLine("参数: enabled=$enabled, startTime=$startTime, days=$vehicleMask")
                                 appendLine("状态码: code=$code, msg=$msg")
                                 appendLine("服务端完整返回: $resp")
                             }

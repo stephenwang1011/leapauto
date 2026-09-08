@@ -1263,7 +1263,8 @@ class LeapmotorApi(private val session: Session) {
     fun setScheduledBatteryPreheat(
         enabled: Boolean,
         startTime: String,
-        opPassword: String = ""
+        opPassword: String = "",
+        days: String = "1,1,1,1,1,1,1"
     ): JSONObject {
         requireVin()
         try {
@@ -1272,6 +1273,7 @@ class LeapmotorApi(private val session: Session) {
         val route = ensureRoute()
         val old = session.oldAuth ?: throw ApiException("未登录（缺少旧凭证）")
 
+        val vehicleMask = ChargePlanCyclesHelper.toVehicleMask(days)
         val stateJson = JSONObject().apply {
             if (enabled) {
                 val item = JSONObject().apply {
@@ -1279,7 +1281,7 @@ class LeapmotorApi(private val session: Session) {
                     put("set_id", "ptc_${System.currentTimeMillis()}")
                     put("start_time", startTime)
                     put("update_time", System.currentTimeMillis().toString())
-                    put("days", "1,2,3,4,5,6,7")
+                    put("days", vehicleMask)
                 }
                 put("controls", JSONArray().put(item))
             } else {
