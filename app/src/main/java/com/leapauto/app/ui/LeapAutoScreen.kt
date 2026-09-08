@@ -2187,39 +2187,6 @@ fun VehicleHero(
                                 )
                             }
                         }
-                        val drivingPresentation = VehicleHomeStatus.drivingPresentation(
-                            speed = status?.speed,
-                            gearStatus = status?.gearStatus,
-                            locked = status?.locked
-                        )
-                        drivingPresentation.label?.let { label ->
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-                                contentColor = MaterialTheme.colorScheme.primary
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    if (drivingPresentation.speed != null) {
-                                        DrivingBreathingDot()
-                                        Text(
-                                            text = "$label ${drivingPresentation.speed}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    } else {
-                                        Text(
-                                            text = label,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                }
-                            }
-                        }
                     }
 
                     // 状态更新时间
@@ -2439,6 +2406,49 @@ fun VehicleHero(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+                        }
+                    }
+
+                    // ====== 行车状态显示在位置下方，间隔 4dp ======
+                    val detailedDrivingState = VehicleHomeStatus.resolveDetailedDrivingState(
+                        gearStatus = status?.gearStatus,
+                        speed = status?.speed,
+                        isDriving = status?.isDriving
+                    )
+                    detailedDrivingState?.let { drivingState ->
+                        Spacer(Modifier.height(4.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (drivingState.isMoving) {
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.60f)
+                            } else {
+                                MaterialTheme.glassInsetSurface.copy(alpha = 0.85f)
+                            },
+                            contentColor = if (drivingState.isMoving) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                            border = BorderStroke(
+                                0.5.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                if (drivingState.isMoving) {
+                                    DrivingBreathingDot()
+                                }
+                                Text(
+                                    text = drivingState.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                 }

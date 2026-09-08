@@ -88,6 +88,68 @@ object VehicleHomeStatus {
         }
     }
 
+    data class DetailedDrivingState(
+        val label: String,
+        val isMoving: Boolean = false
+    )
+
+    /**
+     * 解析位置下方的详细行车挡位与速度状态：
+     * - D挡：前进显示 "D挡 · 70km/h"，无速度显示 "D挡 · 0km/h"
+     * - R挡：倒车显示 "R挡 · 4km/h"，无速度显示 "R挡 · 0km/h"
+     * - N挡：显示 "N挡"（不显示速度）
+     * - P挡：显示 "已驻车"（不显示速度）
+     */
+    fun resolveDetailedDrivingState(
+        gearStatus: String?,
+        speed: String?,
+        isDriving: Boolean? = null
+    ): DetailedDrivingState? {
+        val speedValue = parseSpeed(speed)
+        val speedText = if (speedValue != null && speedValue > 0.0) {
+            "${if (speedValue % 1.0 == 0.0) speedValue.toInt().toString() else "%.1f".format(speedValue)}km/h"
+        } else {
+            "0km/h"
+        }
+
+        val normalizedGear = when (gearStatus?.trim()?.uppercase()) {
+            "D", "D挡", "DRIVE", "前进", "3" -> "D"
+            "R", "R挡", "REVERSE", "倒车", "1" -> "R"
+            "N", "N挡", "NEUTRAL", "空挡", "2" -> "N"
+            "P", "P挡", "PARK", "驻车", "停车", "0" -> "P"
+            else -> null
+        }
+
+        return when (normalizedGear) {
+            "D" -> DetailedDrivingState(
+                label = "D挡 · $speedText",
+                isMoving = speedValue != null && speedValue > 0.0
+            )
+            "R" -> DetailedDrivingState(
+                label = "R挡 · $speedText",
+                isMoving = speedValue != null && speedValue > 0.0
+            )
+            "N" -> DetailedDrivingState(
+                label = "N挡",
+                isMoving = false
+            )
+            "P" -> DetailedDrivingState(
+                label = "已驻车",
+                isMoving = false
+            )
+            else -> {
+                if (isDriving == true || (speedValue != null && speedValue > 0.0)) {
+                    DetailedDrivingState(
+                        label = "行驶中 · $speedText",
+                        isMoving = true
+                    )
+                } else {
+                    null
+                }
+            }
+        }
+    }
+
     /** Selects charging or driving battery power without inferring engine output. */
     fun powerSummary(
         chargeState: Int?,

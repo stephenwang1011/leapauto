@@ -101,6 +101,43 @@ class VehicleHomeStatusTest {
     }
 
     @Test
+    fun `detailed driving state formats D, R, N, P gears per specification`() {
+        // D挡前进且有速度
+        val dMoving = VehicleHomeStatus.resolveDetailedDrivingState("D挡", "70 km/h")
+        assertEquals("D挡 · 70km/h", dMoving?.label)
+        assertEquals(true, dMoving?.isMoving)
+
+        // D挡静止无速度
+        val dStopped = VehicleHomeStatus.resolveDetailedDrivingState("D挡", "0 km/h")
+        assertEquals("D挡 · 0km/h", dStopped?.label)
+        assertEquals(false, dStopped?.isMoving)
+
+        val dNullSpeed = VehicleHomeStatus.resolveDetailedDrivingState("D", null)
+        assertEquals("D挡 · 0km/h", dNullSpeed?.label)
+        assertEquals(false, dNullSpeed?.isMoving)
+
+        // R挡倒车且有速度
+        val rMoving = VehicleHomeStatus.resolveDetailedDrivingState("R挡", "4 km/h")
+        assertEquals("R挡 · 4km/h", rMoving?.label)
+        assertEquals(true, rMoving?.isMoving)
+
+        // R挡静止无速度
+        val rStopped = VehicleHomeStatus.resolveDetailedDrivingState("R", "0")
+        assertEquals("R挡 · 0km/h", rStopped?.label)
+        assertEquals(false, rStopped?.isMoving)
+
+        // N挡空挡（不显示速度）
+        val nGear = VehicleHomeStatus.resolveDetailedDrivingState("N挡", "0 km/h")
+        assertEquals("N挡", nGear?.label)
+        assertEquals(false, nGear?.isMoving)
+
+        // P挡驻车（显示已驻车，不显示速度）
+        val pGear = VehicleHomeStatus.resolveDetailedDrivingState("P挡", "0 km/h")
+        assertEquals("已驻车", pGear?.label)
+        assertEquals(false, pGear?.isMoving)
+    }
+
+    @Test
     fun `power summary prioritizes charging then positive-speed driving`() {
         assertEquals(
             "3.3 kW",

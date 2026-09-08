@@ -215,13 +215,13 @@ fun HealthyChargingBottomSheet(
                 Spacer(modifier = Modifier.size(36.dp))
             }
 
-            // 当前电量与 3D 电池模型视觉（图 1 头部）
+            // 当前电量与电池数据（最低温度 + 充电剩余时间）
             val rawSoc = VehicleHomeStatus.resolvedSoc(status?.preciseSoc, status?.soc)
             val normalizedSoc = rawSoc?.toIntOrNull() ?: 33
-            val socFloat = rawSoc?.toFloatOrNull() ?: 33f
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.Bottom,
@@ -243,10 +243,70 @@ fun HealthyChargingBottomSheet(
                     )
                 }
 
-                Spacer(Modifier.height(4.dp))
+                // 最低电池温度 与 充电剩余时间 卡片
+                val formattedRemainTime = formatChargeRemainTime(status?.chargeRemainTime, status?.chargeState)
+                val minTemp = status?.minBatteryTemp?.trim()?.takeIf { it.isNotBlank() && it != "--" } ?: "-- °C"
 
-                // 3D 汽车底盘透视与中置电池能量条
-                BatteryChassisVisual(soc = socFloat)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp, horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 最低电池温度
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "最低电池温度",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = minTemp,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        // 分割线
+                        Box(
+                            modifier = Modifier
+                                .height(26.dp)
+                                .width(0.8.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f))
+                        )
+
+                        // 充电剩余时间
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "充电剩余时间",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = formattedRemainTime,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (status?.chargeState == 1) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
             }
 
             // 卡片 1: 健康充电（参考图 1）
@@ -1171,128 +1231,6 @@ private fun OfficialDayPill(
 }
 
 // ----------------------------------------------------------------
-// 3D 电池底盘透视视觉模型（图 1 头部）
-// ----------------------------------------------------------------
-
-@Composable
-private fun BatteryChassisVisual(
-    soc: Float,
-    modifier: Modifier = Modifier
-) {
-    val isDark = LocalAppDarkTheme.current
-    val chassisColor = if (isDark) Color(0xFF333338) else Color(0xFFE5E5EA)
-    val batteryEmptyColor = if (isDark) Color(0xFF26262B) else Color(0xFFF0F0F4)
-    val greenPrimary = Color(0xFF00C853)
-    val greenLight = Color(0xFF69F0AE)
-
-    Canvas(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(96.dp)
-    ) {
-        val w = size.width
-        val h = size.height
-        val cx = w / 2f
-        val cy = h / 2f
-
-        // 车身轮廓框架
-        val bodyWidth = 240.dp.toPx()
-        val bodyHeight = 54.dp.toPx()
-        val bodyLeft = cx - bodyWidth / 2f
-        val bodyTop = cy - bodyHeight / 2f
-
-        // 四轮轮廓
-        val wheelW = 36.dp.toPx()
-        val wheelH = 12.dp.toPx()
-        // 前轮
-        drawRoundRect(
-            color = chassisColor,
-            topLeft = Offset(bodyLeft + 16.dp.toPx(), bodyTop - 6.dp.toPx()),
-            size = Size(wheelW, wheelH),
-            cornerRadius = CornerRadius(4.dp.toPx())
-        )
-        drawRoundRect(
-            color = chassisColor,
-            topLeft = Offset(bodyLeft + 16.dp.toPx(), bodyTop + bodyHeight - 6.dp.toPx()),
-            size = Size(wheelW, wheelH),
-            cornerRadius = CornerRadius(4.dp.toPx())
-        )
-        // 后轮
-        drawRoundRect(
-            color = chassisColor,
-            topLeft = Offset(bodyLeft + bodyWidth - wheelW - 16.dp.toPx(), bodyTop - 6.dp.toPx()),
-            size = Size(wheelW, wheelH),
-            cornerRadius = CornerRadius(4.dp.toPx())
-        )
-        drawRoundRect(
-            color = chassisColor,
-            topLeft = Offset(bodyLeft + bodyWidth - wheelW - 16.dp.toPx(), bodyTop + bodyHeight - 6.dp.toPx()),
-            size = Size(wheelW, wheelH),
-            cornerRadius = CornerRadius(4.dp.toPx())
-        )
-
-        // 车身柔和外框
-        drawRoundRect(
-            color = chassisColor,
-            topLeft = Offset(bodyLeft, bodyTop),
-            size = Size(bodyWidth, bodyHeight),
-            cornerRadius = CornerRadius(22.dp.toPx()),
-            style = Stroke(width = 1.5.dp.toPx())
-        )
-
-        // 中置动力电池包
-        val battW = 150.dp.toPx()
-        val battH = 32.dp.toPx()
-        val battLeft = cx - battW / 2f
-        val battTop = cy - battH / 2f
-
-        // 电池包底盘背景
-        drawRoundRect(
-            color = batteryEmptyColor,
-            topLeft = Offset(battLeft, battTop),
-            size = Size(battW, battH),
-            cornerRadius = CornerRadius(6.dp.toPx())
-        )
-
-        // 绿色电量填充
-        val ratio = (soc / 100f).coerceIn(0f, 1f)
-        if (ratio > 0f) {
-            val fillW = battW * ratio
-            drawRoundRect(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(Color(0xFF00E676), greenPrimary),
-                    startX = battLeft,
-                    endX = battLeft + fillW
-                ),
-                topLeft = Offset(battLeft, battTop),
-                size = Size(fillW, battH),
-                cornerRadius = CornerRadius(6.dp.toPx())
-            )
-            // 顶部微立体高光
-            drawRoundRect(
-                brush = Brush.verticalGradient(
-                    colors = listOf(greenLight.copy(alpha = 0.55f), Color.Transparent),
-                    startY = battTop,
-                    endY = battTop + 8.dp.toPx()
-                ),
-                topLeft = Offset(battLeft, battTop),
-                size = Size(fillW, 8.dp.toPx()),
-                cornerRadius = CornerRadius(6.dp.toPx())
-            )
-        }
-
-        // 电池包边框
-        drawRoundRect(
-            color = if (isDark) Color(0xFF444448) else Color(0xFFDCDCE0),
-            topLeft = Offset(battLeft, battTop),
-            size = Size(battW, battH),
-            cornerRadius = CornerRadius(6.dp.toPx()),
-            style = Stroke(width = 0.8.dp.toPx())
-        )
-    }
-}
-
-// ----------------------------------------------------------------
 // 格式化辅助
 // ----------------------------------------------------------------
 
@@ -1303,4 +1241,31 @@ private fun formatScheduleTimeRange(start: String, end: String): String {
     val eMin = end.substringAfter(":").toIntOrNull() ?: 0
     val isNextDay = (eHour * 60 + eMin) <= (sHour * 60 + sMin)
     return if (isNextDay) "$start-次日$end" else "$start-$end"
+}
+
+private fun formatChargeRemainTime(remainTime: String?, chargeState: Int?): String {
+    if (chargeState == 2) return "已充满"
+    if (chargeState != 1 || remainTime.isNullOrBlank() || remainTime == "--") return "未充电"
+
+    val raw = remainTime.trim()
+    val hasHourAndMin = raw.contains("时")
+    val totalMinutes = if (hasHourAndMin) {
+        val h = raw.substringBefore("时").filter { it.isDigit() }.toIntOrNull() ?: 0
+        val m = raw.substringAfter("时").substringBefore("分").filter { it.isDigit() }.toIntOrNull() ?: 0
+        h * 60 + m
+    } else {
+        raw.filter { it.isDigit() || it == '.' }.toDoubleOrNull()?.toInt()
+    }
+
+    if (totalMinutes == null) return raw
+
+    return when {
+        totalMinutes <= 0 -> "已充满"
+        totalMinutes < 60 -> "剩余${totalMinutes}分钟"
+        else -> {
+            val hours = totalMinutes / 60
+            val mins = totalMinutes % 60
+            if (mins > 0) "剩余${hours}小时${mins}分钟" else "剩余${hours}小时"
+        }
+    }
 }
