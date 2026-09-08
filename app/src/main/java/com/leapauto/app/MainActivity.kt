@@ -562,12 +562,12 @@ class MainActivity : ComponentActivity() {
         loggedIn = false
         versionUpdateState = VersionUpdateState.Idle
         busy = false
-        toast("已退出登录")
+        toast("已登出")
     }
 
     private fun savePin() {
         if (!pin.matches(Regex("\\d{4}"))) {
-            toast("请输入 4 位数字操作密码")
+            toast("请输入 4 位数字操控密码")
             return
         }
         sessionStore.saveOpPassword(pin)
@@ -577,7 +577,7 @@ class MainActivity : ComponentActivity() {
         pendingPinProtectedCancelAction = null
         pinSetupInProgress = false
         pin = ""
-        toast("操作密码已保存")
+        toast("操控密码已保存")
         pendingAction?.invoke()
     }
 

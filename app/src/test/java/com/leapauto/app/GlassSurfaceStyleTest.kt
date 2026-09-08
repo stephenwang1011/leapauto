@@ -61,7 +61,8 @@ class GlassSurfaceStyleTest {
         ).forEach { relativePath ->
             val widgetBackground = File(projectDir, relativePath).readText()
             assertTrue(widgetBackground.contains("android:radius=\"20dp\""))
-            assertFalse(widgetBackground.contains("<stroke"))
+            assertTrue(widgetBackground.contains("<stroke"))
+            assertTrue(widgetBackground.contains("android:width=\"1dp\""))
             assertFalse(widgetBackground.contains("<padding"))
         }
     }

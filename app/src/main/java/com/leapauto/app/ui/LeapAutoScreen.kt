@@ -394,11 +394,11 @@ fun LeapAutoScreen(
     if (loggedIn && pinSetupInProgress && !showSessionExpiredDialog) {
         AlertDialog(
             onDismissRequest = {},
-            title = { Text("设置操作密码") },
+            title = { Text("设置操控密码") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "请输入零跑APP上您设置过的4位操作密码。保存后用于远程控车指令鉴权。",
+                        "请输入零跑APP上您设置过的4位操控密码。保存后用于远程控车指令鉴权。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -603,7 +603,22 @@ fun LeapAutoScreen(
                                 }
                             }
                         },
-                        actions = {},
+                        actions = {
+                            if (selectedTab == MainNavigationTabs.ACCOUNT) {
+                                TextButton(
+                                    onClick = onLogout,
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.error
+                                    )
+                                ) {
+                                    Text(
+                                        "登出",
+                                        fontWeight = FontWeight.Medium,
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                }
+                            }
+                        },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                     )
                 }
@@ -1098,54 +1113,6 @@ private fun SettingsSectionTitle(title: String) {
 }
 
 @Composable
-private fun AccountInfoCard(maskedPhone: String) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
-        border = glassCardBorder(),
-        shadowElevation = 0.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                modifier = Modifier.size(42.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
-            ) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_phosphor_car),
-                        contentDescription = "账号信息",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = maskedPhone,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "已连接零跑官方车联网",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.statusGood
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun MyContent(
     phone: String = "",
     pinSaved: Boolean,
@@ -1168,14 +1135,9 @@ private fun MyContent(
     versionUpdateState: VersionUpdateState,
     onCheckForUpdate: () -> Unit,
     onOpenUpdate: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit = {}
 ) {
     var showDiagnosticLogDialog by rememberSaveable { mutableStateOf(false) }
-    val maskedPhone = when {
-        phone.length == 11 -> "${phone.take(3)}****${phone.takeLast(4)}"
-        phone.isNotBlank() -> phone
-        else -> "已连接零跑"
-    }
 
     Column(
         Modifier
@@ -1184,9 +1146,6 @@ private fun MyContent(
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        AccountInfoCard(maskedPhone)
-
-        SettingsSectionTitle("控车安全")
         PinCard(
             pinSaved = pinSaved,
             pin = pin,
@@ -1198,7 +1157,6 @@ private fun MyContent(
 
         VehicleConfigCard(vehicleModel, vehicleConfig, onSaveVehicleConfig)
 
-        SettingsSectionTitle("个性化与小组件")
         AppearanceModeCard(appearanceMode, onAppearanceModeChange)
         WidgetOpacityCard(widgetOpacity, onWidgetOpacityChange)
         WidgetSensitiveActionVerificationCard(
@@ -1216,28 +1174,6 @@ private fun MyContent(
         )
 
         DiagnosticLogCard(onClick = { showDiagnosticLogDialog = true })
-
-        Spacer(Modifier.height(4.dp))
-
-        OutlinedButton(
-            onClick = onLogout,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.06f),
-                contentColor = MaterialTheme.colorScheme.error
-            ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
-        ) {
-            Text(
-                "退出登录",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.error
-            )
-        }
         Spacer(Modifier.height(8.dp))
     }
 
@@ -1281,7 +1217,9 @@ private fun VehicleConfigCard(
                     Text("座驾配置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text("· ${config.nickname.ifBlank { displayModel }}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Text("修改 >", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+                TextButton(onClick = { editing = true }) {
+                    Text("修改")
+                }
             }
 
             Row(
@@ -5356,7 +5294,7 @@ fun PinCard(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "操作密码",
+                        "操控密码",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -5376,7 +5314,7 @@ fun PinCard(
                 OutlinedTextField(
                     value = pin,
                     onValueChange = onPinChange,
-                    label = { Text("4 位数字操作密码") },
+                    label = { Text("4 位数字操控密码") },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     singleLine = true,

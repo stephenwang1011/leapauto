@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 全应用卡片样式全面升级：将全App所有卡片(主页/能耗/空调/设置)全面对齐45°液态玻璃柔润高光微倒角\n" +
-        "2. 充电中心卡片同步接入玻璃折射质感，全应用视觉呈现浑然天成的高级统一美感"
+        "1. 桌面插件(小组件)全面接入液态玻璃微反光微描边：多档透明度背景新增1dp半透明高光边框\n" +
+        "2. 桌面小组件与App内卡片在深浅色模式下实现高度统一的晶莹水晶悬浮质感"
 }
