@@ -96,6 +96,25 @@ object ChargeStatus {
 
     fun type(values: Map<String, Any?>): String? = type(values["dcInputFastCharge"])
 
+    /**
+     * 判断当前是否已插上充电枪（包括交流慢充枪、直流快充枪、或处于充电工况中）。
+     */
+    fun isGunConnected(status: JSONObject?): Boolean {
+        if (status == null) return false
+        val ac = boolean(status.opt("acInputSlowCharge")) == true
+        val dc = boolean(status.opt("dcInputFastCharge")) == true
+        val s = state(status)
+        return ac || dc || s == 1 || s == 2
+    }
+
+    fun isGunConnected(values: Map<String, Any?>?): Boolean {
+        if (values == null) return false
+        val ac = boolean(values["acInputSlowCharge"]) == true
+        val dc = boolean(values["dcInputFastCharge"]) == true
+        val s = state(values)
+        return ac || dc || s == 1 || s == 2
+    }
+
     private fun type(value: Any?): String? = when (boolean(value)) {
         true -> "直流快充"
         false -> "交流充电"

@@ -122,4 +122,21 @@ class ChargeStatusTest {
         assertTrue(!ChargeNotificationPolicy.shouldNotifyCompleted(previousState = 1, completed = false))
         assertTrue(!ChargeNotificationPolicy.shouldNotifyCompleted(previousState = 2, completed = true))
     }
+
+    @Test
+    fun `isGunConnected correctly detects slow charge, fast charge and active charge states`() {
+        // 未插枪且未充电
+        assertEquals(false, ChargeStatus.isGunConnected(mapOf("acInputSlowCharge" to 0, "dcInputFastCharge" to 0, "chargeState" to 0)))
+        assertEquals(false, ChargeStatus.isGunConnected(null as Map<String, Any?>?))
+
+        // 慢充枪插入
+        assertEquals(true, ChargeStatus.isGunConnected(mapOf("acInputSlowCharge" to 1, "chargeState" to 0)))
+
+        // 快充枪插入
+        assertEquals(true, ChargeStatus.isGunConnected(mapOf("dcInputFastCharge" to 1, "chargeState" to 0)))
+
+        // 充电中或已充满
+        assertEquals(true, ChargeStatus.isGunConnected(mapOf("chargeState" to 1)))
+        assertEquals(true, ChargeStatus.isGunConnected(mapOf("chargeState" to 2)))
+    }
 }

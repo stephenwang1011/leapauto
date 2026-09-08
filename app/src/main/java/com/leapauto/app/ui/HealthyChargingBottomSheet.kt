@@ -110,7 +110,8 @@ fun HealthyChargingBottomSheet(
         enabled: Boolean,
         startTime: String,
         days: String
-    ) -> Unit = { _, _, _ -> }
+    ) -> Unit = { _, _, _ -> },
+    onControl: (String) -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
@@ -341,6 +342,81 @@ fun HealthyChargingBottomSheet(
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (status?.chargeState == 1) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 实时插枪即时充电操作栏（未插枪时完全隐藏）
+            val isGunConnected = status?.chargeGunConnected == true || status?.chargeState == 1 || status?.chargeState == 2
+            val isCharging = status?.chargeState == 1
+
+            if (isGunConnected) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isCharging) {
+                        Button(
+                            onClick = { onControl("stopCharging") },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isDark) Color(0xFF3E1E22) else Color(0xFFFFECEB),
+                                contentColor = Color(0xFFFF3B30)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                        ) {
+                            Text(
+                                text = "⏹ 停止充电",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFF3B30)
+                            )
+                        }
+                    } else {
+                        Button(
+                            onClick = { onControl("startCharging") },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.statusGood,
+                                contentColor = Color.White
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                        ) {
+                            Text(
+                                text = "⚡ 立即开始充电",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    // 辅助按键：解锁充电枪（cmdid=192）
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = cardBgColor,
+                        border = BorderStroke(0.6.dp, cardBorderColor),
+                        modifier = Modifier
+                            .height(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onControl("unlockCharger") }
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "🔓 解锁拔枪",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }

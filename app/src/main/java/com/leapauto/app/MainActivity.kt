@@ -89,7 +89,8 @@ data class VehicleStatus(
     val chargeScheduleCycles: String? = null,
     val chargeScheduleCirculation: Int? = null,
     val chargeScheduleRecharge: Boolean? = null,
-    val chargeScheduleSocLimit: Int? = null
+    val chargeScheduleSocLimit: Int? = null,
+    val chargeGunConnected: Boolean = false
 )
 
 data class TireStatus(
@@ -2000,7 +2001,8 @@ class MainActivity : ComponentActivity() {
             chargeScheduleCycles = m.optString("chargeScheduleCycles").takeIf { it.isNotBlank() },
             chargeScheduleCirculation = m.opt("chargeScheduleCirculation")?.toString()?.toIntOrNull(),
             chargeScheduleRecharge = m.opt("chargeScheduleRecharge")?.let { it.toString() == "1" },
-            chargeScheduleSocLimit = m.opt("chargesocSetting")?.toString()?.toIntOrNull()
+            chargeScheduleSocLimit = m.opt("chargesocSetting")?.toString()?.toIntOrNull(),
+            chargeGunConnected = ChargeStatus.isGunConnected(m)
         )
     }
 

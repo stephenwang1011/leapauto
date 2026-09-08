@@ -664,6 +664,9 @@ object Commands {
         "deodorize" -> ControlCommand("170", QUICK_DEODORIZE_STATE, "快速除味")
         "sentryOn" -> ControlCommand("400", """{"operation":"on"}""", "开启哨兵模式")
         "sentryOff" -> ControlCommand("400", """{"operation":"off"}""", "关闭哨兵模式")
+        "startCharging" -> ControlCommand("193", """{"value":"start"}""", "开始充电")
+        "stopCharging" -> ControlCommand("193", """{"value":"stop"}""", "停止充电")
+        "unlockCharger" -> ControlCommand("192", """{"operation":"unlock"}""", "解锁充电枪")
         else -> throw ApiException("未知命令: $name")
     }
 

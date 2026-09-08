@@ -90,6 +90,25 @@ class CommandsTest {
     }
 
     @Test
+    fun chargingGunControlActionsUseVerifiedCmdidsAndPayloads() {
+        val start = Commands.build("startCharging")
+        val stop = Commands.build("stopCharging")
+        val unlock = Commands.build("unlockCharger")
+
+        assertEquals("193", start.cmdid)
+        assertEquals("{\"value\":\"start\"}", start.stateJson)
+        assertEquals("开始充电", start.label)
+
+        assertEquals("193", stop.cmdid)
+        assertEquals("{\"value\":\"stop\"}", stop.stateJson)
+        assertEquals("停止充电", stop.label)
+
+        assertEquals("192", unlock.cmdid)
+        assertEquals("{\"operation\":\"unlock\"}", unlock.stateJson)
+        assertEquals("解锁充电枪", unlock.label)
+    }
+
+    @Test
     fun sunshadeQuickActionsReuseTheVerifiedCommandAndExplicitTargets() {
         val open = Commands.build("sunshadeOpen")
         val close = Commands.build("sunshadeClose")
