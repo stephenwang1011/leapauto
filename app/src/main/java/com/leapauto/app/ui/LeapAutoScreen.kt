@@ -328,7 +328,6 @@ fun LeapAutoScreen(
     var showVehicleLocation by rememberSaveable { mutableStateOf(false) }
     var showClimateControl by rememberSaveable { mutableStateOf(false) }
     var showHealthyChargingSheet by rememberSaveable { mutableStateOf(false) }
-    var showBatteryPreheatSheet by rememberSaveable { mutableStateOf(false) }
     val destination = when {
         !loggedIn -> ScreenDestination.LOGIN
         showVehicleLocation && selectedTab == MainNavigationTabs.VEHICLE -> ScreenDestination.LOCATION_DETAIL
@@ -521,22 +520,6 @@ fun LeapAutoScreen(
         )
     }
 
-    if (showBatteryPreheatSheet) {
-        BatteryPreheatBottomSheet(
-            onDismissRequest = { showBatteryPreheatSheet = false },
-            status = status,
-            initialScheduledPreheatEnabled = scheduledPreheatEnabled,
-            initialScheduledStartTime = scheduledPreheatStartTime,
-            onToggleInstantPreheat = { enable ->
-                if (enable) onControl("batteryPreheat") else onControl("batteryPreheatOff")
-            },
-            onApplyScheduledPreheat = { enabled, time ->
-                onApplyScheduledPreheat(enabled, time, scheduledPreheatDays)
-                showBatteryPreheatSheet = false
-            }
-        )
-    }
-
     val isAppDark = LocalAppDarkTheme.current
     Box(
         Modifier
@@ -684,9 +667,6 @@ fun LeapAutoScreen(
                     },
                     onOpenHealthyCharging = {
                         showHealthyChargingSheet = true
-                    },
-                    onOpenBatteryPreheat = {
-                        showBatteryPreheatSheet = true
                     },
                     onOpenAccount = {
                         selectedTab = MainNavigationTabs.ACCOUNT
@@ -960,7 +940,6 @@ private fun HomeContent(
     onControl: (String) -> Unit, onDismissControlFeedback: () -> Unit, onQuickAc: (Int, Long) -> Unit,
     onOpenClimateControl: () -> Unit,
     onOpenHealthyCharging: () -> Unit = {},
-    onOpenBatteryPreheat: () -> Unit = {},
     onOpenAccount: () -> Unit,
     vehicleImageVersion: Int = 0
 ) {
@@ -1008,7 +987,6 @@ private fun HomeContent(
                     status = status,
                     todayMileage = EnergyHomeCardPolicy.todayMileage((energyState as? EnergyAnalyticsState.Success)?.data),
                     onOpenHealthyCharging = onOpenHealthyCharging,
-                    onOpenBatteryPreheat = onOpenBatteryPreheat,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -1020,8 +998,7 @@ private fun HomeContent(
                 vehicleModel = vehicleModel,
                 status = status,
                 locationSnapshot = locationSnapshot,
-                onControl = onControl,
-                onOpenBatteryPreheat = onOpenBatteryPreheat
+                onControl = onControl
             )
             ClimateOverviewCard(
                 status = status,
@@ -2775,8 +2752,7 @@ private fun QuickVehicleActions(
     vehicleModel: String,
     status: VehicleStatus?,
     locationSnapshot: VehicleLocationSnapshot?,
-    onControl: (String) -> Unit,
-    onOpenBatteryPreheat: () -> Unit = {}
+    onControl: (String) -> Unit
 ) {
     val context = LocalContext.current
     val sessionStore = remember(context) { SessionStore(context) }
@@ -2791,7 +2767,7 @@ private fun QuickVehicleActions(
     var sunshadeButtonHeight by remember { mutableStateOf(0f) }
     val trunkState = status?.trunkState ?: TrunkState.UNKNOWN
     val commandsPerPage = 4
-    val availableCommands = remember(vehicleModel, status?.sentryMode, status?.batteryPreheatEnabled) {
+    val availableCommands = remember(vehicleModel, status?.sentryMode) {
         val supportsWindowGroup = !vehicleModel.contains("T03", ignoreCase = true)
         val supportsFrunk = VehicleQuickControlCapabilities.supportsFrunk(vehicleModel)
         val windowGroup = if (supportsWindowGroup) {
@@ -2815,7 +2791,6 @@ private fun QuickVehicleActions(
             Cmd("trunk", "开后备箱", R.drawable.ic_phosphor_trunk_open),
             *frunkCommands.toTypedArray(),
             *extraCommands.toTypedArray(),
-            Cmd("batteryPreheat", "电池预热", R.drawable.ic_phosphor_battery_charging),
             Cmd("sentry", "哨兵模式", R.drawable.ic_sentry)
         )
     }
@@ -3015,7 +2990,6 @@ private fun QuickVehicleActions(
                                     "windowOpen" -> false
                                     "windowClose" -> !windowOpen
                                     "trunk" -> false
-                                    "batteryPreheat" -> status?.batteryPreheatEnabled == true
                                     "sentry" -> status?.sentryMode == true
                                     else -> false
                                 }
@@ -3039,7 +3013,6 @@ private fun QuickVehicleActions(
                                                     }
                                                 }
                                                 "sentry" -> onControl(SentryModeControlPolicy.commandName(status?.sentryMode))
-                                                "batteryPreheat" -> onOpenBatteryPreheat()
                                                 else -> onControl(command.name)
                                             }
                                         }
@@ -3471,8 +3444,7 @@ fun VehicleStatusCard(
     todayMileage: String = "--",
     modifier: Modifier = Modifier,
     powerAutoPlayEnabled: Boolean = false,
-    onOpenHealthyCharging: () -> Unit = {},
-    onOpenBatteryPreheat: () -> Unit = {}
+    onOpenHealthyCharging: () -> Unit = {}
 ) {
     val powerSummary = VehicleHomeStatus.powerSummary(
         chargeState = status?.chargeState,
@@ -3545,12 +3517,7 @@ fun VehicleStatusCard(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    val currentItem = powerItems[powerPagerState.currentPage]
-                                    if (currentItem.first == "电池温度") {
-                                        onOpenBatteryPreheat()
-                                    } else {
-                                        powerNextPageRequest = (powerPagerState.currentPage + 1) % powerItems.size
-                                    }
+                                    powerNextPageRequest = (powerPagerState.currentPage + 1) % powerItems.size
                                 },
                             pageSpacing = 8.dp,
                             beyondViewportPageCount = 1,

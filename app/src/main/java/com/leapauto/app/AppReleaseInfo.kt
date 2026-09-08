@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 限制健康充电模式下充电上限不可拉至 100%，并在滑动到 100% 时提供友好保护提示\n" +
-        "2. 开启健康充电时自动将 100% 档位下调至官方推荐的最佳限值 90%"
+        "1. 移除首页快捷控车中的电池预热按键及旧版预热弹窗，避免冗余和误触\n" +
+        "2. 电池预热与定时预约统一在“充电中心”中管理，对齐官方体验"
 }
