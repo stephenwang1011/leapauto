@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 柔化45°液态玻璃倒角边框：描边精细收缩至1.0dp，受光强度柔化至78%，消除生硬白线感\n" +
-        "2. 呈现流动润泽的水晶微折射质感，与冷钛底板浑然天成"
+        "1. 全应用卡片样式全面升级：将全App所有卡片(主页/能耗/空调/设置)全面对齐45°液态玻璃柔润高光微倒角\n" +
+        "2. 充电中心卡片同步接入玻璃折射质感，全应用视觉呈现浑然天成的高级统一美感"
 }

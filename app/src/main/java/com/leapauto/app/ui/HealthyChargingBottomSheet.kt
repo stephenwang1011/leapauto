@@ -70,6 +70,7 @@ import com.leapauto.app.ChargePlanCyclesHelper
 import com.leapauto.app.R
 import com.leapauto.app.VehicleHomeStatus
 import com.leapauto.app.VehicleStatus
+import com.leapauto.app.VehicleStatusMapper
 import com.leapauto.app.ui.theme.LocalAppDarkTheme
 import com.leapauto.app.ui.theme.statusGood
 import kotlin.math.abs
@@ -79,7 +80,7 @@ import kotlin.math.roundToInt
  * 充电中心主界面（参考官方 App 图 1、图 2、图 3 重构）。
  *
  * 整合：
- * 1. 顶部电池能量透视模型与当前电量（33%）。
+ * 1. 顶部当前电量展示与电池数据卡片。
  * 2. 健康充电卡片：开关、描述、充电上限滑动条、90% 最佳限值小三角标记。
  * 3. 预约充电卡片：开关、描述、时段入口（点击弹出图 2 预约充电滚轮弹窗）。
  * 4. 预约电池预热卡片：开关、描述、时段入口（点击弹出图 3 预约电池预热滚轮弹窗）。
@@ -241,7 +242,7 @@ fun HealthyChargingBottomSheet(
 
             // 当前电量与电池数据（最低温度 + 充电剩余时间）
             val rawSoc = VehicleHomeStatus.resolvedSoc(status?.preciseSoc, status?.soc)
-            val normalizedSoc = rawSoc?.toIntOrNull() ?: 33
+            val displaySoc = rawSoc?.let { VehicleStatusMapper.displayPreciseSoc(it)?.removeSuffix("%") } ?: "--"
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -252,19 +253,21 @@ fun HealthyChargingBottomSheet(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "$normalizedSoc",
+                        text = displaySoc,
                         fontSize = 48.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
                         lineHeight = 48.sp
                     )
-                    Text(
-                        text = "%",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(bottom = 6.dp, start = 2.dp)
-                    )
+                    if (displaySoc != "--") {
+                        Text(
+                            text = "%",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(bottom = 6.dp, start = 2.dp)
+                        )
+                    }
                 }
 
                 // 电池温度、充电功率 与 充电剩余时间 精致卡片
@@ -278,7 +281,7 @@ fun HealthyChargingBottomSheet(
                 Surface(
                     shape = RoundedCornerShape(14.dp),
                     color = cardBgColor,
-                    border = BorderStroke(0.6.dp, cardBorderColor),
+                    border = glassCardBorder(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -443,7 +446,7 @@ fun HealthyChargingBottomSheet(
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = cardBgColor,
-                border = BorderStroke(0.6.dp, cardBorderColor),
+                border = glassCardBorder(),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -634,7 +637,7 @@ fun HealthyChargingBottomSheet(
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = cardBgColor,
-                border = BorderStroke(0.6.dp, cardBorderColor),
+                border = glassCardBorder(),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -726,14 +729,17 @@ fun HealthyChargingBottomSheet(
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = cardBgColor,
-                border = BorderStroke(0.6.dp, cardBorderColor),
+                border = glassCardBorder(),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(
+                            horizontal = 16.dp,
+                            vertical = if (scheduledPreheatEnabled) 12.dp else 6.dp
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),

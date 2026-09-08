@@ -790,7 +790,7 @@ private fun LoginContent(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.glassSurface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+            border = glassCardBorder(),
             shadowElevation = 0.dp
         ) {
             Column(
@@ -1103,7 +1103,7 @@ private fun AccountInfoCard(maskedPhone: String) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
         Row(
@@ -1268,7 +1268,7 @@ private fun VehicleConfigCard(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1668,7 +1668,7 @@ private fun VersionUpdateCard(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1783,7 +1783,7 @@ private fun DiagnosticLogCard(onClick: () -> Unit) {
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
         Row(
@@ -1897,7 +1897,7 @@ private fun AppearanceModeCard(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
         Column(
@@ -1946,7 +1946,7 @@ private fun WidgetOpacityCard(opacity: Int, onOpacityChange: (Int) -> Unit) {
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1993,7 +1993,7 @@ private fun WidgetSensitiveActionVerificationCard(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
         Row(
@@ -2077,7 +2077,7 @@ private fun DrivingBreathingDot(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun glassCardBorder(): BorderStroke {
+internal fun glassCardBorder(): BorderStroke {
     val isDark = LocalAppDarkTheme.current
     val topLeftColor = if (isDark) Color.White.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.78f)
     val bottomRightColor = if (isDark) Color.White.copy(alpha = 0.04f) else Color.White.copy(alpha = 0.18f)
@@ -2092,7 +2092,7 @@ private fun glassCardBorder(): BorderStroke {
 }
 
 @Composable
-private fun glassInsetBorder(warning: Boolean = false): BorderStroke {
+internal fun glassInsetBorder(warning: Boolean = false): BorderStroke {
     if (warning) return BorderStroke(1.2.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
     val isDark = LocalAppDarkTheme.current
     val topLeftColor = if (isDark) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.70f)
@@ -3946,7 +3946,7 @@ private fun LocationMapStateMessage(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
         Column(
@@ -4015,7 +4015,7 @@ fun EnergyHomePagerCard(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
         Column(
@@ -4605,14 +4605,11 @@ fun ClimateOverviewCard(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(
-            1.dp,
-            if (status?.acSwitch == true && climateTone != ClimateTemperatureTone.DEFAULT) {
-                temperatureColor.copy(alpha = 0.35f)
-            } else {
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-            }
-        ),
+        border = if (status?.acSwitch == true && climateTone != ClimateTemperatureTone.DEFAULT) {
+            BorderStroke(1.dp, temperatureColor.copy(alpha = 0.45f))
+        } else {
+            glassCardBorder()
+        },
         shadowElevation = 0.dp,
         modifier = modifier.height(56.dp)
     ) {
@@ -4814,7 +4811,7 @@ fun ClimateControlContent(
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.glassSurface,
                 contentColor = MaterialTheme.colorScheme.onSurface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                border = glassCardBorder(),
                 shadowElevation = 0.dp
             ) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -4851,7 +4848,7 @@ fun ClimateControlContent(
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.glassSurface,
                 contentColor = MaterialTheme.colorScheme.onSurface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                border = glassCardBorder(),
                 shadowElevation = 0.dp
             ) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
@@ -5014,7 +5011,7 @@ fun ClimateControlContent(
                     shape = RoundedCornerShape(20.dp),
                     color = MaterialTheme.glassSurface,
                     contentColor = MaterialTheme.colorScheme.onSurface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                    border = glassCardBorder(),
                     shadowElevation = 0.dp
                 ) {
                     Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
