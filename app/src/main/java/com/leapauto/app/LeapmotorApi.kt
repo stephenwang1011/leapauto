@@ -1277,59 +1277,6 @@ class LeapmotorApi(private val session: Session) {
         return http(controlUrl, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
     }
 
-    /** 查询车辆当前已设置的充电计划（cmdId=190）。 */
-    fun getChargeSchedule(): JSONObject {
-        requireVin()
-        val route = ensureRoute()
-        val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
-        val url = "$host/carownerservice/v3/api/appremotectl/getappointment"
-        val params = LinkedHashMap<String, String>()
-        params["carvin"] = session.selectedVin
-        params["vin"] = session.selectedVin
-        params["cmdId"] = "190"
-        return try {
-            http(url, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
-        } catch (e: Exception) {
-            JSONObject().put("error", e.message ?: e.toString())
-        }
-    }
-
-    /** 查询车辆当前已设置的电池预热预约（cmdId=161）。 */
-    fun getPtcHeatingSchedule(): JSONObject {
-        requireVin()
-        val route = ensureRoute()
-        val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
-        val url = "$host/carownerservice/v3/api/appremotectl/getappointment"
-        val params = LinkedHashMap<String, String>()
-        params["carvin"] = session.selectedVin
-        params["vin"] = session.selectedVin
-        params["cmdId"] = "161"
-        return try {
-            http(url, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
-        } catch (e: Exception) {
-            JSONObject().put("error", e.message ?: e.toString())
-        }
-    }
-
-    /** 查询车辆定时日程列表（/schedule/list），必需包含 type (Integer, 如 1=充电日程)。 */
-    fun queryScheduleList(type: Int = 1): JSONObject {
-        requireVin()
-        val route = ensureRoute()
-        val model = session.selectedCarType.ifBlank { "C16" }
-        val url = "${route.appRegion}/carownerservice/v3/api/schedule/list"
-        val params = mapOf(
-            "carvin" to session.selectedVin,
-            "vin" to session.selectedVin,
-            "model" to model,
-            "type" to type.toString()
-        )
-        return try {
-            gatewayFetch(url, method = "POST", params = params, query = params, formBody = params)
-        } catch (e: Exception) {
-            JSONObject().put("error", e.message ?: e.toString())
-        }
-    }
-
     // ---------------------------------------------------------------- 内部
 
     private fun gatewayFetch(
