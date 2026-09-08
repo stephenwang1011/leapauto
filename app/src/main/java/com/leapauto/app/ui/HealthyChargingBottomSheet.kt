@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -353,82 +354,71 @@ fun HealthyChargingBottomSheet(
             val isCharging = status?.chargeState == 1
 
             if (isGunConnected) {
-                    if (isCharging) {
-                        // 充电过程中：只要停止充电按钮，不显示解锁拔枪，按钮占满整行
-                        Button(
-                            onClick = {
-                                onControl("stopCharging")
+                val outlineBtnBg = if (isDark) Color(0xFF222226) else Color.White
+                val outlineBtnBorder = if (isDark) Color(0xFF48484C) else Color(0xFF8E8E93)
+                val outlineBtnText = if (isDark) Color(0xFFEDEDED) else Color(0xFF222222)
+                val solidBtnBg = if (isDark) Color(0xFF38383A) else Color(0xFF2B2B2B)
+
+                val mainActionText = if (isCharging) "结束充电" else "开始充电"
+                val mainActionCmd = if (isCharging) "stopCharging" else "startCharging"
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 左侧线框按钮：解锁充电枪
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = outlineBtnBg,
+                        border = BorderStroke(0.8.dp, outlineBtnBorder),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable {
+                                onControl("unlockCharger")
                                 onDismissRequest()
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isDark) Color(0xFF3E1E22) else Color(0xFFFFECEB),
-                                contentColor = Color(0xFFFF3B30)
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(44.dp)
+                            }
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize()
                         ) {
                             Text(
-                                text = "停止充电",
+                                text = "解锁充电枪",
                                 fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFFF3B30)
+                                fontWeight = FontWeight.Normal,
+                                color = outlineBtnText
                             )
                         }
-                    } else {
-                        // 插枪未充电状态：展现“开始充电”与“解锁拔枪”
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Button(
-                                onClick = {
-                                    onControl("startCharging")
-                                    onDismissRequest()
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.statusGood,
-                                    contentColor = Color.White
-                                ),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp)
-                            ) {
-                                Text(
-                                    text = "开始充电",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
+                    }
 
-                            // 辅助按键：解锁拔枪（cmdid=192）
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = cardBgColor,
-                                border = BorderStroke(0.6.dp, cardBorderColor),
-                                modifier = Modifier
-                                    .height(44.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable {
-                                        onControl("unlockCharger")
-                                        onDismissRequest()
-                                    }
-                            ) {
-                            Box(
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "解锁拔枪",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
+                    // 右侧实心深色按钮：结束充电 (充电中) / 开始充电 (未充电)
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = solidBtnBg,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable {
+                                onControl(mainActionCmd)
+                                onDismissRequest()
                             }
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Text(
+                                text = mainActionText,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Normal,
+                                color = Color.White
+                            )
                         }
                     }
                 }
@@ -480,24 +470,24 @@ fun HealthyChargingBottomSheet(
                     // 充电上限滑块与最佳限值90%标记
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
                             text = "充电上限${selectedSoc.roundToInt()}%",
-                            style = MaterialTheme.typography.bodyLarge,
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
 
-                        // 滑块本体（平滑纯净无粗糙白点）
+                        // 滑块本体（完全对照截图：浅薄荷绿微轨 + 内部微型白色刻度柱 + 20dp 白色立体旋钮）
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = "50%",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 13.sp,
+                                color = if (isDark) Color(0xFF8E8E93) else Color(0xFF6E6E73),
                                 modifier = Modifier.padding(end = 8.dp)
                             )
                             Slider(
@@ -517,47 +507,79 @@ fun HealthyChargingBottomSheet(
                                 },
                                 valueRange = 50f..100f,
                                 steps = 0,
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Color.White,
-                                    activeTrackColor = MaterialTheme.statusGood,
-                                    inactiveTrackColor = if (isDark) Color(0xFF2C2C30) else Color(0xFFEBECEF)
-                                ),
                                 thumb = {
                                     Surface(
                                         shape = CircleShape,
                                         color = Color.White,
-                                        shadowElevation = 2.dp,
-                                        border = BorderStroke(1.dp, if (isDark) Color(0xFF55555A) else Color(0xFFD0D0D6)),
-                                        modifier = Modifier.size(12.dp)
+                                        shadowElevation = 3.dp,
+                                        border = BorderStroke(0.6.dp, Color(0xFFD8D8DC)),
+                                        modifier = Modifier.size(20.dp)
                                     ) {}
                                 },
                                 track = { sliderState ->
-                                    SliderDefaults.Track(
-                                        sliderState = sliderState,
-                                        modifier = Modifier.height(4.dp),
-                                        colors = SliderDefaults.colors(
-                                            activeTrackColor = MaterialTheme.statusGood,
-                                            inactiveTrackColor = if (isDark) Color(0xFF2C2C30) else Color(0xFFEBECEF)
-                                        ),
-                                        drawStopIndicator = null
-                                    )
+                                    val activeRatio = ((sliderState.value - 50f) / 50f).coerceIn(0f, 1f)
+                                    val activeTrackColor = if (isDark) Color(0xFF234B32) else Color(0xFFD0E8D6)
+                                    val inactiveTrackColor = if (isDark) Color(0xFF2C2C30) else Color(0xFFECECF0)
+                                    val tickColor = Color.White
+
+                                    Canvas(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(7.dp)
+                                    ) {
+                                        val w = size.width
+                                        val h = size.height
+                                        val r = h / 2f
+                                        val activeW = w * activeRatio
+
+                                        // 底层全宽浅灰轨道
+                                        drawRoundRect(
+                                            color = inactiveTrackColor,
+                                            size = Size(w, h),
+                                            cornerRadius = CornerRadius(r, r)
+                                        )
+
+                                        // 活跃浅薄荷绿轨道
+                                        if (activeW > 0f) {
+                                            drawRoundRect(
+                                                color = activeTrackColor,
+                                                size = Size(activeW, h),
+                                                cornerRadius = CornerRadius(r, r)
+                                            )
+                                        }
+
+                                        // 内部微型白色垂直刻度柱（60%, 70%, 80%, 90%）
+                                        val stepRatios = listOf(0.20f, 0.40f, 0.60f, 0.80f)
+                                        val tickW = 2.dp.toPx()
+                                        val tickH = 3.5.dp.toPx()
+                                        val tickY = (h - tickH) / 2f
+                                        stepRatios.forEach { ratio ->
+                                            val tickX = w * ratio - tickW / 2f
+                                            drawRoundRect(
+                                                color = tickColor,
+                                                topLeft = Offset(tickX, tickY),
+                                                size = Size(tickW, tickH),
+                                                cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
+                                            )
+                                        }
+                                    }
                                 },
                                 modifier = Modifier.weight(1f)
                             )
                             Text(
                                 text = "100%",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 13.sp,
+                                color = if (isDark) Color(0xFF8E8E93) else Color(0xFF6E6E73),
                                 modifier = Modifier.padding(start = 8.dp)
                             )
                         }
 
-                        // 90% 最佳限值提示标记（上移且箭头清晰明显）
+                        // 90% 最佳限值提示标记（紧贴轨道正下方，箭头清晰突出）
                         BoxWithConstraints(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 38.dp)
-                                .offset(y = (-8).dp)
+                                .offset(y = (-6).dp)
                         ) {
                             val xPos = maxWidth * 0.80f
                             Column(
@@ -567,14 +589,14 @@ fun HealthyChargingBottomSheet(
                             ) {
                                 Text(
                                     text = "▲",
-                                    fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.80f)
+                                    fontSize = 8.sp,
+                                    color = Color(0xFFA0A0A5)
                                 )
                                 Text(
                                     text = "最佳限值90%",
                                     fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    fontWeight = FontWeight.Normal,
+                                    color = if (isDark) Color(0xFF8E8E93) else Color(0xFF7A7A80)
                                 )
                             }
                         }

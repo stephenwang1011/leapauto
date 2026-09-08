@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 充电中心文案与指标精炼：最低电池温度简化为“电池温度”，未充电功率显示“未充电”，剩余时间精炼为“X时Y分”\n" +
-        "2. 优化插枪控充操作：充电中文案简化为纯文字“停止充电”且独占整行，未充电呈现纯文字“开始充电”与“解锁拔枪”"
+        "1. 充电上限滑块与官方设计像素级对齐：浅薄荷绿微轨内置白色垂直细柱，立体白旋钮比例协调\n" +
+        "2. 最佳限值90%紧凑上移，插枪按键严格对齐解锁充电枪(白线框)+结束充电(深色实心)官方样式"
 }
