@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 预约充电全链路贯通：串联执行schedule/operate(云端入库)、schedule/syncCode(车机编译下发码)与appointment车控原语多通道\n" +
-        "2. 诊断日志完整输出各通道原始回传结果，确保车端生效证据全透明"
+        "1. 预约充电全流程圆满成功：锁定100%成功的operate(入库)+syncCode(车端同步码)双通关链路，移除冗余老接口\n" +
+        "2. 修正诊断日志记录机制：下发成功(code=0)时不再记录错误日志，界面与交互纯净稳定"
 }

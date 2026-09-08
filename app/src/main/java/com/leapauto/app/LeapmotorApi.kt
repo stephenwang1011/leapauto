@@ -1180,45 +1180,8 @@ class LeapmotorApi(private val session: Session) {
             JSONObject().put("error", e.message ?: e.toString())
         }
 
-        // 3. 同时尝试车控预约原语通道 (/appremotectl/appointment) 带 oldAppHeaders + oppwd
-        val stateJson = JSONObject().apply {
-            put("startTime", startTime)
-            put("endTime", endTime)
-            put("start", startTime)
-            put("end", endTime)
-            put("state", stateInt)
-            put("status", stateInt)
-            put("value", if (enabled) "1" else "0")
-            put("repeat", "1,2,3,4,5,6,7")
-            put("model", model)
-            put("continueCharge", continueInt)
-            put("continueUntilFull", continueInt)
-        }
-        val old = session.oldAuth
-        var respAppt: JSONObject? = null
-        if (old != null && opPassword.isNotBlank()) {
-            val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
-            val apptUrl = "$host/carownerservice/v3/api/appremotectl/appointment"
-            val apptParams = LinkedHashMap<String, String>()
-            apptParams["cmdid"] = "361"
-            apptParams["model"] = model
-            apptParams["state"] = stateJson.toString()
-            apptParams["carvin"] = session.selectedVin
-            apptParams["startTime"] = startTime
-            apptParams["endTime"] = endTime
-            apptParams["oppwd"] = Crypto.encryptOperationPassword(opPassword, old.token)
-
-            try {
-                ensureFreshOldToken()
-                respAppt = http(apptUrl, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(apptParams))
-            } catch (e: Exception) {
-                respAppt = JSONObject().put("error", e.message ?: e.toString())
-            }
-        }
-
         return respOperate.apply {
-            put("syncCodeResp", respSync)
-            if (respAppt != null) put("appointmentResp", respAppt)
+            if (respSync != null) put("syncCodeResp", respSync)
         }
     }
 
@@ -1267,39 +1230,8 @@ class LeapmotorApi(private val session: Session) {
             JSONObject().put("error", e.message ?: e.toString())
         }
 
-        val stateJson = JSONObject().apply {
-            put("startTime", startTime)
-            put("start", startTime)
-            put("state", stateInt)
-            put("status", stateInt)
-            put("value", if (enabled) "1" else "0")
-            put("repeat", "1,2,3,4,5,6,7")
-            put("model", model)
-        }
-        val old = session.oldAuth
-        var respAppt: JSONObject? = null
-        if (old != null && opPassword.isNotBlank()) {
-            val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
-            val apptUrl = "$host/carownerservice/v3/api/appremotectl/appointment"
-            val apptParams = LinkedHashMap<String, String>()
-            apptParams["cmdid"] = "161"
-            apptParams["model"] = model
-            apptParams["state"] = stateJson.toString()
-            apptParams["carvin"] = session.selectedVin
-            apptParams["startTime"] = startTime
-            apptParams["oppwd"] = Crypto.encryptOperationPassword(opPassword, old.token)
-
-            try {
-                ensureFreshOldToken()
-                respAppt = http(apptUrl, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(apptParams))
-            } catch (e: Exception) {
-                respAppt = JSONObject().put("error", e.message ?: e.toString())
-            }
-        }
-
         return respOperate.apply {
-            put("syncCodeResp", respSync)
-            if (respAppt != null) put("appointmentResp", respAppt)
+            if (respSync != null) put("syncCodeResp", respSync)
         }
     }
 
