@@ -161,6 +161,7 @@ class MainActivity : ComponentActivity() {
     private var scheduledChargeEnabled by mutableStateOf(false)
     private var scheduledChargeStartTime by mutableStateOf("23:00")
     private var scheduledChargeEndTime by mutableStateOf("07:00")
+    private var scheduledChargeContinueUntilLimit by mutableStateOf(true)
     private var scheduledPreheatEnabled by mutableStateOf(false)
     private var scheduledPreheatStartTime by mutableStateOf("23:00")
     private var signalMapDebugState by mutableStateOf<VehicleSignalMapDebugState>(VehicleSignalMapDebugState.Idle)
@@ -205,6 +206,7 @@ class MainActivity : ComponentActivity() {
         scheduledChargeEnabled = sessionStore.loadScheduledChargeEnabled(session.selectedVin)
         scheduledChargeStartTime = sessionStore.loadScheduledChargeStartTime(session.selectedVin)
         scheduledChargeEndTime = sessionStore.loadScheduledChargeEndTime(session.selectedVin)
+        scheduledChargeContinueUntilLimit = sessionStore.loadScheduledChargeContinueUntilLimit(session.selectedVin)
         scheduledPreheatEnabled = sessionStore.loadScheduledPreheatEnabled(session.selectedVin)
         scheduledPreheatStartTime = sessionStore.loadScheduledPreheatStartTime(session.selectedVin)
         ChargeNotificationManager.ensureChannel(this)
@@ -247,6 +249,7 @@ class MainActivity : ComponentActivity() {
                     scheduledChargeEnabled = scheduledChargeEnabled,
                     scheduledChargeStartTime = scheduledChargeStartTime,
                     scheduledChargeEndTime = scheduledChargeEndTime,
+                    scheduledChargeContinueUntilLimit = scheduledChargeContinueUntilLimit,
                     scheduledPreheatEnabled = scheduledPreheatEnabled,
                     scheduledPreheatStartTime = scheduledPreheatStartTime,
                     onApplyChargingSettings = ::applyHealthyAndScheduledCharging,
@@ -784,17 +787,20 @@ class MainActivity : ComponentActivity() {
         targetSoc: Int,
         scheduledEnabled: Boolean,
         startTime: String,
-        endTime: String
+        endTime: String,
+        continueUntilLimit: Boolean
     ) {
         val vin = session.selectedVin
         sessionStore.saveHealthyChargeLimit(vin, targetSoc)
         sessionStore.saveScheduledChargeEnabled(vin, scheduledEnabled)
         sessionStore.saveScheduledChargeStartTime(vin, startTime)
         sessionStore.saveScheduledChargeEndTime(vin, endTime)
+        sessionStore.saveScheduledChargeContinueUntilLimit(vin, continueUntilLimit)
         healthyChargeLimitSoc = targetSoc
         scheduledChargeEnabled = scheduledEnabled
         scheduledChargeStartTime = startTime
         scheduledChargeEndTime = endTime
+        scheduledChargeContinueUntilLimit = continueUntilLimit
 
         val started = System.currentTimeMillis()
         worker.execute {
@@ -805,11 +811,11 @@ class MainActivity : ComponentActivity() {
                 val msgHealthy = respHealthy.optString("msg", respHealthy.optString("message", ""))
 
                 val savedPin = sessionStore.loadOpPassword().orEmpty()
-                val respSched = api.setScheduledCharging(scheduledEnabled, startTime, endTime, savedPin)
+                val respSched = api.setScheduledCharging(scheduledEnabled, startTime, endTime, savedPin, continueUntilLimit)
                 val codeSched = respSched.optInt("code", respSched.optInt("result", -1))
                 val msgSched = respSched.optString("msg", respSched.optString("message", ""))
                 val currentAppointment = runCatching { api.getAppointment() }.getOrNull()
-                val currentScheduleList = runCatching { api.queryScheduleList() }.getOrNull()
+                val currentScheduleList = runCatching { api.queryScheduleList(1) }.getOrNull()
 
                 val elapsed = System.currentTimeMillis() - started
                 ErrorLogs.repository.record(
@@ -825,11 +831,11 @@ class MainActivity : ComponentActivity() {
                             appendLine("下发设置: 健康充电 + 谷电预约充电")
                             appendLine("VIN: $vin")
                             appendLine("健康充电: enabled=$healthyEnabled, targetSoc=$targetSoc (code=$codeHealthy, msg=$msgHealthy)")
-                            appendLine("预约充电: enabled=$scheduledEnabled, $startTime ~ $endTime (code=$codeSched, msg=$msgSched)")
+                            appendLine("预约充电: enabled=$scheduledEnabled, $startTime ~ $endTime, 未达上限继续充电=$continueUntilLimit (code=$codeSched, msg=$msgSched)")
                             appendLine("健康充电完整响应: $respHealthy")
                             appendLine("预约充电完整响应: $respSched")
                             appendLine("已有预约 (getappointment): ${currentAppointment ?: "无"}")
-                            appendLine("日程列表 (schedule/list): ${currentScheduleList ?: "无"}")
+                            appendLine("日程列表 (schedule/list?type=1): ${currentScheduleList ?: "无"}")
                         }
                     )
                 )

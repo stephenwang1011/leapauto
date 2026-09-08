@@ -65,7 +65,8 @@ fun HealthyChargingBottomSheet(
     initialScheduledChargeEnabled: Boolean = false,
     initialScheduledStartTime: String = "23:00",
     initialScheduledEndTime: String = "07:00",
-    onApply: (healthyEnabled: Boolean, targetSoc: Int, scheduledEnabled: Boolean, startTime: String, endTime: String) -> Unit
+    initialContinueUntilLimit: Boolean = true,
+    onApply: (healthyEnabled: Boolean, targetSoc: Int, scheduledEnabled: Boolean, startTime: String, endTime: String, continueUntilLimit: Boolean) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedSoc by remember(currentLimitSoc) { mutableFloatStateOf(currentLimitSoc.toFloat()) }
@@ -74,6 +75,7 @@ fun HealthyChargingBottomSheet(
     var scheduledChargeEnabled by remember(initialScheduledChargeEnabled) { mutableStateOf(initialScheduledChargeEnabled) }
     var scheduledStartTime by remember(initialScheduledStartTime) { mutableStateOf(initialScheduledStartTime) }
     var scheduledEndTime by remember(initialScheduledEndTime) { mutableStateOf(initialScheduledEndTime) }
+    var continueUntilLimit by remember(initialContinueUntilLimit) { mutableStateOf(initialContinueUntilLimit) }
     var showStartTimeDialog by remember { mutableStateOf(false) }
     var showEndTimeDialog by remember { mutableStateOf(false) }
 
@@ -368,6 +370,50 @@ fun HealthyChargingBottomSheet(
                                 modifier = Modifier.weight(1f)
                             )
                         }
+
+                        // 未达上限继续充电开关
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.glassSurface,
+                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = "未达上限继续充电",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "到达停止时间若未达充电上限，将继续充电直至达到目标电量",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 10.sp,
+                                        lineHeight = 14.sp
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Switch(
+                                    checked = continueUntilLimit,
+                                    onCheckedChange = { continueUntilLimit = it },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = MaterialTheme.statusGood
+                                    )
+                                )
+                            }
+                        }
+
                         Text(
                             text = "💡 默认匹配全国 23:00 ~ 次日 07:00 谷电低价时段，插枪后车辆保持待机，到点自动开充。",
                             style = MaterialTheme.typography.labelSmall,
@@ -412,7 +458,8 @@ fun HealthyChargingBottomSheet(
                         selectedSoc.roundToInt(),
                         scheduledChargeEnabled,
                         scheduledStartTime,
-                        scheduledEndTime
+                        scheduledEndTime,
+                        continueUntilLimit
                     )
                 },
                 shape = RoundedCornerShape(14.dp),

@@ -185,6 +185,17 @@ class SessionStore(context: Context) {
         prefs.edit().putString("scheduled_charge_end_time_$vin", time).apply()
     }
 
+    /** 预约充电到达停止时间未达上限时，是否继续充电（默认开启）。 */
+    fun loadScheduledChargeContinueUntilLimit(vin: String): Boolean {
+        if (vin.isBlank()) return true
+        return prefs.getBoolean("scheduled_charge_continue_until_limit_$vin", true)
+    }
+
+    fun saveScheduledChargeContinueUntilLimit(vin: String, enabled: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_charge_continue_until_limit_$vin", enabled).apply()
+    }
+
     // 预约电池预热设置（默认 23:00 开始）
     fun loadScheduledPreheatEnabled(vin: String): Boolean {
         if (vin.isBlank()) return false

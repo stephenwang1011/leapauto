@@ -275,9 +275,10 @@ fun LeapAutoScreen(
     scheduledChargeEnabled: Boolean = false,
     scheduledChargeStartTime: String = "23:00",
     scheduledChargeEndTime: String = "07:00",
+    scheduledChargeContinueUntilLimit: Boolean = true,
     scheduledPreheatEnabled: Boolean = false,
     scheduledPreheatStartTime: String = "23:00",
-    onApplyChargingSettings: (Boolean, Int, Boolean, String, String) -> Unit = { _, _, _, _, _ -> },
+    onApplyChargingSettings: (Boolean, Int, Boolean, String, String, Boolean) -> Unit = { _, _, _, _, _, _ -> },
     onApplyScheduledPreheat: (Boolean, String) -> Unit = { _, _ -> },
     networkDebugEnabled: Boolean = false,
     vehicleImageVersion: Int = 0,
@@ -492,8 +493,9 @@ fun LeapAutoScreen(
             initialScheduledChargeEnabled = scheduledChargeEnabled,
             initialScheduledStartTime = scheduledChargeStartTime,
             initialScheduledEndTime = scheduledChargeEndTime,
-            onApply = { healthyEnabled, targetSoc, schedEnabled, startTime, endTime ->
-                onApplyChargingSettings(healthyEnabled, targetSoc, schedEnabled, startTime, endTime)
+            initialContinueUntilLimit = scheduledChargeContinueUntilLimit,
+            onApply = { healthyEnabled, targetSoc, schedEnabled, startTime, endTime, continueUntilLimit ->
+                onApplyChargingSettings(healthyEnabled, targetSoc, schedEnabled, startTime, endTime, continueUntilLimit)
                 showHealthyChargingSheet = false
             }
         )

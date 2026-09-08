@@ -1135,12 +1135,14 @@ class LeapmotorApi(private val session: Session) {
         enabled: Boolean,
         startTime: String,
         endTime: String,
-        opPassword: String = ""
+        opPassword: String = "",
+        continueUntilLimit: Boolean = true
     ): JSONObject {
         requireVin()
         val route = ensureRoute()
         val model = session.selectedCarType.ifBlank { "C16" }
         val stateInt = if (enabled) 1 else 0
+        val continueInt = if (continueUntilLimit) 1 else 0
         val stateJson = JSONObject().apply {
             put("startTime", startTime)
             put("endTime", endTime)
@@ -1151,6 +1153,8 @@ class LeapmotorApi(private val session: Session) {
             put("value", if (enabled) "1" else "0")
             put("repeat", "1,2,3,4,5,6,7")
             put("model", model)
+            put("continueCharge", continueInt)
+            put("continueUntilFull", continueInt)
         }
 
         // 1. 优先调用官方独立定时任务接口 (/schedule/operate)，携带车端必需的 model、type(Integer 1) 参数
@@ -1165,7 +1169,9 @@ class LeapmotorApi(private val session: Session) {
             "startTime" to startTime,
             "endTime" to endTime,
             "repeat" to "1,2,3,4,5,6,7",
-            "cycle" to "1,2,3,4,5,6,7"
+            "cycle" to "1,2,3,4,5,6,7",
+            "continueCharge" to continueInt.toString(),
+            "continueUntilFull" to continueInt.toString()
         )
         try {
             val resp = gatewayFetch(scheduleUrl, method = "POST", params = schedParams, query = schedParams, formBody = schedParams)
