@@ -817,28 +817,32 @@ class MainActivity : ComponentActivity() {
                 val isHealthySuccess = codeHealthy == 0 || codeHealthy == 200
                 val isSchedSuccess = codeSched == 0 || codeSched == 200
 
-                if (!isHealthySuccess || !isSchedSuccess) {
-                    val elapsed = System.currentTimeMillis() - started
-                    ErrorLogs.repository.record(
-                        ErrorLogEntry(
-                            timestampMs = System.currentTimeMillis(),
-                            category = ErrorLogCategory.CONTROL_FAILURE,
-                            stage = "charging_settings_control",
-                            httpStatus = if (codeHealthy != -1) codeHealthy else null,
-                            durationMs = elapsed,
-                            retryCount = 0,
-                            appVersion = BuildConfig.VERSION_NAME,
-                            message = buildString {
-                                appendLine("下发充电设置部分未完成:")
-                                appendLine("VIN: $vin")
-                                appendLine("健康充电: enabled=$healthyEnabled, targetSoc=$targetSoc (code=$codeHealthy, msg=$msgHealthy)")
-                                appendLine("预约充电: enabled=$scheduledEnabled, $startTime ~ $endTime, 未达上限继续充电=$continueUntilLimit (code=$codeSched, msg=$msgSched)")
-                                appendLine("健康充电响应: $respHealthy")
-                                appendLine("预约充电响应: $respSched")
+                val elapsed = System.currentTimeMillis() - started
+                ErrorLogs.repository.record(
+                    ErrorLogEntry(
+                        timestampMs = System.currentTimeMillis(),
+                        category = if (isHealthySuccess && isSchedSuccess) ErrorLogCategory.API_FAILURE else ErrorLogCategory.CONTROL_FAILURE,
+                        stage = "charging_settings_control",
+                        httpStatus = if (codeHealthy != -1) codeHealthy else null,
+                        durationMs = elapsed,
+                        retryCount = 0,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        message = buildString {
+                            appendLine("下发设置: 健康充电 + 谷电预约充电")
+                            appendLine("VIN: $vin")
+                            appendLine("健康充电: enabled=$healthyEnabled, targetSoc=$targetSoc (code=$codeHealthy, msg=$msgHealthy)")
+                            appendLine("预约充电: enabled=$scheduledEnabled, $startTime ~ $endTime, 未达上限继续充电=$continueUntilLimit (code=$codeSched, msg=$msgSched)")
+                            appendLine("健康充电完整响应: $respHealthy")
+                            appendLine("预约充电operate响应: $respSched")
+                            if (respSched.has("syncCodeResp")) {
+                                appendLine("车端syncCode响应: ${respSched.opt("syncCodeResp")}")
                             }
-                        )
+                            if (respSched.has("appointmentResp")) {
+                                appendLine("车控appointment响应: ${respSched.opt("appointmentResp")}")
+                            }
+                        }
                     )
-                }
+                )
 
                 mainHandler.post {
                     if (isHealthySuccess && isSchedSuccess) {

@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 优先采用零跑C16实车验证成功的独立日程接口(schedule/operate)：免操作密码直接下发谷电预约充电\n" +
-        "2. 深度闭环预约充电与预约电池预热，下发结果与本地设置100%保持同步"
+        "1. 预约充电全链路贯通：串联执行schedule/operate(云端入库)、schedule/syncCode(车机编译下发码)与appointment车控原语多通道\n" +
+        "2. 诊断日志完整输出各通道原始回传结果，确保车端生效证据全透明"
 }
