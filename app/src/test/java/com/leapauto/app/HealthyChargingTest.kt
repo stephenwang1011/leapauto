@@ -38,11 +38,12 @@ class HealthyChargingTest {
 
         val chargeEnableInt = if (enabled) 1 else 0
         val rechargeInt = if (continueUntilLimit) 1 else 0
+        val vehicleCycles = ChargePlanCyclesHelper.toVehicleMask(cycles)
         val stateJson = JSONObject().apply {
             put("chargeEnable", chargeEnableInt)
             put("chargesoc", targetSoc.coerceIn(50, 100))
             put("circulation", if (enabled) circulation else 0)
-            put("cycles", if (enabled && circulation == 1) cycles.ifBlank { "1,2,3,4,5,6,7" } else "")
+            put("cycles", if (enabled && circulation == 1) vehicleCycles else "")
             put("starttime", startTime)
             put("endtime", endTime)
             put("recharge", rechargeInt)
@@ -51,10 +52,28 @@ class HealthyChargingTest {
         assertEquals(1, stateJson.getInt("chargeEnable"))
         assertEquals(80, stateJson.getInt("chargesoc"))
         assertEquals(1, stateJson.getInt("circulation"))
-        assertEquals("1,2,3,4,5,6,7", stateJson.getString("cycles"))
+        assertEquals("1,1,1,1,1,1,1", stateJson.getString("cycles"))
         assertEquals("23:00", stateJson.getString("starttime"))
         assertEquals("07:00", stateJson.getString("endtime"))
         assertEquals(1, stateJson.getInt("recharge"))
+    }
+
+    @Test
+    fun chargePlanCyclesHelperCorrectlyConvertsWorkdaysAndWeekends() {
+        // 工作日
+        assertEquals("1,1,1,1,1,0,0", ChargePlanCyclesHelper.toVehicleMask("1,2,3,4,5"))
+        assertEquals(setOf(1, 2, 3, 4, 5), ChargePlanCyclesHelper.parseToDaySet("1,1,1,1,1,0,0"))
+        assertEquals("工作日 (周一至周五)", ChargePlanCyclesHelper.formatSummary("1,1,1,1,1,0,0"))
+
+        // 周末
+        assertEquals("0,0,0,0,0,1,1", ChargePlanCyclesHelper.toVehicleMask("6,7"))
+        assertEquals(setOf(6, 7), ChargePlanCyclesHelper.parseToDaySet("0,0,0,0,0,1,1"))
+        assertEquals("周末 (周六、周日)", ChargePlanCyclesHelper.formatSummary("0,0,0,0,0,1,1"))
+
+        // 自定义（周一、周三、周五）
+        assertEquals("1,0,1,0,1,0,0", ChargePlanCyclesHelper.toVehicleMask(setOf(1, 3, 5)))
+        assertEquals(setOf(1, 3, 5), ChargePlanCyclesHelper.parseToDaySet("1,0,1,0,1,0,0"))
+        assertEquals("周一、周三、周五", ChargePlanCyclesHelper.formatSummary(setOf(1, 3, 5)))
     }
 
     @Test

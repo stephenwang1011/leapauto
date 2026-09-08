@@ -82,7 +82,14 @@ data class VehicleStatus(
     val passengerSeatHeating: Int? = null,
     val passengerSeatVentilation: Int? = null,
     val steeringWheelHeating: Boolean? = null,
-    val acSettingRight: String? = null
+    val acSettingRight: String? = null,
+    val chargeScheduleEnabled: Boolean? = null,
+    val chargeScheduleStart: String? = null,
+    val chargeScheduleEnd: String? = null,
+    val chargeScheduleCycles: String? = null,
+    val chargeScheduleCirculation: Int? = null,
+    val chargeScheduleRecharge: Boolean? = null,
+    val chargeScheduleSocLimit: Int? = null
 )
 
 data class TireStatus(
@@ -800,20 +807,21 @@ class MainActivity : ComponentActivity() {
         cycles: String = "1,2,3,4,5,6,7"
     ) {
         val vin = session.selectedVin
+        val vehicleCycles = ChargePlanCyclesHelper.toVehicleMask(cycles)
         sessionStore.saveHealthyChargeLimit(vin, targetSoc)
         sessionStore.saveScheduledChargeEnabled(vin, scheduledEnabled)
         sessionStore.saveScheduledChargeStartTime(vin, startTime)
         sessionStore.saveScheduledChargeEndTime(vin, endTime)
         sessionStore.saveScheduledChargeContinueUntilLimit(vin, continueUntilLimit)
         sessionStore.saveScheduledChargeCirculation(vin, circulation)
-        sessionStore.saveScheduledChargeCycles(vin, cycles)
+        sessionStore.saveScheduledChargeCycles(vin, vehicleCycles)
         healthyChargeLimitSoc = targetSoc
         scheduledChargeEnabled = scheduledEnabled
         scheduledChargeStartTime = startTime
         scheduledChargeEndTime = endTime
         scheduledChargeContinueUntilLimit = continueUntilLimit
         scheduledChargeCirculation = circulation
-        scheduledChargeCycles = cycles
+        scheduledChargeCycles = vehicleCycles
 
         val started = System.currentTimeMillis()
         worker.execute {
@@ -832,7 +840,7 @@ class MainActivity : ComponentActivity() {
                     opPassword = savedPin,
                     continueUntilLimit = continueUntilLimit,
                     circulation = circulation,
-                    cycles = cycles
+                    cycles = vehicleCycles
                 )
                 val codeSched = respSched.optInt("code", respSched.optInt("result", -1))
                 val msgSched = respSched.optString("msg", respSched.optString("message", ""))
@@ -1245,6 +1253,37 @@ class MainActivity : ComponentActivity() {
                     climateOptimisticGuard = ClimateTelemetryMergePolicy.consume(guard, decision)
                     if (decision == ClimateTelemetryMergeDecision.APPLY) {
                         confirmClimateTelemetryIfMatched(refreshClimateRevision, parsed)
+                    }
+
+                    // 车端若返回了真实充电计划 (config.3)，同步反显更新
+                    parsed.chargeScheduleEnabled?.let { schedEnabled ->
+                        scheduledChargeEnabled = schedEnabled
+                        sessionStore.saveScheduledChargeEnabled(session.selectedVin, schedEnabled)
+                    }
+                    parsed.chargeScheduleStart?.let { start ->
+                        scheduledChargeStartTime = start
+                        sessionStore.saveScheduledChargeStartTime(session.selectedVin, start)
+                    }
+                    parsed.chargeScheduleEnd?.let { end ->
+                        scheduledChargeEndTime = end
+                        sessionStore.saveScheduledChargeEndTime(session.selectedVin, end)
+                    }
+                    parsed.chargeScheduleCycles?.let { cyc ->
+                        val vehicleMask = ChargePlanCyclesHelper.toVehicleMask(cyc)
+                        scheduledChargeCycles = vehicleMask
+                        sessionStore.saveScheduledChargeCycles(session.selectedVin, vehicleMask)
+                    }
+                    parsed.chargeScheduleCirculation?.let { circ ->
+                        scheduledChargeCirculation = circ
+                        sessionStore.saveScheduledChargeCirculation(session.selectedVin, circ)
+                    }
+                    parsed.chargeScheduleRecharge?.let { rech ->
+                        scheduledChargeContinueUntilLimit = rech
+                        sessionStore.saveScheduledChargeContinueUntilLimit(session.selectedVin, rech)
+                    }
+                    parsed.chargeScheduleSocLimit?.let { socLimit ->
+                        healthyChargeLimitSoc = socLimit
+                        sessionStore.saveHealthyChargeLimit(session.selectedVin, socLimit)
                     }
                     if (!silent) {
                         statusError = ""
@@ -1941,7 +1980,14 @@ class MainActivity : ComponentActivity() {
             driverSeatVentilation = m.opt("driverSeatVentilation")?.toString()?.toIntOrNull(),
             passengerSeatHeating = m.opt("passengerSeatHeating")?.toString()?.toIntOrNull(),
             passengerSeatVentilation = m.opt("passengerSeatVentilation")?.toString()?.toIntOrNull(),
-            steeringWheelHeating = m.optBool("steeringWheelHeating")
+            steeringWheelHeating = m.optBool("steeringWheelHeating"),
+            chargeScheduleEnabled = m.opt("chargeScheduleEnabled")?.let { it.toString() == "1" },
+            chargeScheduleStart = m.optString("chargeScheduleStart").takeIf { it.isNotBlank() },
+            chargeScheduleEnd = m.optString("chargeScheduleEnd").takeIf { it.isNotBlank() },
+            chargeScheduleCycles = m.optString("chargeScheduleCycles").takeIf { it.isNotBlank() },
+            chargeScheduleCirculation = m.opt("chargeScheduleCirculation")?.toString()?.toIntOrNull(),
+            chargeScheduleRecharge = m.opt("chargeScheduleRecharge")?.let { it.toString() == "1" },
+            chargeScheduleSocLimit = m.opt("chargesocSetting")?.toString()?.toIntOrNull()
         )
     }
 

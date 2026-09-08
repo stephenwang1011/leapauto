@@ -207,15 +207,15 @@ class SessionStore(context: Context) {
         prefs.edit().putInt("scheduled_charge_circulation_$vin", circulation).apply()
     }
 
-    /** 预约充电重复周期：星期数字逗号分隔，如 "1,2,3,4,5,6,7"（默认全周）。 */
+    /** 预约充电重复周期：车端原生 7 位 0/1 掩码，如 "1,1,1,1,1,1,1"（默认全周）。 */
     fun loadScheduledChargeCycles(vin: String): String {
-        if (vin.isBlank()) return "1,2,3,4,5,6,7"
-        return prefs.getString("scheduled_charge_cycles_$vin", "1,2,3,4,5,6,7") ?: "1,2,3,4,5,6,7"
+        if (vin.isBlank()) return "1,1,1,1,1,1,1"
+        return prefs.getString("scheduled_charge_cycles_$vin", "1,1,1,1,1,1,1") ?: "1,1,1,1,1,1,1"
     }
 
     fun saveScheduledChargeCycles(vin: String, cycles: String) {
         if (vin.isBlank()) return
-        prefs.edit().putString("scheduled_charge_cycles_$vin", cycles).apply()
+        prefs.edit().putString("scheduled_charge_cycles_$vin", ChargePlanCyclesHelper.toVehicleMask(cycles)).apply()
     }
 
     // 预约电池预热设置（默认 23:00 开始）

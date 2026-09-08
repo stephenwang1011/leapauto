@@ -47,6 +47,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.leapauto.app.ChargePlanCyclesHelper
 import com.leapauto.app.R
 import com.leapauto.app.VehicleHomeStatus
 import com.leapauto.app.VehicleStatus
@@ -89,7 +90,9 @@ fun HealthyChargingBottomSheet(
     var scheduledEndTime by remember(initialScheduledEndTime) { mutableStateOf(initialScheduledEndTime) }
     var continueUntilLimit by remember(initialContinueUntilLimit) { mutableStateOf(initialContinueUntilLimit) }
     var scheduledCirculation by remember(initialScheduledCirculation) { mutableIntStateOf(initialScheduledCirculation) }
-    var scheduledCycles by remember(initialScheduledCycles) { mutableStateOf(initialScheduledCycles.ifBlank { "1,2,3,4,5,6,7" }) }
+    var selectedDays by remember(initialScheduledCycles) {
+        mutableStateOf(ChargePlanCyclesHelper.parseToDaySet(initialScheduledCycles))
+    }
     var showStartTimeDialog by remember { mutableStateOf(false) }
     var showEndTimeDialog by remember { mutableStateOf(false) }
 
@@ -381,19 +384,12 @@ fun HealthyChargingBottomSheet(
                             )
                         }
 
-                        // 2) 重复周期选择 (cycles: 星期1~7逗号分隔) - 仅在周期重复时呈现
+                        // 2) 重复周期选择 (cycles: 原生7位掩码规范) - 仅在周期重复时呈现
                         if (scheduledCirculation == 1) {
                             Column(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                val currentDays = remember(scheduledCycles) {
-                                    scheduledCycles.split(",")
-                                        .mapNotNull { it.trim().toIntOrNull() }
-                                        .filter { it in 1..7 }
-                                        .toSet()
-                                }
-
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -405,7 +401,7 @@ fun HealthyChargingBottomSheet(
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
-                                        text = formatCyclesSummary(scheduledCycles),
+                                        text = ChargePlanCyclesHelper.formatSummary(selectedDays),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.statusGood,
                                         fontWeight = FontWeight.Bold
@@ -419,20 +415,20 @@ fun HealthyChargingBottomSheet(
                                 ) {
                                     CyclePresetChip(
                                         label = "每天",
-                                        selected = currentDays == setOf(1, 2, 3, 4, 5, 6, 7),
-                                        onClick = { scheduledCycles = "1,2,3,4,5,6,7" },
+                                        selected = selectedDays == (1..7).toSet(),
+                                        onClick = { selectedDays = (1..7).toSet() },
                                         modifier = Modifier.weight(1f)
                                     )
                                     CyclePresetChip(
                                         label = "工作日",
-                                        selected = currentDays == setOf(1, 2, 3, 4, 5),
-                                        onClick = { scheduledCycles = "1,2,3,4,5" },
+                                        selected = selectedDays == setOf(1, 2, 3, 4, 5),
+                                        onClick = { selectedDays = setOf(1, 2, 3, 4, 5) },
                                         modifier = Modifier.weight(1f)
                                     )
                                     CyclePresetChip(
                                         label = "周末",
-                                        selected = currentDays == setOf(6, 7),
-                                        onClick = { scheduledCycles = "6,7" },
+                                        selected = selectedDays == setOf(6, 7),
+                                        onClick = { selectedDays = setOf(6, 7) },
                                         modifier = Modifier.weight(1f)
                                     )
                                 }
@@ -455,14 +451,13 @@ fun HealthyChargingBottomSheet(
                                         WeekDayChip(
                                             dayName = dayName,
                                             dayIndex = dayIdx,
-                                            selected = currentDays.contains(dayIdx),
+                                            selected = selectedDays.contains(dayIdx),
                                             onToggle = { idx ->
-                                                val updated = if (currentDays.contains(idx)) {
-                                                    if (currentDays.size > 1) currentDays - idx else currentDays
+                                                selectedDays = if (selectedDays.contains(idx)) {
+                                                    if (selectedDays.size > 1) selectedDays - idx else selectedDays
                                                 } else {
-                                                    currentDays + idx
+                                                    selectedDays + idx
                                                 }
-                                                scheduledCycles = updated.sorted().joinToString(",")
                                             },
                                             modifier = Modifier.weight(1f)
                                         )
@@ -602,6 +597,7 @@ fun HealthyChargingBottomSheet(
                         )
                     }
 
+                    val vehicleCyclesMask = ChargePlanCyclesHelper.toVehicleMask(selectedDays)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -612,9 +608,10 @@ fun HealthyChargingBottomSheet(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "• cycles: \"${if (scheduledChargeEnabled && scheduledCirculation == 1) scheduledCycles else ""}\"",
+                            text = "• cycles: \"${if (scheduledChargeEnabled && scheduledCirculation == 1) vehicleCyclesMask else ""}\"",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.statusGood,
+                            fontWeight = FontWeight.Bold
                         )
                     }
 
@@ -653,6 +650,7 @@ fun HealthyChargingBottomSheet(
             }
 
             // 8. 保存并下发按钮
+            val targetVehicleCycles = ChargePlanCyclesHelper.toVehicleMask(selectedDays)
             Button(
                 onClick = {
                     onApply(
@@ -663,7 +661,7 @@ fun HealthyChargingBottomSheet(
                         scheduledEndTime,
                         continueUntilLimit,
                         scheduledCirculation,
-                        scheduledCycles
+                        targetVehicleCycles
                     )
                 },
                 shape = RoundedCornerShape(14.dp),
@@ -779,20 +777,6 @@ private fun TimeSelectionBox(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.statusGood
             )
-        }
-    }
-}
-
-private fun formatCyclesSummary(cycles: String): String {
-    val days = cycles.split(",").mapNotNull { it.trim().toIntOrNull() }.filter { it in 1..7 }.toSet()
-    return when {
-        days == setOf(1, 2, 3, 4, 5, 6, 7) -> "每天"
-        days == setOf(1, 2, 3, 4, 5) -> "工作日 (周一至周五)"
-        days == setOf(6, 7) -> "周末 (周六、周日)"
-        days.isEmpty() -> "未选择"
-        else -> {
-            val names = mapOf(1 to "一", 2 to "二", 3 to "三", 4 to "四", 5 to "五", 6 to "六", 7 to "日")
-            "周" + days.sorted().mapNotNull { names[it] }.joinToString("、")
         }
     }
 }

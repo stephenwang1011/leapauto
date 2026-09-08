@@ -1049,7 +1049,34 @@ class LeapmotorApi(private val session: Session) {
         if (signalMap.length() == 0) {
             throw ApiException("车况接口未返回 signalMap:\n${raw.toString().take(800)}")
         }
-        return SignalTable.decode(signalMap)
+        val decoded = SignalTable.decode(signalMap)
+        // 合并车端/网关可能下发的 config.3 充电计划
+        val config = raw.optJSONObject("data")?.optJSONObject("config") ?: raw.optJSONObject("config")
+        val chargePlan = config?.optJSONObject("3")
+        if (chargePlan != null) {
+            if (!decoded.has("chargeScheduleEnabled") && chargePlan.has("isEnable")) {
+                decoded.put("chargeScheduleEnabled", chargePlan.optInt("isEnable"))
+            }
+            if (!decoded.has("chargeScheduleStart") && chargePlan.has("beginTime")) {
+                decoded.put("chargeScheduleStart", chargePlan.optString("beginTime"))
+            }
+            if (!decoded.has("chargeScheduleEnd") && chargePlan.has("endTime")) {
+                decoded.put("chargeScheduleEnd", chargePlan.optString("endTime"))
+            }
+            if (!decoded.has("chargeScheduleCycles") && chargePlan.has("cycles")) {
+                decoded.put("chargeScheduleCycles", chargePlan.optString("cycles"))
+            }
+            if (!decoded.has("chargeScheduleCirculation") && chargePlan.has("circulation")) {
+                decoded.put("chargeScheduleCirculation", chargePlan.optInt("circulation"))
+            }
+            if (!decoded.has("chargeScheduleRecharge") && chargePlan.has("recharge")) {
+                decoded.put("chargeScheduleRecharge", chargePlan.optInt("recharge"))
+            }
+            if (!decoded.has("chargesocSetting") && chargePlan.has("percent")) {
+                decoded.put("chargesocSetting", chargePlan.optInt("percent"))
+            }
+        }
+        return decoded
     }
 
     // ---------------------------------------------------------------- 控车
@@ -1161,11 +1188,16 @@ class LeapmotorApi(private val session: Session) {
 
         val chargeEnableInt = if (enabled) 1 else 0
         val rechargeInt = if (continueUntilLimit) 1 else 0
+        val vehicleCyclesMask = if (enabled && circulation == 1) {
+            ChargePlanCyclesHelper.toVehicleMask(cycles)
+        } else {
+            ""
+        }
         val stateJson = JSONObject().apply {
             put("chargeEnable", chargeEnableInt)
             put("chargesoc", targetSoc.coerceIn(50, 100))
             put("circulation", if (enabled) circulation else 0)
-            put("cycles", if (enabled && circulation == 1) cycles.ifBlank { "1,2,3,4,5,6,7" } else "")
+            put("cycles", vehicleCyclesMask)
             put("starttime", startTime)
             put("endtime", endTime)
             put("recharge", rechargeInt)
