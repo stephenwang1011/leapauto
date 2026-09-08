@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 全部弹窗与抽屉去透明化重构：预约充电抽屉、电池预热抽屉、时间选择器及快捷菜单全部升级为100%纯色不透明容器\n" +
-        "2. 彻底杜绝底层界面文字与车模透光穿帮，质感扎实纯正，深浅色模式均保持高对比阅读体验"
+        "1. 修复预约充电cmdid=361重复拼接为361,361导致的类型转换错误：全面清理Query重复参数，纯粹通过FormBody传参\n" +
+        "2. 深度闭环预约充电与预约电池预热参数通道，下发流程进一步精细化"
 }

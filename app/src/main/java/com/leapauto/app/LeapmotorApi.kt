@@ -1174,7 +1174,7 @@ class LeapmotorApi(private val session: Session) {
             "continueUntilFull" to continueInt.toString()
         )
         try {
-            val resp = gatewayFetch(scheduleUrl, method = "POST", params = schedParams, query = schedParams, formBody = schedParams)
+            val resp = gatewayFetch(scheduleUrl, method = "POST", params = schedParams, formBody = schedParams)
             val code = resp.optInt("code", resp.optInt("result", -1))
             if (code == 0 || code == 200) {
                 return resp
@@ -1221,7 +1221,7 @@ class LeapmotorApi(private val session: Session) {
         if (oldToken != null && opPassword.isNotBlank()) {
             params["oppwd"] = Crypto.encryptOperationPassword(opPassword, oldToken)
         }
-        return gatewayFetch(url, method = "POST", params = params, query = params, formBody = params)
+        return gatewayFetch(url, method = "POST", params = params, formBody = params)
     }
 
     /**
@@ -1261,7 +1261,7 @@ class LeapmotorApi(private val session: Session) {
             "cycle" to "1,2,3,4,5,6,7"
         )
         try {
-            val resp = gatewayFetch(scheduleUrl, method = "POST", params = schedParams, query = schedParams, formBody = schedParams)
+            val resp = gatewayFetch(scheduleUrl, method = "POST", params = schedParams, formBody = schedParams)
             val code = resp.optInt("code", resp.optInt("result", -1))
             if (code == 0 || code == 200) {
                 return resp
@@ -1305,7 +1305,7 @@ class LeapmotorApi(private val session: Session) {
         if (oldToken != null && opPassword.isNotBlank()) {
             params["oppwd"] = Crypto.encryptOperationPassword(opPassword, oldToken)
         }
-        return gatewayFetch(url, method = "POST", params = params, query = params, formBody = params)
+        return gatewayFetch(url, method = "POST", params = params, formBody = params)
     }
 
     /** 查询车辆当前已设置的预约任务。 */
@@ -1319,7 +1319,7 @@ class LeapmotorApi(private val session: Session) {
             "vin" to session.selectedVin,
             "model" to model
         )
-        return gatewayFetch(url, method = "POST", params = params, query = params, formBody = params)
+        return gatewayFetch(url, method = "POST", params = params, formBody = params)
     }
 
     /** 查询车辆定时日程列表（/schedule/list），必需包含 type (Integer, 如 1=充电日程)。 */
