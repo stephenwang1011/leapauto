@@ -250,9 +250,13 @@ fun HealthyChargingBottomSheet(
                     )
                 }
 
-                // 最低电池温度 与 充电剩余时间 精致卡片
+                // 最低电池温度、充电功率 与 充电剩余时间 精致卡片
                 val formattedRemainTime = formatChargeRemainTime(status?.chargeRemainTime, status?.chargeState)
                 val minTemp = status?.minBatteryTemp?.trim()?.takeIf { it.isNotBlank() && it != "--" } ?: "-- °C"
+                val chargingPowerText = when {
+                    status?.chargeState == 1 -> status.chargingPower?.takeIf { it.isNotBlank() } ?: "充电中"
+                    else -> "0.0 kW"
+                }
 
                 Surface(
                     shape = RoundedCornerShape(14.dp),
@@ -263,11 +267,11 @@ fun HealthyChargingBottomSheet(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 12.dp, horizontal = 16.dp),
+                            .padding(vertical = 12.dp, horizontal = 12.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 最低电池温度
+                        // 1. 最低电池温度
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -286,7 +290,7 @@ fun HealthyChargingBottomSheet(
                             )
                         }
 
-                        // 分割线
+                        // 分割线 1
                         Box(
                             modifier = Modifier
                                 .height(22.dp)
@@ -294,11 +298,38 @@ fun HealthyChargingBottomSheet(
                                 .background(cardBorderColor)
                         )
 
-                        // 充电剩余时间
+                        // 2. 充电功率
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(3.dp),
                             modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "充电功率",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = chargingPowerText,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (status?.chargeState == 1) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        // 分割线 2
+                        Box(
+                            modifier = Modifier
+                                .height(22.dp)
+                                .width(0.8.dp)
+                                .background(cardBorderColor)
+                        )
+
+                        // 3. 充电剩余时间
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                            modifier = Modifier.weight(1.1f)
                         ) {
                             Text(
                                 text = "充电剩余时间",
@@ -422,6 +453,17 @@ fun HealthyChargingBottomSheet(
                                         border = BorderStroke(1.dp, Color(0xFFE2E2E8)),
                                         modifier = Modifier.size(20.dp)
                                     ) {}
+                                },
+                                track = { sliderState ->
+                                    SliderDefaults.Track(
+                                        sliderState = sliderState,
+                                        modifier = Modifier.height(4.dp),
+                                        colors = SliderDefaults.colors(
+                                            activeTrackColor = MaterialTheme.statusGood,
+                                            inactiveTrackColor = if (isDark) Color(0xFF2C2C30) else Color(0xFFEBECEF)
+                                        ),
+                                        drawStopIndicator = null
+                                    )
                                 },
                                 modifier = Modifier.weight(1f)
                             )

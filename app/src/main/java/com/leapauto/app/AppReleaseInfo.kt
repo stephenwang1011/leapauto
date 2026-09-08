@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 充电中心视觉质感全面精细化：采用纯白悬浮卡片搭配柔和浅灰背景，对齐官方细腻质感\n" +
-        "2. 优化滑块与指标排版：移除滑块粗糙点阵并定制专属白滑块，精致呈现最低温度与充电倒计时"
+        "1. 充电中心顶部指标升级为三列对称展示：最低电池温度、实时充电功率与格式化充电剩余时间\n" +
+        "2. 智能适配充电与未充电状态，充电中功率与剩余时间高亮显示"
 }
