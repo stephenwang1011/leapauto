@@ -33,7 +33,7 @@ application name is `零跑智控`, and the current code baseline is:
 - Android Gradle Plugin: `8.7.3`
 - Kotlin: `2.1.0`
 
-The source code, `API.md`, and the current tests are the authority for implemented
+The source code, `API/API.md` (and the `API/` knowledge base), and the current tests are the authority for implemented
 behavior. `功能规划.md` and `车辆位置未完成功能.md` describe roadmap and follow-up
 work; do not describe a planned item as available unless the code and tests support
 it. Do not edit generated files under `app/build/`, `.gradle/`, or `.kotlin/`.
@@ -57,7 +57,7 @@ it. Do not edit generated files under `app/build/`, `.gradle/`, or `.kotlin/`.
 | `ChargeNotificationManager.kt`                                               | Local notifications for charging completion, interruption, and fault transitions.                                                                                                                                        |
 | `VersionUpdate.kt`, `AppReleaseInfo.kt`, `ExternalLinks.kt`                  | Public PGYER HTML update check, release notes shown in-app, and feedback/download links.                                                                                                                                 |
 | `app/src/main/res/`                                                          | Compose support drawables, authorized vehicle images, launcher PNGs, widget XML/layouts, themes, colors, and strings.                                                                                                    |
-| `API.md`                                                                     | Verified API hosts, request flow, signal mappings, command IDs, and known protocol limits.                                                                                                                               |
+| `API/`                                                                       | Consolidated API documentation and third-party reference libraries: `API/API.md` (verified spec), `API/leap-api/` (Python SDK & 未实现指令清单), `API/hack_lingpao_app/` (reverse-engineering notes), `API/leap-cn-mcp/` (MCP server & JS SDK). |
 | `scripts/package-release.ps1`                                                | Signed Release packaging with a hard 10 MiB delivery-size gate.                                                                                                                                                          |
 | `scripts/publish-pgyer.ps1`                                                  | Local signed Release packaging and PGYER CLI upload.                                                                                                                                                                     |
 
@@ -125,7 +125,7 @@ The current location path is deliberately narrow:
 
 Do not infer a WGS-84/GCJ-02 conversion outside the code's verified contract. The
 current verified path marks the accepted signal-map coordinates as `GCJ02`; any
-change to this assumption requires evidence in `API.md`, tests, and product review.
+change to this assumption requires evidence in `API/API.md`, tests, and product review.
 
 ### Remote-control safety
 
@@ -153,6 +153,22 @@ Never send a real vehicle command, SMS, or external location request as a test
 without explicit user authorization. A successful HTTP response means the service
 accepted the command; only a verified result poll or later vehicle refresh may
 support stronger wording.
+
+## API and Protocol Knowledge Base (`API/`)
+
+All verified API specifications, protocol references, reverse-engineering notes, and third-party libraries are consolidated under the root `API/` directory. Future agents must search and consult `API/` before researching, implementing, or modifying any API, telemetry signal, command payload, or protocol behavior:
+
+| Path | Category | Content and Agent Guidance |
+| --- | --- | --- |
+| `API/API.md` | Core Verified Spec | **Single source of truth** for LeapAuto's verified API endpoints, request signing (old MD5 & new HMAC-SHA256), `signalMap` ID-to-name mapping table, vehicle remote command IDs, result polling rules, and verified protocol constraints. |
+| `API/leap-api/` | Python Client Library | Clean-room Python implementation of the Leapmotor API (`markoceri/leapmotor-api`). Key reference files:<br>• `未实现指令清单.md`: Gap analysis of 30 commands (seats, heating, ventilation, auto-park, etc.) between China and overseas implementations.<br>• `API分析.md`: Full architecture, mutual TLS client certs, endpoints, and error handling.<br>• `docs/api.md`: Comprehensive `cmd_id` specs, JSON body formats, and scheduler payloads.<br>• `docs/vehicles.md`: Supported models, features, and configurations. |
+| `API/hack_lingpao_app/` | China App Reverse Engineering | Research notes from decompiling China Android App v1.22.93 (`cqrg/hack_lingpao_app`). Key reference files:<br>• `API_REFERENCE.md`: China App endpoint catalog (appuser, carownerservice, signal query, etc.).<br>• `APP_PROTOCOL.md`: Request signing, RSA phone encryption, AES operation PIN encryption.<br>• `REVERSE_NOTES.md`: 360 packer unpacking, frida-dexdump, smali analysis.<br>• `lingpao_client.py`: Reference Python client implementation. |
+| `API/leap-cn-mcp/` | MCP Server & Node.js SDK | Model Context Protocol server and JavaScript SDK (`leap-cn-mcp@0.1.7`). Key reference files:<br>• `leap-cn-mcp-commands.md`: Command specifications, parameter rules, and vehicle differences.<br>• `package/src/leapmotor-cn-sdk.js`: Field definitions, telemetry parsers, and command builder. |
+
+When adding or verifying any vehicle command, signal ID, or protocol flow:
+1. Always search `API/` first to locate verified parameters, field definitions, and payloads.
+2. When a signal is confirmed, update `SignalTable.kt`, the consuming model/formatter, tests, and `API/API.md` together.
+3. When a command is confirmed, update `Models.kt`, confirmation/feedback behavior, tests, and `API/API.md` together.
 
 ## Collaboration and Ownership
 

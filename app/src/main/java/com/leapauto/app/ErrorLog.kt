@@ -6,7 +6,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 
-enum class ErrorLogCategory { API_FAILURE, CONTROL_FAILURE, LOGIN_FAILURE, SESSION_EXPIRED, PARSE_FAILURE, PAGE_ERROR }
+enum class ErrorLogCategory { API_FAILURE, CONTROL_FAILURE, LOGIN_FAILURE, SESSION_EXPIRED, PARSE_FAILURE, PAGE_ERROR, CONTROL_LOG }
 
 data class ErrorLogEntry(
     val timestampMs: Long,
@@ -34,12 +34,23 @@ data class ErrorLogEntry(
 class ErrorLogRepository(
     private val clockMs: () -> Long = { System.currentTimeMillis() },
     private val ttlMs: Long = 30 * 60 * 1000L,
-    private val capacity: Int = 200
+    private val capacity: Int = 200,
+    private val filterComfortOnly: Boolean = false
 ) {
     private val lock = ReentrantReadWriteLock()
     private val entries = ArrayDeque<ErrorLogEntry>()
 
     fun record(entry: ErrorLogEntry) {
+        if (filterComfortOnly) {
+            val isComfort = entry.stage.startsWith("comfort") ||
+                entry.message.contains("301") ||
+                entry.message.contains("370") ||
+                entry.message.contains("320") ||
+                entry.message.contains("360") ||
+                entry.message.contains("座椅") ||
+                entry.message.contains("方向盘")
+            if (!isComfort) return
+        }
         lock.write {
             purgeLocked()
             entries.addLast(entry)
@@ -63,5 +74,5 @@ class ErrorLogRepository(
 }
 
 object ErrorLogs {
-    val repository = ErrorLogRepository()
+    val repository = ErrorLogRepository(filterComfortOnly = true)
 }

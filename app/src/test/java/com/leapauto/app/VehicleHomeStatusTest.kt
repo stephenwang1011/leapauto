@@ -3,6 +3,8 @@ package com.leapauto.app
 import java.time.LocalDateTime
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VehicleHomeStatusTest {
@@ -131,10 +133,35 @@ class VehicleHomeStatusTest {
         assertEquals("N挡", nGear?.label)
         assertEquals(false, nGear?.isMoving)
 
+        // N挡但车辆已下电/已熄火 -> 显示已驻车
+        val nGearShutDown = VehicleHomeStatus.resolveDetailedDrivingState("N挡", "0 km/h", isShutDown = true)
+        assertEquals("已驻车", nGearShutDown?.label)
+        assertEquals(false, nGearShutDown?.isMoving)
+
         // P挡驻车（显示已驻车，不显示速度）
         val pGear = VehicleHomeStatus.resolveDetailedDrivingState("P挡", "0 km/h")
         assertEquals("已驻车", pGear?.label)
         assertEquals(false, pGear?.isMoving)
+    }
+
+    @Test
+    fun `vehicle shutdown detection correctly identifies power-off states`() {
+        // 闭锁状态判定下电/驻车
+        assertTrue(VehicleHomeStatus.isVehicleShutDown(locked = true))
+
+        // BCM ON3 状态: 0=下电, 1=上电
+        assertTrue(VehicleHomeStatus.isVehicleShutDown(bcmKeyPositionOn3 = "0"))
+        assertTrue(VehicleHomeStatus.isVehicleShutDown(bcmKeyPositionOn3 = 0))
+        assertFalse(VehicleHomeStatus.isVehicleShutDown(bcmKeyPositionOn3 = "1"))
+
+        // 整车状态: 0, 1, 3=下电/休眠/驻车, 2=行驶中
+        assertTrue(VehicleHomeStatus.isVehicleShutDown(vehicleState = 0))
+        assertTrue(VehicleHomeStatus.isVehicleShutDown(vehicleState = 1))
+        assertTrue(VehicleHomeStatus.isVehicleShutDown(vehicleState = 3))
+        assertFalse(VehicleHomeStatus.isVehicleShutDown(vehicleState = 2))
+
+        // 手刹/电子驻车制动已拉起
+        assertTrue(VehicleHomeStatus.isVehicleShutDown(parkingBrakeState = "1"))
     }
 
     @Test

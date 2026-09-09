@@ -9,11 +9,11 @@
     <LinearLayout
         android:id="@+id/widgetRoot"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:background="@drawable/widget_card_background"
         android:orientation="vertical"
         android:paddingStart="4dp"
-        android:paddingTop="8dp"
+        android:paddingTop="4dp"
         android:paddingEnd="4dp"
         android:paddingBottom="4dp">
 
@@ -53,8 +53,9 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="top"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
         android:orientation="horizontal">
 
         <LinearLayout
@@ -63,7 +64,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="4dp"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="0dp"
             android:orientation="vertical">
 
         <LinearLayout
@@ -83,38 +84,41 @@
                     android:id="@+id/txtWRange"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:includeFontPadding="false"
                     android:shadowColor="@color/widget_text_shadow"
                     android:shadowDx="0"
                     android:shadowDy="0"
                     android:shadowRadius="1.5"
                     android:text="--"
                     android:textColor="@color/widget_on_surface"
-                    android:textSize="27sp" />
+                    android:textSize="26sp" />
 
                 <TextView
                     android:id="@+id/txtWRangeUnit"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="2dp"
+                    android:includeFontPadding="false"
                     android:shadowColor="@color/widget_text_shadow"
                     android:shadowDx="0"
                     android:shadowDy="0"
                     android:shadowRadius="1.5"
                     android:text="km"
                     android:textColor="@color/widget_on_surface"
-                    android:textSize="23sp" />
+                    android:textSize="20sp" />
             </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="3dp"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
+                android:gravity="center_vertical"
                 android:orientation="horizontal">
 
                 <FrameLayout
                     android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="0.9">
+                    android:layout_height="3dp"
+                    android:layout_weight="0.75">
 
                     <ProgressBar
                         android:id="@+id/progressWCharge"
@@ -150,10 +154,26 @@
 
                 </FrameLayout>
 
+                <TextView
+                    android:id="@+id/txtWPureSoc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:shadowColor="@color/widget_text_shadow"
+                    android:shadowDx="0"
+                    android:shadowDy="0"
+                    android:shadowRadius="1.5"
+                    android:text="--%"
+                    android:textColor="@color/widget_on_surface"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_weight="0.1" />
+                    android:layout_weight="0.25" />
             </LinearLayout>
 
         </LinearLayout>
@@ -359,8 +379,8 @@
         <LinearLayout
             android:id="@+id/widgetStatusContainer"
             android:layout_width="wrap_content"
-            android:layout_height="18dp"
-            android:layout_marginTop="4dp"
+            android:layout_height="16dp"
+            android:layout_marginTop="2dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:visibility="gone">
@@ -395,138 +415,288 @@
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/widgetActionRow"
         android:layout_width="match_parent"
         android:layout_height="28dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="12dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
         android:clipChildren="false"
         android:gravity="center"
         android:orientation="horizontal">
 
-        <ImageView
-            android:id="@+id/btnWUnlock"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/widget_action_background"
-            android:contentDescription="解锁"
-            android:padding="0dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_phosphor_lock_open"
-            android:tint="@color/widget_action_icon" />
-
-        <ImageView
-            android:id="@+id/btnWLock"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/widget_action_background"
-            android:contentDescription="上锁"
-            android:padding="0dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_phosphor_lock"
-            android:tint="@color/widget_action_icon" />
-
         <FrameLayout
-            android:id="@+id/btnWSentry"
+            android:id="@+id/spaceWActionStart"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.5"
+            android:visibility="gone" />
+
+        <!-- Slot 1 -->
+        <FrameLayout
+            android:id="@+id/slotW1"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="@drawable/widget_action_background"
-            android:clipChildren="false"
-            android:contentDescription="哨兵模式">
+            android:clipChildren="false">
 
             <ImageView
-                android:id="@+id/imgWSentryOff"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:id="@+id/imgWSlot1"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
                 android:layout_gravity="center"
-                android:contentDescription="@null"
                 android:padding="0dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_sentry"
-                android:tint="@color/widget_action_icon" />
-
-            <ImageView
-                android:id="@+id/imgWSentryOn"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:layout_gravity="center"
-                android:contentDescription="@null"
-                android:padding="0dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_sentry"
-                android:tint="@color/energy_green"
-                android:visibility="gone" />
-        </FrameLayout>
-
-        <FrameLayout
-            android:id="@+id/btnWAc"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/widget_action_background"
-            android:clipChildren="false"
-            android:contentDescription="空调状态未知，打开 App 查看">
-
-            <ImageView
-                android:id="@+id/imgWAcOff"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:layout_gravity="center"
-                android:contentDescription="@null"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_phosphor_fan"
-                android:tint="@color/widget_action_icon" />
+                android:src="@drawable/ic_phosphor_lock_open" />
 
             <ProgressBar
-                android:id="@+id/imgWAcOn"
+                android:id="@+id/progressWSlot1AcCooling"
                 style="@null"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
                 android:layout_gravity="center"
-                android:contentDescription="@null"
                 android:indeterminate="true"
                 android:indeterminateOnly="true"
                 android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
                 android:visibility="gone" />
 
             <ProgressBar
-                android:id="@+id/imgWAcOnHeating"
+                android:id="@+id/progressWSlot1AcHeating"
                 style="@null"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
                 android:layout_gravity="center"
-                android:contentDescription="@null"
                 android:indeterminate="true"
                 android:indeterminateOnly="true"
                 android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
                 android:visibility="gone" />
 
             <ProgressBar
-                android:id="@+id/imgWAcOnVent"
+                android:id="@+id/progressWSlot1AcVent"
                 style="@null"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
                 android:layout_gravity="center"
-                android:contentDescription="@null"
                 android:indeterminate="true"
                 android:indeterminateOnly="true"
                 android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
                 android:visibility="gone" />
         </FrameLayout>
 
-        <ImageView
-            android:id="@+id/btnWTrunk"
+        <!-- Slot 2 -->
+        <FrameLayout
+            android:id="@+id/slotW2"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="@drawable/widget_action_background"
-            android:contentDescription="打开后备箱"
-            android:padding="0dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_phosphor_trunk_open"
-            android:tint="@color/widget_action_icon" />
+            android:clipChildren="false">
+
+            <ImageView
+                android:id="@+id/imgWSlot2"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:padding="0dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_phosphor_lock" />
+
+            <ProgressBar
+                android:id="@+id/progressWSlot2AcCooling"
+                style="@null"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateOnly="true"
+                android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/progressWSlot2AcHeating"
+                style="@null"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateOnly="true"
+                android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/progressWSlot2AcVent"
+                style="@null"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateOnly="true"
+                android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <!-- Slot 3 -->
+        <FrameLayout
+            android:id="@+id/slotW3"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/widget_action_background"
+            android:clipChildren="false">
+
+            <ImageView
+                android:id="@+id/imgWSlot3"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:padding="0dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_sentry" />
+
+            <ProgressBar
+                android:id="@+id/progressWSlot3AcCooling"
+                style="@null"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateOnly="true"
+                android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/progressWSlot3AcHeating"
+                style="@null"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateOnly="true"
+                android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/progressWSlot3AcVent"
+                style="@null"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateOnly="true"
+                android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <!-- Slot 4 -->
+        <FrameLayout
+            android:id="@+id/slotW4"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/widget_action_background"
+            android:clipChildren="false">
+
+            <ImageView
+                android:id="@+id/imgWSlot4"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:padding="0dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_phosphor_fan" />
+
+            <ProgressBar
+                android:id="@+id/progressWSlot4AcCooling"
+                style="@null"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateOnly="true"
+                android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/progressWSlot4AcHeating"
+                style="@null"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateOnly="true"
+                android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/progressWSlot4AcVent"
+                style="@null"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateOnly="true"
+                android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <!-- Slot 5 -->
+        <FrameLayout
+            android:id="@+id/slotW5"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/widget_action_background"
+            android:clipChildren="false">
+
+            <ImageView
+                android:id="@+id/imgWSlot5"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:padding="0dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_phosphor_trunk_open" />
+
+            <ProgressBar
+                android:id="@+id/progressWSlot5AcCooling"
+                style="@null"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateOnly="true"
+                android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/progressWSlot5AcHeating"
+                style="@null"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateOnly="true"
+                android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/progressWSlot5AcVent"
+                style="@null"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateOnly="true"
+                android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/spaceWActionEnd"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.5"
+            android:visibility="gone" />
     </LinearLayout>
     </LinearLayout>
 </FrameLayout>

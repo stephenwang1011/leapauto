@@ -54,6 +54,7 @@ data class VehicleStatus(
     val isDriving: Boolean?,
     val gearStatus: String?,
     val locked: Boolean?,
+    val isShutDown: Boolean = false,
     val acSwitch: Boolean?,
     val acSetting: String?,
     val acCoolingAndHeating: Int?,
@@ -160,6 +161,7 @@ class MainActivity : ComponentActivity() {
     private var pin by mutableStateOf("")
     private var widgetOpacity by mutableStateOf(100)
     private var widgetSensitiveActionVerificationEnabled by mutableStateOf(true)
+    private var widget4x2Actions by mutableStateOf(Widget4x2ActionPolicy.DEFAULT_ACTIONS)
     private var appearanceMode by mutableStateOf(AppearanceMode.SYSTEM)
     private var energyState by mutableStateOf<EnergyAnalyticsState>(EnergyAnalyticsState.Idle)
     @Volatile private var energyLastSuccessAt = 0L
@@ -195,6 +197,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setupGlobalCrashHandler()
         checkLastCrashReport()
+        ErrorLogs.repository.clear()
         NetworkDebugController.initialize(this)
         sessionStore = SessionStore(this)
         energyCacheStore = EnergyCacheStore(this)
@@ -212,6 +215,7 @@ class MainActivity : ComponentActivity() {
         widgetOpacity = sessionStore.loadWidgetOpacity()
         widgetSensitiveActionVerificationEnabled =
             sessionStore.loadWidgetSensitiveActionVerificationEnabled()
+        widget4x2Actions = sessionStore.loadWidget4x2Actions()
         appearanceMode = sessionStore.loadAppearanceMode()
         handledUpdateVersion = sessionStore.loadHandledUpdateVersion()
         healthyChargeLimitSoc = sessionStore.loadHealthyChargeLimit(session.selectedVin)
@@ -293,6 +297,8 @@ class MainActivity : ComponentActivity() {
                     onWidgetOpacityChange = ::saveWidgetOpacity,
                     widgetSensitiveActionVerificationEnabled = widgetSensitiveActionVerificationEnabled,
                     onWidgetSensitiveActionVerificationChange = ::saveWidgetSensitiveActionVerification,
+                    widget4x2Actions = widget4x2Actions,
+                    onWidget4x2ActionsChange = ::saveWidget4x2Actions,
                     onAppearanceModeChange = ::saveAppearanceMode,
                     onSaveVehicleConfig = ::saveVehicleConfig,
                     onNetworkDebugEnabledChange = { enabled ->
@@ -615,6 +621,12 @@ class MainActivity : ComponentActivity() {
     private fun saveWidgetSensitiveActionVerification(enabled: Boolean) {
         sessionStore.saveWidgetSensitiveActionVerificationEnabled(enabled)
         widgetSensitiveActionVerificationEnabled = enabled
+    }
+
+    private fun saveWidget4x2Actions(actions: List<String>) {
+        sessionStore.saveWidget4x2Actions(actions)
+        widget4x2Actions = actions
+        ControlWidget.refreshAppearance(this)
     }
 
     private fun clearEnergyState() {
@@ -1960,6 +1972,12 @@ class MainActivity : ComponentActivity() {
             isDriving = WidgetStatusMapper.isDriving(m),
             gearStatus = formatGear(m.opt("gearStatus")),
             locked = m.optBool("driverDoorLockStatus"),
+            isShutDown = VehicleHomeStatus.isVehicleShutDown(
+                bcmKeyPositionOn3 = m.opt("bcmKeyPositionOn3"),
+                vehicleState = m.opt("vehicleState"),
+                parkingBrakeState = m.opt("parkingBrakeState"),
+                locked = m.optBool("driverDoorLockStatus")
+            ),
             acSwitch = m.optBool("acSwitch"),
             acSetting = formatClimateSetting(m.opt("acSetting")),
             acSettingRight = formatClimateSetting(m.opt("acSettingRight")),
@@ -2218,6 +2236,27 @@ class MainActivity : ComponentActivity() {
                 }
                 val result = api.sendControl(command, savedPin)
                 sessionStore.save(session)
+
+                val isComfortCommand = command.cmdid in setOf("301", "370", "320", "360")
+                if (isComfortCommand) {
+                    ErrorLogs.repository.record(
+                        ErrorLogEntry(
+                            timestampMs = System.currentTimeMillis(),
+                            category = ErrorLogCategory.CONTROL_LOG,
+                            stage = "comfort_send_${command.cmdid}",
+                            httpStatus = 200,
+                            durationMs = System.currentTimeMillis() - started,
+                            retryCount = 0,
+                            appVersion = BuildConfig.VERSION_NAME,
+                            message = "下发指令: ${command.label}\n" +
+                                "cmdid: ${command.cmdid}\n" +
+                                "state: ${command.stateJson}\n" +
+                                "网关响应 msgID: ${result.msgID.ifBlank { "无 (非轮询)" }}\n" +
+                                "网关响应报文: ${result.raw}"
+                        )
+                    )
+                }
+
                 val shouldQueryControlResult = result.hasPollingId()
                 if (!shouldQueryControlResult) {
                     runOnMain(generation) {
@@ -2239,11 +2278,21 @@ class MainActivity : ComponentActivity() {
                 var finalText = "${command.label}：已发送，暂未收到车辆响应"
                 var completed = false
                 var sentryQuerySucceeded = false
+                var lastPollResp: String? = null
                 for (i in 0 until ControlResultPollingPolicy.appMaxAttempts) {
                     Thread.sleep(ControlResultPollingPolicy.delayBeforeAttempt(i))
                     val resp = api.queryControlResult(result.msgID)
                     sessionStore.save(session)
-                    if (SentryModeControlPolicy.querySucceeded(resp.opt("result"), resp.opt("code"))) {
+                    lastPollResp = resp.toString()
+                    val qResult = resp.opt("result")
+                    val qCode = resp.opt("code")
+                    val qData = resp.opt("data")
+                    val dataSuccess = qData == 1 || qData == "1" || qData == true
+
+                    if (SentryModeControlPolicy.querySucceeded(qResult, qCode)) {
+                        if (isComfortCommand && !dataSuccess) {
+                            continue
+                        }
                         if (sentryTarget != null) {
                             sentryQuerySucceeded = true
                             val latest = VehicleStatusMapper.withFuelMock(
@@ -2263,8 +2312,28 @@ class MainActivity : ComponentActivity() {
                         break
                     }
                 }
-                if (!completed && sentryTarget != null && sentryQuerySucceeded) {
-                    finalText = "${command.label}：命令已执行，车辆状态待确认"
+                if (!completed) {
+                    if (sentryTarget != null && sentryQuerySucceeded) {
+                        finalText = "${command.label}：命令已执行，车辆状态待确认"
+                    } else if (isComfortCommand) {
+                        finalText = "${command.label}：车端未确认执行 (data=0)"
+                    }
+                }
+                if (isComfortCommand) {
+                    ErrorLogs.repository.record(
+                        ErrorLogEntry(
+                            timestampMs = System.currentTimeMillis(),
+                            category = ErrorLogCategory.CONTROL_LOG,
+                            stage = "comfort_poll_${command.cmdid}",
+                            httpStatus = 200,
+                            durationMs = System.currentTimeMillis() - started,
+                            retryCount = 0,
+                            appVersion = BuildConfig.VERSION_NAME,
+                            message = "指令结果: $finalText\n" +
+                                "cmdid: ${command.cmdid}, msgID: ${result.msgID}\n" +
+                                "车机轮询响应: ${lastPollResp ?: "未收到响应"}"
+                        )
+                    )
                 }
                 runOnMain(generation) {
                     controlFeedback = ControlFeedback(
@@ -2282,22 +2351,28 @@ class MainActivity : ComponentActivity() {
             } catch (e: Exception) {
                 val elapsed = System.currentTimeMillis() - started
                 val apiError = e as? ApiException
-                ErrorLogs.repository.record(
-                    ErrorLogEntry(
-                        timestampMs = System.currentTimeMillis(),
-                        category = ErrorLogCategory.CONTROL_FAILURE,
-                        stage = "control_${command.cmdid}",
-                        httpStatus = apiError?.httpStatus,
-                        durationMs = elapsed,
-                        retryCount = 0,
-                        appVersion = BuildConfig.VERSION_NAME,
-                        message = buildString {
-                            appendLine("控车异常: ${command.label} (cmdid=${command.cmdid})")
-                            appendLine("载荷: ${command.stateJson}")
-                            appendLine("错误: ${e.message ?: e.toString()}")
-                        }
+                val isComfort = command.cmdid in setOf("301", "370", "320", "360")
+                if (isComfort) {
+                    ErrorLogs.repository.record(
+                        ErrorLogEntry(
+                            timestampMs = System.currentTimeMillis(),
+                            category = ErrorLogCategory.CONTROL_FAILURE,
+                            stage = "comfort_control_error_${command.cmdid}",
+                            httpStatus = apiError?.httpStatus,
+                            durationMs = elapsed,
+                            retryCount = 0,
+                            appVersion = BuildConfig.VERSION_NAME,
+                            message = buildString {
+                                appendLine("座舱舒适指令下发/执行失败: ${command.label} (cmdid=${command.cmdid})")
+                                appendLine("请求载荷: ${command.stateJson}")
+                                appendLine("错误信息: ${e.message ?: e.toString()}")
+                                if (apiError?.httpStatus != null) {
+                                    appendLine("HTTP状态: ${apiError.httpStatus}")
+                                }
+                            }
+                        )
                     )
-                )
+                }
                 runOnMain(generation) {
                     handleSessionFailure(e)
                     val errMsg = controlFailureMessage(command.label, e)

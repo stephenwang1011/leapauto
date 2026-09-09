@@ -477,17 +477,6 @@ class LeapmotorApi(private val session: Session) {
                     session.selectedYear = selected.year
                 }
             }
-            rawObjects.firstOrNull { it.optString("vin") == session.selectedVin }?.let { rawJson ->
-                ErrorLogs.repository.record(
-                    ErrorLogEntry(
-                        timestampMs = System.currentTimeMillis(),
-                        category = ErrorLogCategory.API_FAILURE, // 借用ErrorLogs展示在诊断日志中
-                        stage = "vehicle_list_info",
-                        appVersion = BuildConfig.VERSION_NAME,
-                        message = "云端车辆档案数据:\n${rawJson.toString().take(600)}"
-                    )
-                )
-            }
         }
         return vehicles
     }

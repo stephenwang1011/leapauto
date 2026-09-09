@@ -675,6 +675,21 @@ class SessionStore(context: Context) {
         appPrefs.edit().remove(quickCommandOrderKey(normalizedVin)).apply()
     }
 
+    fun loadWidget4x2Actions(): List<String> {
+        val raw = appPrefs.getString(WIDGET_4X2_ACTIONS, null)
+        val list = raw?.split(',')
+            ?.map(String::trim)
+            ?.filter(String::isNotEmpty)
+        return Widget4x2ActionPolicy.resolve(list)
+    }
+
+    fun saveWidget4x2Actions(actions: List<String>) {
+        val resolved = Widget4x2ActionPolicy.resolve(actions)
+        appPrefs.edit()
+            .putString(WIDGET_4X2_ACTIONS, resolved.joinToString(","))
+            .apply()
+    }
+
     /**
      * Records the newest public version that the user has already handled in the
      * update prompt. It intentionally lives in app preferences and survives logout.
@@ -736,6 +751,7 @@ class SessionStore(context: Context) {
         const val WIDGET_SYNC_SUPPRESSED_UNTIL = "widget_sync_suppressed_until"
         const val WIDGET_AUTH_INVALID = "widget_auth_invalid"
         const val POWER_PAGER_AUTO_PLAY_ENABLED = "power_pager_auto_play_enabled"
+        const val WIDGET_4X2_ACTIONS = "widget_4x2_actions"
         val WIDGET_OPACITY_OPTIONS = setOf(100, 75, 50, 25)
         val SESSION_LOCK = Any()
     }

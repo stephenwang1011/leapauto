@@ -42,7 +42,18 @@ class ControlWidget : AppWidgetProvider() {
             val update = baseViews(context).apply {
                 setTextViewText(R.id.txtWUpdated, text)
                 if (acEnabled != null) {
-                    applyAcPresentation(context, this, acEnabled, acTone)
+                    val store = SessionStore(context)
+                    val snapshot = store.loadWidgetSnapshot(store.load().selectedVin)
+                    applyActionSlots(
+                        context = context,
+                        views = this,
+                        actions = store.loadWidget4x2Actions(),
+                        locked = snapshot?.locked,
+                        trunkState = snapshot?.trunkState ?: TrunkState.UNKNOWN,
+                        sentryEnabled = snapshot?.sentryEnabled,
+                        acEnabled = acEnabled,
+                        acTone = acTone
+                    )
                 }
             }
             manager.partiallyUpdateAppWidget(ids, update)
@@ -210,10 +221,16 @@ class ControlWidget : AppWidgetProvider() {
                 )
             }
             setOnClickPendingIntent(R.id.widgetRoot, openAppPendingIntent(context))
-            applyLockPresentation(context, this, snapshot?.locked)
-            applyAcPresentation(context, this, snapshot?.acEnabled, snapshot?.acTone ?: ClimateTemperatureTone.DEFAULT)
-            applyTrunkPresentation(context, this, snapshot?.trunkState ?: TrunkState.UNKNOWN)
-            applySentryPresentation(context, this, snapshot?.sentryEnabled)
+            applyActionSlots(
+                context = context,
+                views = this,
+                actions = store.loadWidget4x2Actions(),
+                locked = snapshot?.locked,
+                trunkState = snapshot?.trunkState ?: TrunkState.UNKNOWN,
+                sentryEnabled = snapshot?.sentryEnabled,
+                acEnabled = snapshot?.acEnabled,
+                acTone = snapshot?.acTone ?: ClimateTemperatureTone.DEFAULT
+            )
         }
 
         internal fun renderStatus(context: Context, views: RemoteViews, status: JSONObject, carType: String) {
@@ -252,7 +269,6 @@ class ControlWidget : AppWidgetProvider() {
             )
             applyPureRangeTone(context, views, soc, config.powerType)
             setWidgetStatusText(context, views, WidgetStatusMapper.presentation(displayStatus, carType))
-            applyLockPresentation(context, views, WidgetStatusMapper.locked(displayStatus))
             val acEnabled = WidgetAcMapper.state(displayStatus)
             val acTone = ClimateTemperatureToneResolver.tone(
                 acEnabled = acEnabled,
@@ -260,9 +276,17 @@ class ControlWidget : AppWidgetProvider() {
                 climateMode = displayStatus.optInt("climateMode", -1).takeIf { it != -1 },
                 targetTemperature = displayStatus.opt("acSetting")?.toString()?.toIntOrNull()
             )
-            applyAcPresentation(context, views, acEnabled, acTone)
-            applyTrunkPresentation(context, views, TrunkStateMapper.fromSignal(displayStatus.opt("bbcmBackDoorStatus")))
-            applySentryPresentation(context, views, WidgetSentryMapper.state(displayStatus))
+            applyActionSlots(
+                context = context,
+                views = views,
+                actions = store.loadWidget4x2Actions(),
+                locked = WidgetStatusMapper.locked(displayStatus),
+                trunkState = TrunkStateMapper.fromSignal(displayStatus.opt("bbcmBackDoorStatus")),
+                sentryEnabled = WidgetSentryMapper.state(displayStatus),
+                acEnabled = acEnabled,
+                acTone = acTone,
+                preheatEnabled = BatteryPreheatState.fromRaw(displayStatus.opt("batteryThermalRequest"))
+            )
         }
 
         internal fun renderSnapshot(context: Context, views: RemoteViews, snapshot: SessionStore.WidgetSnapshot) {
@@ -310,108 +334,226 @@ class ControlWidget : AppWidgetProvider() {
                 )
             )
             views.setTextViewText(R.id.txtWUpdated, snapshot.updated)
-            applyLockPresentation(context, views, snapshot.locked)
-            applyAcPresentation(context, views, snapshot.acEnabled, snapshot.acTone)
-            applyTrunkPresentation(context, views, snapshot.trunkState)
-            applySentryPresentation(context, views, snapshot.sentryEnabled)
+            applyActionSlots(
+                context = context,
+                views = views,
+                actions = store.loadWidget4x2Actions(),
+                locked = snapshot.locked,
+                trunkState = snapshot.trunkState,
+                sentryEnabled = snapshot.sentryEnabled,
+                acEnabled = snapshot.acEnabled,
+                acTone = snapshot.acTone
+            )
         }
 
-        /** Unknown telemetry must not be treated as a safe state for a control command. */
-        private fun applyAcPresentation(
+        internal fun applyActionSlots(
             context: Context,
             views: RemoteViews,
+            actions: List<String>,
+            locked: Boolean?,
+            trunkState: TrunkState,
+            sentryEnabled: Boolean?,
             acEnabled: Boolean?,
-            tone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT
+            acTone: ClimateTemperatureTone,
+            preheatEnabled: Boolean? = null
         ) {
-            val presentation = WidgetAcMapper.presentation(acEnabled, tone)
-            val themeContext = widgetThemeContext(context)
-            val actionColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
-            views.setInt(R.id.imgWAcOff, "setColorFilter", actionColor)
-            views.setInt(
-                R.id.btnWAc,
-                "setBackgroundResource",
-                widgetActionBackgroundResource(widgetUsesDarkAppearance(context))
-            )
-
-            val showCooling = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.COOLING
-            val showHeating = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.HEATING
-            val showVent = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.VENTILATION
-            val showOff = !presentation.showEnabledIcon
-
-            views.setViewVisibility(R.id.imgWAcOff, if (showOff) View.VISIBLE else View.GONE)
-            views.setViewVisibility(R.id.imgWAcOn, if (showCooling) View.VISIBLE else View.GONE)
-            views.setViewVisibility(R.id.imgWAcOnHeating, if (showHeating) View.VISIBLE else View.GONE)
-            views.setViewVisibility(R.id.imgWAcOnVent, if (showVent) View.VISIBLE else View.GONE)
-
-            views.setContentDescription(R.id.btnWAc, presentation.contentDescription)
-            val pendingIntent = presentation.command
-                ?.let { command -> click(context, command) }
-                ?: openAppPendingIntent(context)
-            views.setOnClickPendingIntent(R.id.btnWAc, pendingIntent)
-        }
-
-        private fun applyLockPresentation(context: Context, views: RemoteViews, locked: Boolean?) {
             val themeContext = widgetThemeContext(context)
             val iconColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
-            views.setImageViewResource(R.id.btnWUnlock, R.drawable.ic_phosphor_lock_open)
-            views.setImageViewResource(R.id.btnWLock, R.drawable.ic_phosphor_lock)
-            views.setInt(R.id.btnWUnlock, "setColorFilter", iconColor)
-            views.setInt(R.id.btnWLock, "setColorFilter", iconColor)
             val background = widgetActionBackgroundResource(widgetUsesDarkAppearance(context))
-            views.setInt(R.id.btnWUnlock, "setBackgroundResource", background)
-            views.setInt(R.id.btnWLock, "setBackgroundResource", background)
-            views.setContentDescription(
-                R.id.btnWUnlock,
-                if (locked == false) "解锁（当前已解锁）" else "解锁"
-            )
-            views.setContentDescription(
-                R.id.btnWLock,
-                if (locked == true) "上锁（当前已上锁）" else "上锁"
-            )
-            views.setOnClickPendingIntent(R.id.btnWUnlock, click(context, "unlock"))
-            views.setOnClickPendingIntent(R.id.btnWLock, click(context, "lock"))
-        }
 
-        /** Binds the trunk action to confirmed telemetry; unknown never guesses a direction. */
-        private fun applyTrunkPresentation(context: Context, views: RemoteViews, trunkState: TrunkState) {
-            val presentation = TrunkControlPresentationMapper.fromState(trunkState)
-            val themeContext = widgetThemeContext(context)
-            val iconColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
-            views.setImageViewResource(R.id.btnWTrunk, R.drawable.ic_phosphor_trunk_open)
-            views.setInt(R.id.btnWTrunk, "setColorFilter", iconColor)
-            val background = widgetActionBackgroundResource(widgetUsesDarkAppearance(context))
-            views.setInt(R.id.btnWTrunk, "setBackgroundResource", background)
-            views.setContentDescription(R.id.btnWTrunk, presentation.contentDescription)
-            views.setFloat(R.id.btnWTrunk, "setAlpha", if (trunkState == TrunkState.UNKNOWN) 0.65f else 1f)
-            views.setOnClickPendingIntent(
-                R.id.btnWTrunk,
-                presentation.command?.let { click(context, it) } ?: openAppPendingIntent(context)
-            )
-        }
+            val slotIds = listOf(R.id.slotW1, R.id.slotW2, R.id.slotW3, R.id.slotW4, R.id.slotW5)
+            val imgIds = listOf(R.id.imgWSlot1, R.id.imgWSlot2, R.id.imgWSlot3, R.id.imgWSlot4, R.id.imgWSlot5)
+            val coolingIds = listOf(R.id.progressWSlot1AcCooling, R.id.progressWSlot2AcCooling, R.id.progressWSlot3AcCooling, R.id.progressWSlot4AcCooling, R.id.progressWSlot5AcCooling)
+            val heatingIds = listOf(R.id.progressWSlot1AcHeating, R.id.progressWSlot2AcHeating, R.id.progressWSlot3AcHeating, R.id.progressWSlot4AcHeating, R.id.progressWSlot5AcHeating)
+            val ventIds = listOf(R.id.progressWSlot1AcVent, R.id.progressWSlot2AcVent, R.id.progressWSlot3AcVent, R.id.progressWSlot4AcVent, R.id.progressWSlot5AcVent)
 
-        private fun applySentryPresentation(context: Context, views: RemoteViews, sentryEnabled: Boolean?) {
-            val presentation = WidgetSentryMapper.presentation(sentryEnabled)
-            val themeContext = widgetThemeContext(context)
-            val actionColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
-            views.setImageViewResource(R.id.imgWSentryOff, R.drawable.ic_sentry)
-            views.setImageViewResource(R.id.imgWSentryOn, R.drawable.ic_sentry)
-            views.setInt(R.id.imgWSentryOff, "setColorFilter", actionColor)
-            views.setInt(R.id.imgWSentryOn, "setColorFilter", ContextCompat.getColor(themeContext, R.color.energy_green))
-            val background = widgetActionBackgroundResource(widgetUsesDarkAppearance(context))
-            views.setInt(R.id.btnWSentry, "setBackgroundResource", background)
-            views.setViewVisibility(
-                R.id.imgWSentryOff,
-                if (presentation.showEnabledIcon) View.GONE else View.VISIBLE
-            )
-            views.setViewVisibility(
-                R.id.imgWSentryOn,
-                if (presentation.showEnabledIcon) View.VISIBLE else View.GONE
-            )
-            views.setContentDescription(R.id.btnWSentry, presentation.contentDescription)
-            views.setOnClickPendingIntent(
-                R.id.btnWSentry,
-                click(context, presentation.command)
-            )
+            val hasSpacers = actions.size <= 4
+            views.setViewVisibility(R.id.spaceWActionStart, if (hasSpacers) View.VISIBLE else View.GONE)
+            views.setViewVisibility(R.id.spaceWActionEnd, if (hasSpacers) View.VISIBLE else View.GONE)
+
+            for (i in 0 until 5) {
+                val slotId = slotIds[i]
+                val imgId = imgIds[i]
+                val coolingId = coolingIds[i]
+                val heatingId = heatingIds[i]
+                val ventId = ventIds[i]
+
+                if (i >= actions.size) {
+                    views.setViewVisibility(slotId, View.GONE)
+                    continue
+                }
+
+                views.setViewVisibility(slotId, View.VISIBLE)
+                views.setInt(slotId, "setBackgroundResource", background)
+
+                val action = actions[i]
+                when (action) {
+                    "unlock" -> {
+                        views.setViewVisibility(imgId, View.VISIBLE)
+                        views.setViewVisibility(coolingId, View.GONE)
+                        views.setViewVisibility(heatingId, View.GONE)
+                        views.setViewVisibility(ventId, View.GONE)
+                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_lock_open)
+                        views.setInt(imgId, "setColorFilter", iconColor)
+                        views.setFloat(imgId, "setAlpha", 1f)
+                        views.setContentDescription(slotId, if (locked == false) "解锁（当前已解锁）" else "解锁")
+                        views.setOnClickPendingIntent(slotId, click(context, "unlock"))
+                    }
+                    "lock" -> {
+                        views.setViewVisibility(imgId, View.VISIBLE)
+                        views.setViewVisibility(coolingId, View.GONE)
+                        views.setViewVisibility(heatingId, View.GONE)
+                        views.setViewVisibility(ventId, View.GONE)
+                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_lock)
+                        views.setInt(imgId, "setColorFilter", iconColor)
+                        views.setFloat(imgId, "setAlpha", 1f)
+                        views.setContentDescription(slotId, if (locked == true) "上锁（当前已上锁）" else "上锁")
+                        views.setOnClickPendingIntent(slotId, click(context, "lock"))
+                    }
+                    "sentry" -> {
+                        views.setViewVisibility(imgId, View.VISIBLE)
+                        views.setViewVisibility(coolingId, View.GONE)
+                        views.setViewVisibility(heatingId, View.GONE)
+                        views.setViewVisibility(ventId, View.GONE)
+                        val presentation = WidgetSentryMapper.presentation(sentryEnabled)
+                        views.setImageViewResource(imgId, R.drawable.ic_sentry)
+                        val sentryColor = if (presentation.showEnabledIcon) {
+                            ContextCompat.getColor(themeContext, R.color.energy_green)
+                        } else {
+                            iconColor
+                        }
+                        views.setInt(imgId, "setColorFilter", sentryColor)
+                        views.setFloat(imgId, "setAlpha", 1f)
+                        views.setContentDescription(slotId, presentation.contentDescription)
+                        views.setOnClickPendingIntent(slotId, click(context, presentation.command))
+                    }
+                    "ac" -> {
+                        val presentation = WidgetAcMapper.presentation(acEnabled, acTone)
+                        val showCooling = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.COOLING
+                        val showHeating = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.HEATING
+                        val showVent = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.VENTILATION
+                        val showOff = !presentation.showEnabledIcon
+
+                        views.setViewVisibility(imgId, if (showOff) View.VISIBLE else View.GONE)
+                        views.setViewVisibility(coolingId, if (showCooling) View.VISIBLE else View.GONE)
+                        views.setViewVisibility(heatingId, if (showHeating) View.VISIBLE else View.GONE)
+                        views.setViewVisibility(ventId, if (showVent) View.VISIBLE else View.GONE)
+
+                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_fan)
+                        views.setInt(imgId, "setColorFilter", iconColor)
+                        views.setFloat(imgId, "setAlpha", 1f)
+                        views.setContentDescription(slotId, presentation.contentDescription)
+                        val pendingIntent = presentation.command
+                            ?.let { command -> click(context, command) }
+                            ?: openAppPendingIntent(context)
+                        views.setOnClickPendingIntent(slotId, pendingIntent)
+                    }
+                    "trunk" -> {
+                        views.setViewVisibility(imgId, View.VISIBLE)
+                        views.setViewVisibility(coolingId, View.GONE)
+                        views.setViewVisibility(heatingId, View.GONE)
+                        views.setViewVisibility(ventId, View.GONE)
+                        val presentation = TrunkControlPresentationMapper.fromState(trunkState)
+                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_trunk_open)
+                        views.setInt(imgId, "setColorFilter", iconColor)
+                        views.setFloat(imgId, "setAlpha", if (trunkState == TrunkState.UNKNOWN) 0.65f else 1f)
+                        views.setContentDescription(slotId, presentation.contentDescription)
+                        views.setOnClickPendingIntent(
+                            slotId,
+                            presentation.command?.let { click(context, it) } ?: openAppPendingIntent(context)
+                        )
+                    }
+                    "frunk" -> {
+                        views.setViewVisibility(imgId, View.VISIBLE)
+                        views.setViewVisibility(coolingId, View.GONE)
+                        views.setViewVisibility(heatingId, View.GONE)
+                        views.setViewVisibility(ventId, View.GONE)
+                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_trunk_open)
+                        views.setInt(imgId, "setColorFilter", iconColor)
+                        views.setFloat(imgId, "setAlpha", 1f)
+                        views.setContentDescription(slotId, "开前备箱")
+                        views.setOnClickPendingIntent(slotId, click(context, "frunkOpen"))
+                    }
+                    "windowOpen" -> {
+                        views.setViewVisibility(imgId, View.VISIBLE)
+                        views.setViewVisibility(coolingId, View.GONE)
+                        views.setViewVisibility(heatingId, View.GONE)
+                        views.setViewVisibility(ventId, View.GONE)
+                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_wind)
+                        views.setInt(imgId, "setColorFilter", iconColor)
+                        views.setFloat(imgId, "setAlpha", 1f)
+                        views.setContentDescription(slotId, "车窗半开")
+                        views.setOnClickPendingIntent(slotId, click(context, "windowOpen"))
+                    }
+                    "windowVent" -> {
+                        views.setViewVisibility(imgId, View.VISIBLE)
+                        views.setViewVisibility(coolingId, View.GONE)
+                        views.setViewVisibility(heatingId, View.GONE)
+                        views.setViewVisibility(ventId, View.GONE)
+                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_wind)
+                        views.setInt(imgId, "setColorFilter", iconColor)
+                        views.setFloat(imgId, "setAlpha", 1f)
+                        views.setContentDescription(slotId, "车窗通风")
+                        views.setOnClickPendingIntent(slotId, click(context, "windowVent"))
+                    }
+                    "windowClose" -> {
+                        views.setViewVisibility(imgId, View.VISIBLE)
+                        views.setViewVisibility(coolingId, View.GONE)
+                        views.setViewVisibility(heatingId, View.GONE)
+                        views.setViewVisibility(ventId, View.GONE)
+                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_wind)
+                        views.setInt(imgId, "setColorFilter", iconColor)
+                        views.setFloat(imgId, "setAlpha", 1f)
+                        views.setContentDescription(slotId, "一键关窗")
+                        views.setOnClickPendingIntent(slotId, click(context, "windowClose"))
+                    }
+                    "sunshade" -> {
+                        views.setViewVisibility(imgId, View.VISIBLE)
+                        views.setViewVisibility(coolingId, View.GONE)
+                        views.setViewVisibility(heatingId, View.GONE)
+                        views.setViewVisibility(ventId, View.GONE)
+                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_sun)
+                        views.setInt(imgId, "setColorFilter", iconColor)
+                        views.setFloat(imgId, "setAlpha", 1f)
+                        views.setContentDescription(slotId, "遮阳帘")
+                        views.setOnClickPendingIntent(slotId, click(context, "sunshadeOpen"))
+                    }
+                    "horn" -> {
+                        views.setViewVisibility(imgId, View.VISIBLE)
+                        views.setViewVisibility(coolingId, View.GONE)
+                        views.setViewVisibility(heatingId, View.GONE)
+                        views.setViewVisibility(ventId, View.GONE)
+                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_bell_ringing)
+                        views.setInt(imgId, "setColorFilter", iconColor)
+                        views.setFloat(imgId, "setAlpha", 1f)
+                        views.setContentDescription(slotId, "鸣笛寻车")
+                        views.setOnClickPendingIntent(slotId, click(context, "horn"))
+                    }
+                    "batteryPreheat" -> {
+                        views.setViewVisibility(imgId, View.VISIBLE)
+                        views.setViewVisibility(coolingId, View.GONE)
+                        views.setViewVisibility(heatingId, View.GONE)
+                        views.setViewVisibility(ventId, View.GONE)
+                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_battery_charging)
+                        val preheatActive = preheatEnabled == true
+                        val preheatColor = if (preheatActive) {
+                            ContextCompat.getColor(themeContext, R.color.energy_green)
+                        } else {
+                            iconColor
+                        }
+                        views.setInt(imgId, "setColorFilter", preheatColor)
+                        views.setFloat(imgId, "setAlpha", 1f)
+                        views.setContentDescription(slotId, if (preheatActive) "电池预热（开启中）" else "电池预热")
+                        views.setOnClickPendingIntent(
+                            slotId,
+                            click(context, if (preheatActive) "batteryPreheatOff" else "batteryPreheat")
+                        )
+                    }
+                    else -> {
+                        views.setViewVisibility(slotId, View.GONE)
+                    }
+                }
+            }
         }
 
         private fun setWidgetStatusText(
@@ -565,6 +707,8 @@ class ControlWidget : AppWidgetProvider() {
             )
             views.setTextColor(R.id.txtWRange, color)
             views.setTextColor(R.id.txtWRangeUnit, color)
+            views.setTextViewText(R.id.txtWPureSoc, if (soc != null) "$progress%" else "--%")
+            views.setTextColor(R.id.txtWPureSoc, color)
         }
 
         private fun highContrastRangeColorResource(colorResource: Int, enabled: Boolean): Int {
@@ -717,15 +861,18 @@ class ControlWidget : AppWidgetProvider() {
             views.setTextColor(R.id.txtWUpdated, onSurfaceVariant)
             views.setTextColor(R.id.txtWRange, onSurface)
             views.setTextColor(R.id.txtWRangeUnit, onSurface)
+            views.setTextColor(R.id.txtWPureSoc, onSurface)
             views.setTextColor(R.id.txtWGeneralStatus, onSurfaceVariant)
-            listOf(R.id.btnWUnlock, R.id.btnWLock, R.id.imgWSentryOff, R.id.imgWAcOff, R.id.btnWTrunk).forEach { id ->
+            val slotIds = listOf(R.id.slotW1, R.id.slotW2, R.id.slotW3, R.id.slotW4, R.id.slotW5)
+            val imgIds = listOf(R.id.imgWSlot1, R.id.imgWSlot2, R.id.imgWSlot3, R.id.imgWSlot4, R.id.imgWSlot5)
+            imgIds.forEach { id ->
                 views.setInt(id, "setColorFilter", actionIcon)
             }
             val actionBackground = widgetActionBackgroundResource(
                 context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
                     Configuration.UI_MODE_NIGHT_YES
             )
-            listOf(R.id.btnWUnlock, R.id.btnWLock, R.id.btnWSentry, R.id.btnWAc, R.id.btnWTrunk).forEach { id ->
+            slotIds.forEach { id ->
                 views.setInt(id, "setBackgroundResource", actionBackground)
             }
             applyProgressAppearance(context, views, opacity == 25)

@@ -144,8 +144,8 @@ class CompactWidgetSpecTest {
         assertTrue(compactWidget.contains("ControlWidget.widgetThemeContext(context)"))
         assertTrue(compactWidget.contains("widget_compact_action_neutral_light"))
         assertTrue(compactWidget.contains("widget_compact_action_neutral_dark"))
-        assertTrue(wideWidget.contains("views.setInt(R.id.btnWTrunk, \"setColorFilter\", iconColor)"))
-        assertTrue(wideWidget.contains("views.setInt(R.id.btnWTrunk, \"setBackgroundResource\", background)"))
+        assertTrue(wideWidget.contains("views.setInt(id, \"setColorFilter\", actionIcon)"))
+        assertTrue(wideWidget.contains("views.setInt(id, \"setBackgroundResource\", actionBackground)"))
         assertTrue(compactWidget.contains("views.setInt(R.id.imgWCAcOff, \"setColorFilter\", actionColor)"))
     }
 

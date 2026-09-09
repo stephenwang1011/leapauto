@@ -1,5 +1,6 @@
 package com.leapauto.app
 
+import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -94,16 +95,60 @@ object VehicleHomeStatus {
     )
 
     /**
+     * 判断车辆是否处于已下电、已熄火或离车闭锁驻车状态：
+     * 1. 车辆处于闭锁状态（locked == true）说明车主已锁车离开；
+     * 2. BCM电源状态为OFF（bcmKeyPositionOn3 == 0 / false）；
+     * 3. 整车状态为非运行中（vehicleState in 0, 1, 3）；
+     * 4. 电子手刹/驻车制动已拉起（parkingBrakeState == 1）。
+     */
+    fun isVehicleShutDown(
+        bcmKeyPositionOn3: Any? = null,
+        vehicleState: Any? = null,
+        parkingBrakeState: Any? = null,
+        locked: Boolean? = null
+    ): Boolean {
+        if (locked == true) return true
+
+        if (bcmKeyPositionOn3 != null && bcmKeyPositionOn3 != JSONObject.NULL) {
+            val raw = bcmKeyPositionOn3.toString().trim()
+            if (raw == "0" || raw.equals("false", ignoreCase = true)) {
+                return true
+            }
+            if (raw == "1" || raw.equals("true", ignoreCase = true)) {
+                return false
+            }
+        }
+
+        if (vehicleState != null && vehicleState != JSONObject.NULL) {
+            val state = vehicleState.toString().trim().toIntOrNull()
+            if (state != null) {
+                if (state in setOf(0, 1, 3)) return true
+                if (state == 2) return false
+            }
+        }
+
+        if (parkingBrakeState != null && parkingBrakeState != JSONObject.NULL) {
+            val epb = parkingBrakeState.toString().trim()
+            if (epb == "1" || epb.equals("true", ignoreCase = true)) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    /**
      * 解析位置下方的详细行车挡位与速度状态：
      * - D挡：前进显示 "D挡 · 70km/h"，无速度显示 "D挡 · 0km/h"
      * - R挡：倒车显示 "R挡 · 4km/h"，无速度显示 "R挡 · 0km/h"
-     * - N挡：显示 "N挡"（不显示速度）
+     * - N挡：上电且空挡显示 "N挡"；已下电/熄火时显示 "已驻车"
      * - P挡：显示 "已驻车"（不显示速度）
      */
     fun resolveDetailedDrivingState(
         gearStatus: String?,
         speed: String?,
-        isDriving: Boolean? = null
+        isDriving: Boolean? = null,
+        isShutDown: Boolean = false
     ): DetailedDrivingState? {
         val speedValue = parseSpeed(speed)
         val speedText = if (speedValue != null && speedValue > 0.0) {
@@ -130,7 +175,7 @@ object VehicleHomeStatus {
                 isMoving = speedValue != null && speedValue > 0.0
             )
             "N" -> DetailedDrivingState(
-                label = "N挡",
+                label = if (isShutDown) "已驻车" else "N挡",
                 isMoving = false
             )
             "P" -> DetailedDrivingState(

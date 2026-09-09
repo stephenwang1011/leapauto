@@ -517,11 +517,11 @@ OTA：
 ## 13. 原始参考
 
 - [项目主页](https://github.com/cqrg/hack_lingpao_app)
-- [API_REFERENCE.md](https://github.com/cqrg/hack_lingpao_app/blob/main/API_REFERENCE.md)
-- [APP_PROTOCOL.md](https://github.com/cqrg/hack_lingpao_app/blob/main/APP_PROTOCOL.md)
-- [REVERSE_NOTES.md](https://github.com/cqrg/hack_lingpao_app/blob/main/REVERSE_NOTES.md)
-- [lingpao_client.py](https://github.com/cqrg/hack_lingpao_app/blob/main/lingpao_client.py)
-- 当前项目协议记录：[API.md](API.md)
+- [API_REFERENCE.md](API/hack_lingpao_app/API_REFERENCE.md)
+- [APP_PROTOCOL.md](API/hack_lingpao_app/APP_PROTOCOL.md)
+- [REVERSE_NOTES.md](API/hack_lingpao_app/REVERSE_NOTES.md)
+- [lingpao_client.py](API/hack_lingpao_app/lingpao_client.py)
+- 当前项目协议记录：[API.md](API/API.md)
 - 当前项目请求实现：[LeapmotorApi.kt](app/src/main/java/com/leapauto/app/LeapmotorApi.kt)
 
 ## 14. 2026-08-17 对 API_REFERENCE.md 的集成评审
@@ -535,7 +535,7 @@ OTA：
 | 外部参考内容 | 当前 LeapAuto 实现 | 结论 |
 | --- | --- | --- |
 | `appuser.leapmotor.cn`、`app-gw-global-master.leapmotor.com` | `LeapmotorApi.APP_USER_HOST`、`LeapmotorApi.GLOBAL_HOST` | 已使用 |
-| 手机验证码登录、RSA 手机号加密 | `loginWithSms()`、`Crypto.rsaEncryptPhone()` | 已使用；发送验证码实际路径以当前 `API.md` 和代码为准 |
+| 手机验证码登录、RSA 手机号加密 | `loginWithSms()`、`Crypto.rsaEncryptPhone()` | 已使用；发送验证码实际路径以当前 `API/API.md` 和代码为准 |
 | accessToken + `signParam.r2/r3` 派生 signKey | `extractNewAuth()`、`Crypto.deriveSignKey()` | 已使用 |
 | 新网关 Header、SHA-256 / HMAC-SHA256 签名 | `newGatewayHeaders()`、`gatewayFetch()` | 已使用 |
 | 网关 Token 续期 | `refreshGatewayToken()`，并保留旧 Token 续期回退 | 已使用 |

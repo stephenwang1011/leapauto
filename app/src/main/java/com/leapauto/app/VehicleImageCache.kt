@@ -82,15 +82,6 @@ object VehicleImageCache {
         if (meta == null) {
             val reason = if (diagnostics.isNotEmpty()) diagnostics.joinToString("\n\n") else "全部候选接口未返回车图"
             Log.w(TAG, "车图元数据获取失败:\n$reason")
-            ErrorLogs.repository.record(
-                ErrorLogEntry(
-                    timestampMs = System.currentTimeMillis(),
-                    category = ErrorLogCategory.API_FAILURE,
-                    stage = "vehicle_picture_meta",
-                    appVersion = BuildConfig.VERSION_NAME,
-                    message = reason.take(4000)
-                )
-            )
             return false
         }
 
@@ -125,16 +116,6 @@ object VehicleImageCache {
             if (response == null || !response.isSuccessful) {
                 val errorMsg = "CDN 下载失败: HTTP ${response?.code ?: "-"}"
                 Log.e(TAG, errorMsg)
-                ErrorLogs.repository.record(
-                    ErrorLogEntry(
-                        timestampMs = System.currentTimeMillis(),
-                        category = ErrorLogCategory.API_FAILURE,
-                        stage = "vehicle_picture_download",
-                        httpStatus = response?.code,
-                        appVersion = BuildConfig.VERSION_NAME,
-                        message = "$errorMsg ($url)"
-                    )
-                )
                 return false
             }
 
@@ -173,28 +154,10 @@ object VehicleImageCache {
                 }
             }
             Log.i(TAG, successMsg)
-            ErrorLogs.repository.record(
-                ErrorLogEntry(
-                    timestampMs = System.currentTimeMillis(),
-                    category = ErrorLogCategory.API_FAILURE, // 借用ErrorLogs管理展示
-                    stage = "vehicle_picture_success",
-                    appVersion = BuildConfig.VERSION_NAME,
-                    message = successMsg
-                )
-            )
             true
         } catch (e: Exception) {
             val err = "车图下载异常: ${e.message}"
             Log.e(TAG, err, e)
-            ErrorLogs.repository.record(
-                ErrorLogEntry(
-                    timestampMs = System.currentTimeMillis(),
-                    category = ErrorLogCategory.API_FAILURE,
-                    stage = "vehicle_picture_download",
-                    appVersion = BuildConfig.VERSION_NAME,
-                    message = err
-                )
-            )
             false
         }
     }
