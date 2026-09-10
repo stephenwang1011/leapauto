@@ -69,6 +69,50 @@ class EnergyHomeCardPolicyTest {
         assertEquals("--", EnergyHomeCardPolicy.todayMileage(energyData()))
     }
 
+    @Test
+    fun `calculateDynamicCardHeightDp accounts for bottom padding when remaining space is large`() {
+        // density = 3.0f, viewport = 800dp (2400px), topContent = 460dp (1380px),
+        // topPadding = 4dp (12px), spacing = 8dp (24px), bottomPadding = 12dp (36px)
+        val calculated = EnergyHomeCardPolicy.calculateDynamicCardHeightDp(
+            viewportHeightPx = 2400,
+            topContentHeightPx = 1380,
+            topPaddingPx = 12,
+            spacingPx = 24,
+            bottomPaddingPx = 36,
+            density = 3.0f
+        )
+        assertEquals(316.0f, calculated, 0.01f)
+    }
+
+    @Test
+    fun `calculateDynamicCardHeightDp clamps to minimum height when remaining space is small`() {
+        // density = 3.0f, viewport = 700dp (2100px), topContent = 520dp (1560px),
+        // topPadding = 4dp (12px), spacing = 8dp (24px), bottomPadding = 12dp (36px)
+        // remaining = 156dp < MIN_CARD_HEIGHT_DP (176dp)
+        val calculated = EnergyHomeCardPolicy.calculateDynamicCardHeightDp(
+            viewportHeightPx = 2100,
+            topContentHeightPx = 1560,
+            topPaddingPx = 12,
+            spacingPx = 24,
+            bottomPaddingPx = 36,
+            density = 3.0f
+        )
+        assertEquals(176.0f, calculated, 0.01f)
+    }
+
+    @Test
+    fun `calculateDynamicCardHeightDp returns default minimum when top content unmeasured`() {
+        val calculated = EnergyHomeCardPolicy.calculateDynamicCardHeightDp(
+            viewportHeightPx = 2400,
+            topContentHeightPx = 0,
+            topPaddingPx = 12,
+            spacingPx = 24,
+            bottomPaddingPx = 36,
+            density = 3.0f
+        )
+        assertEquals(176.0f, calculated, 0.01f)
+    }
+
     private fun energyData(
         trend: List<EnergySeriesPoint> = emptyList(),
         mileageTrend: List<EnergySeriesPoint> = emptyList()

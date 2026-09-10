@@ -149,6 +149,23 @@ data class EnergyAnalyticsData(
 /** Data limits used by the compact home energy pager. */
 object EnergyHomeCardPolicy {
     const val PAGE_COUNT = 4
+    const val MIN_CARD_HEIGHT_DP = 176
+    const val BOTTOM_PADDING_DP = 12
+
+    fun calculateDynamicCardHeightDp(
+        viewportHeightPx: Int,
+        topContentHeightPx: Int,
+        topPaddingPx: Int,
+        spacingPx: Int,
+        bottomPaddingPx: Int,
+        density: Float,
+        minHeightDp: Int = MIN_CARD_HEIGHT_DP
+    ): Float {
+        if (topContentHeightPx <= 0 || density <= 0f) return minHeightDp.toFloat()
+        val remainingPx = viewportHeightPx - topContentHeightPx - topPaddingPx - spacingPx - bottomPaddingPx
+        val remainingDp = remainingPx / density
+        return maxOf(minHeightDp.toFloat(), remainingDp)
+    }
 
     fun todayMileage(data: EnergyAnalyticsData?): String {
         if (data == null || data.mileageTrend.isEmpty()) return "--"

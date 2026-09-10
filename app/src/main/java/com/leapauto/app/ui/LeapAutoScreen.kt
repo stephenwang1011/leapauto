@@ -342,6 +342,7 @@ fun LeapAutoScreen(
     var showVehicleLocation by rememberSaveable { mutableStateOf(false) }
     var showClimateControl by rememberSaveable { mutableStateOf(false) }
     var showHealthyChargingSheet by rememberSaveable { mutableStateOf(false) }
+    var showVehicleHealthCheckSheet by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirmationDialog by rememberSaveable { mutableStateOf(false) }
 
     val destination = when {
@@ -535,6 +536,22 @@ fun LeapAutoScreen(
             },
             onControl = onControl,
             onRefreshStatus = onRefresh
+        )
+    }
+
+    if (showVehicleHealthCheckSheet) {
+        val context = LocalContext.current
+        val remoteBitmap = remember(vehicleVin, vehicleImageVersion) {
+            if (vehicleVin.isNotBlank()) VehicleImageCache.loadCachedBitmap(context, vehicleVin) else null
+        }
+        VehicleHealthCheckBottomSheet(
+            status = status,
+            vehicleAppearance = vehicleAppearance,
+            vehicleNickname = vehicleConfig.nickname.ifBlank { vehicleDisplayModel },
+            remoteBitmap = remoteBitmap,
+            onControl = onControl,
+            onRefreshStatus = onRefresh,
+            onDismissRequest = { showVehicleHealthCheckSheet = false }
         )
     }
 
@@ -747,7 +764,10 @@ fun LeapAutoScreen(
                     },
                     vehicleImageVersion = vehicleImageVersion,
                     availableVehicles = availableVehicles,
-                    onSwitchVehicle = onSwitchVehicle
+                    onSwitchVehicle = onSwitchVehicle,
+                    onOpenHealthCheck = {
+                        showVehicleHealthCheckSheet = true
+                    }
                 )
                 ScreenDestination.LOCATION_DETAIL -> VehicleLocationDetailContent(
                     summary = status?.locationSummary,
@@ -1022,7 +1042,8 @@ private fun HomeContent(
     onOpenAccount: () -> Unit,
     vehicleImageVersion: Int = 0,
     availableVehicles: List<Vehicle> = emptyList(),
-    onSwitchVehicle: (String) -> Unit = {}
+    onSwitchVehicle: (String) -> Unit = {},
+    onOpenHealthCheck: () -> Unit = {}
 ) {
     var showAddressNavigationDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -1038,25 +1059,26 @@ private fun HomeContent(
             val viewportHeight = maxHeight
             val density = LocalDensity.current
             var topContentHeightPx by remember { mutableIntStateOf(0) }
-            val minCardHeight = 184.dp
+            val minCardHeight = EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP.dp
+            val bottomPadding = EnergyHomeCardPolicy.BOTTOM_PADDING_DP.dp
             val dynamicCardHeight = remember(topContentHeightPx, viewportHeight) {
-                if (topContentHeightPx > 0) {
-                    val topPaddingPx = with(density) { 4.dp.roundToPx() }
-                    val spacingPx = with(density) { 8.dp.roundToPx() }
-                    val remainingPx = with(density) { viewportHeight.roundToPx() } -
-                        topContentHeightPx - topPaddingPx - spacingPx
-                    val remainingDp = with(density) { remainingPx.toDp() }
-                    maxOf(minCardHeight, remainingDp)
-                } else {
-                    minCardHeight
-                }
+                val heightDp = EnergyHomeCardPolicy.calculateDynamicCardHeightDp(
+                    viewportHeightPx = with(density) { viewportHeight.roundToPx() },
+                    topContentHeightPx = topContentHeightPx,
+                    topPaddingPx = with(density) { 4.dp.roundToPx() },
+                    spacingPx = with(density) { 8.dp.roundToPx() },
+                    bottomPaddingPx = with(density) { bottomPadding.roundToPx() },
+                    density = density.density,
+                    minHeightDp = EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP
+                )
+                heightDp.dp
             }
 
             Column(
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(start = 12.dp, top = 4.dp, end = 12.dp, bottom = 0.dp),
+                    .padding(start = 12.dp, top = 4.dp, end = 12.dp, bottom = bottomPadding),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Column(
@@ -1083,7 +1105,8 @@ private fun HomeContent(
                         onControl = onControl,
                         onOpenHealthyCharging = onOpenHealthyCharging,
                         availableVehicles = availableVehicles,
-                        onSwitchVehicle = onSwitchVehicle
+                        onSwitchVehicle = onSwitchVehicle,
+                        onOpenHealthCheck = onOpenHealthCheck
                     )
                     Row(
                         Modifier.fillMaxWidth(),
@@ -2525,7 +2548,8 @@ fun VehicleHero(
     onControl: ((String) -> Unit)? = null,
     onOpenHealthyCharging: () -> Unit = {},
     availableVehicles: List<Vehicle> = emptyList(),
-    onSwitchVehicle: (String) -> Unit = {}
+    onSwitchVehicle: (String) -> Unit = {},
+    onOpenHealthCheck: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val remoteBitmap = remember(vehicleVin, vehicleImageVersion) {
@@ -2916,7 +2940,9 @@ fun VehicleHero(
                 modifier = Modifier
                     .fillMaxWidth()
                     .offset(y = (-8).dp)
-                    .height(130.dp),
+                    .height(130.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable(onClick = onOpenHealthCheck),
                 contentAlignment = Alignment.Center
             ) {
                 if (remoteBitmap != null) {
@@ -4937,7 +4963,7 @@ fun EnergyHomePagerCard(
 ) {
     val pagerState = rememberPagerState(initialPage = EnergyHomePage.RECENT_MILEAGE.ordinal) { EnergyHomePage.entries.size }
     Surface(
-        modifier = modifier.heightIn(min = 184.dp),
+        modifier = modifier.heightIn(min = EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP.dp),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
