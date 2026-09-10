@@ -58,10 +58,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -69,6 +72,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.abs
+import kotlin.math.sin
 import com.leapauto.app.HealthCheckItem
 import com.leapauto.app.HealthCheckLevel
 import com.leapauto.app.HealthSystemReport
@@ -164,33 +169,19 @@ fun VehicleHealthCheckBottomSheet(
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                Surface(
-                    shape = RoundedCornerShape(percent = 50),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.40f)),
-                    modifier = Modifier.clickable {
+                IconButton(
+                    onClick = {
                         onRefreshStatus()
                         scanKey++
-                    }
+                    },
+                    modifier = Modifier.size(36.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_phosphor_arrow_clockwise),
-                            contentDescription = "重新体检",
-                            modifier = Modifier.size(13.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = if (isScanning) "扫描中…" else "重新体检",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    Icon(
+                        painter = painterResource(R.drawable.ic_phosphor_arrow_clockwise),
+                        contentDescription = "重新体检",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
 
@@ -237,14 +228,14 @@ fun VehicleHealthCheckBottomSheet(
                             )
                         }
 
-                        // 激光雷达扫描波动态渲染
+                        // 方案 1: 1.0dp 超细晶锐激光 + 双端全息测距光标 + 粒子脉冲尾迹
                         if (isScanning) {
                             val infiniteTransition = rememberInfiniteTransition(label = "laserScan")
                             val sweepFraction by infiniteTransition.animateFloat(
-                                initialValue = 0f,
-                                targetValue = 1f,
+                                initialValue = -0.06f,
+                                targetValue = 1.06f,
                                 animationSpec = infiniteRepeatable(
-                                    animation = tween(1200, easing = LinearEasing),
+                                    animation = tween(1350, easing = LinearEasing),
                                     repeatMode = RepeatMode.Restart
                                 ),
                                 label = "sweep"
@@ -255,29 +246,109 @@ fun VehicleHealthCheckBottomSheet(
                                 val h = size.height
                                 val laserX = w * sweepFraction
 
-                                // 扫描光柱与尾晕
-                                drawRect(
-                                    brush = Brush.horizontalGradient(
+                                // 1. 微透光晕翼（中心聚焦车身，超薄 20dp 范围）
+                                val glowRadius = (h * 0.40f).coerceAtLeast(18.dp.toPx())
+                                drawOval(
+                                    brush = Brush.radialGradient(
                                         colors = listOf(
-                                            Color.Transparent,
+                                            Color.White.copy(alpha = 0.35f),
                                             LeapBlue.copy(alpha = 0.20f),
-                                            LeapBlue.copy(alpha = 0.85f),
-                                            Color.White
+                                            LeapBlue.copy(alpha = 0.04f),
+                                            Color.Transparent
                                         ),
-                                        startX = (laserX - 60f).coerceAtLeast(0f),
-                                        endX = laserX
+                                        center = Offset(laserX, h * 0.5f),
+                                        radius = glowRadius
                                     ),
-                                    topLeft = Offset((laserX - 60f).coerceAtLeast(0f), 0f),
-                                    size = androidx.compose.ui.geometry.Size(60f, h)
+                                    topLeft = Offset(laserX - 10.dp.toPx(), 0f),
+                                    size = androidx.compose.ui.geometry.Size(20.dp.toPx(), h)
                                 )
 
-                                // 激光竖线
+                                // 2. 伴生微光柔边 (2.5 dp 柔和淡蓝光晕)
                                 drawLine(
-                                    color = Color.White,
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.Transparent,
+                                            LeapBlue.copy(alpha = 0.35f),
+                                            LeapBlue.copy(alpha = 0.60f),
+                                            LeapBlue.copy(alpha = 0.35f),
+                                            Color.Transparent
+                                        ),
+                                        startY = 0f,
+                                        endY = h
+                                    ),
                                     start = Offset(laserX, 0f),
                                     end = Offset(laserX, h),
-                                    strokeWidth = 2.dp.toPx()
+                                    strokeWidth = 2.5.dp.toPx()
                                 )
+
+                                // 3. 1.0 dp 晶锐核心白激光刃（纵向两端柔和羽化）
+                                drawLine(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.Transparent,
+                                            Color.White.copy(alpha = 0.85f),
+                                            Color.White,
+                                            Color.White.copy(alpha = 0.85f),
+                                            Color.Transparent
+                                        ),
+                                        startY = 0f,
+                                        endY = h
+                                    ),
+                                    start = Offset(laserX, 0f),
+                                    end = Offset(laserX, h),
+                                    strokeWidth = 1.dp.toPx()
+                                )
+
+                                // 4. 双端全息测距光标（顶底两端菱形雷达跟踪标）
+                                val markerPositions = listOf(h * 0.12f, h * 0.88f)
+                                val markerRadius = 3.5.dp.toPx()
+                                for (markerY in markerPositions) {
+                                    val diamondPath = Path().apply {
+                                        moveTo(laserX, markerY - markerRadius)
+                                        lineTo(laserX + markerRadius, markerY)
+                                        lineTo(laserX, markerY + markerRadius)
+                                        lineTo(laserX - markerRadius, markerY)
+                                        close()
+                                    }
+                                    drawPath(
+                                        path = diamondPath,
+                                        color = Color.White.copy(alpha = 0.85f),
+                                        style = Stroke(width = 1.dp.toPx())
+                                    )
+                                    drawCircle(
+                                        color = LeapBlue,
+                                        radius = 1.2.dp.toPx(),
+                                        center = Offset(laserX, markerY)
+                                    )
+                                }
+
+                                // 5. 微粒子雷达拖尾（激光扫过产生的点云消散感）
+                                val particles = listOf(
+                                    Triple(-6f, 0.35f, 1.8f),
+                                    Triple(-13f, 0.48f, 2.2f),
+                                    Triple(-21f, 0.42f, 1.5f),
+                                    Triple(-9f, 0.60f, 2.0f),
+                                    Triple(-18f, 0.54f, 1.6f),
+                                    Triple(-28f, 0.46f, 1.3f),
+                                    Triple(-7f, 0.68f, 1.7f),
+                                    Triple(-15f, 0.30f, 1.4f)
+                                )
+                                for ((dxDp, yRatio, rDp) in particles) {
+                                    val px = laserX + dxDp.dp.toPx()
+                                    if (px < 0f || px > w) continue
+                                    val py = h * yRatio + sin((sweepFraction * 8f + yRatio * 12f)) * 2.5.dp.toPx()
+                                    val alpha = (1f - (abs(dxDp) / 32f)).coerceIn(0f, 1f) * 0.70f
+                                    drawCircle(
+                                        color = LeapBlue.copy(alpha = alpha),
+                                        radius = rDp.dp.toPx(),
+                                        center = Offset(px, py)
+                                    )
+                                    drawCircle(
+                                        color = Color.White.copy(alpha = alpha * 0.75f),
+                                        radius = (rDp * 0.5f).dp.toPx(),
+                                        center = Offset(px, py)
+                                    )
+                                }
                             }
                         }
                     }
@@ -427,7 +498,9 @@ private fun HealthSystemCard(
     system: HealthSystemReport,
     isScanning: Boolean
 ) {
-    var expanded by remember { mutableStateOf(true) }
+    var expanded by remember(system.name, system.level) {
+        mutableStateOf(system.defaultExpanded)
+    }
     val levelColor = when (system.level) {
         HealthCheckLevel.GOOD -> MaterialTheme.statusGood
         HealthCheckLevel.WARNING -> MaterialTheme.statusWarn
@@ -493,40 +566,69 @@ private fun HealthSystemCard(
                         contentDescription = if (expanded) "收起" else "展开",
                         modifier = Modifier
                             .size(14.dp)
-                            .then(if (expanded) Modifier.clip(CircleShape) else Modifier),
+                            .rotate(if (expanded) 90f else 0f),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
             // 展开的检测细项
-            if (expanded && !isScanning) {
+            AnimatedVisibility(visible = expanded && !isScanning) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 26.dp),
+                        .padding(top = 2.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     system.items.forEach { item ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        val itemColor = when (item.level) {
+                            HealthCheckLevel.GOOD -> MaterialTheme.statusGood
+                            HealthCheckLevel.WARNING -> MaterialTheme.statusWarn
+                            HealthCheckLevel.CRITICAL -> MaterialTheme.colorScheme.error
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = item.title,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = item.detail,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (item.level != HealthCheckLevel.GOOD) levelColor else MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.End,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.weight(0.44f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(5.dp)
+                                            .clip(CircleShape)
+                                            .background(itemColor)
+                                    )
+                                    Text(
+                                        text = item.title,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Text(
+                                    text = item.detail,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = if (item.level != HealthCheckLevel.GOOD) itemColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.End,
+                                    modifier = Modifier.weight(0.56f),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }

@@ -2,8 +2,11 @@ package com.leapauto.app.ui
 
 import android.content.Context
 import android.graphics.Paint
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
@@ -278,6 +281,7 @@ fun LeapAutoScreen(
     hvacCapability: HvacCapability = HvacCapability.fallback(),
     pinSaved: Boolean,
     pinSetupInProgress: Boolean,
+    pinSetupErrorMessage: String = "",
     showVehicleConfigConfirmationPrompt: Boolean,
     widgetOpacity: Int,
     widgetSensitiveActionVerificationEnabled: Boolean,
@@ -336,7 +340,9 @@ fun LeapAutoScreen(
     onControl: (String) -> Unit,
     onApplyClimateSettings: (AirConditioningCommand) -> Unit = {},
     onDismissControlFeedback: () -> Unit,
-    onQuickAc: (Int, Long) -> Unit = { _, _ -> }
+    onQuickAc: (Int, Long) -> Unit = { _, _ -> },
+    onSelectCustomVehicleImage: (Uri) -> Unit = {},
+    onResetCustomVehicleImage: () -> Unit = {}
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
     var showVehicleLocation by rememberSaveable { mutableStateOf(false) }
@@ -410,20 +416,54 @@ fun LeapAutoScreen(
 
     if (loggedIn && pinSetupInProgress && !showSessionExpiredDialog) {
         AlertDialog(
-            onDismissRequest = {},
-            title = { Text("设置操控密码") },
+            onDismissRequest = onCancelPinSetup,
+            title = {
+                Text(
+                    text = if (pinSetupErrorMessage.isNotBlank()) "更新操控密码" else "设置操控密码",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "请输入零跑APP上您设置过的4位操控密码。保存后用于远程控车指令鉴权。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (pinSetupErrorMessage.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
+                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_phosphor_warning),
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    pinSetupErrorMessage,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            "请输入零跑APP上您设置过的4位操控密码。保存后用于远程控车指令鉴权。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     OutlinedTextField(
                         value = pin,
                         onValueChange = onPinChange,
                         label = { Text("4 位数字密码") },
-                        placeholder = { Text("请输入控车密码") },
+                        placeholder = { Text("请输入4位数字控车密码") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
@@ -435,10 +475,10 @@ fun LeapAutoScreen(
                 TextButton(
                     enabled = pin.matches(Regex("\\d{4}")),
                     onClick = onSavePin
-                ) { Text("保存密码") }
+                ) { Text("确定") }
             },
             dismissButton = {
-                TextButton(onClick = onCancelPinSetup) { Text("取消设置") }
+                TextButton(onClick = onCancelPinSetup) { Text("取消") }
             }
         )
     }
@@ -813,6 +853,9 @@ fun LeapAutoScreen(
                     availableVehicles = availableVehicles,
                     onSwitchVehicle = onSwitchVehicle,
                     vehicleVin = vehicleVin,
+                    vehicleImageVersion = vehicleImageVersion,
+                    onSelectCustomVehicleImage = onSelectCustomVehicleImage,
+                    onResetCustomVehicleImage = onResetCustomVehicleImage,
                     onLogout = onLogout
                 )
             }
@@ -1257,6 +1300,9 @@ private fun MyContent(
     availableVehicles: List<Vehicle> = emptyList(),
     onSwitchVehicle: (String) -> Unit = {},
     vehicleVin: String = "",
+    vehicleImageVersion: Int = 0,
+    onSelectCustomVehicleImage: (Uri) -> Unit = {},
+    onResetCustomVehicleImage: () -> Unit = {},
     onLogout: () -> Unit = {}
 ) {
     var showDiagnosticLogDialog by rememberSaveable { mutableStateOf(false) }
@@ -1269,15 +1315,6 @@ private fun MyContent(
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        PinCard(
-            pinSaved = pinSaved,
-            pin = pin,
-            onPinChange = onPinChange,
-            onSavePin = onSavePin,
-            initialSetupInProgress = pinSetupInProgress,
-            onCancelInitialSetup = onCancelPinSetup
-        )
-
         if (availableVehicles.size > 1) {
             Surface(
                 modifier = Modifier
@@ -1331,6 +1368,13 @@ private fun MyContent(
         }
 
         VehicleConfigCard(vehicleModel, vehicleConfig, onSaveVehicleConfig)
+
+        VehicleCustomImageCard(
+            vehicleVin = vehicleVin,
+            vehicleImageVersion = vehicleImageVersion,
+            onSelectImageUri = onSelectCustomVehicleImage,
+            onResetToDefault = onResetCustomVehicleImage
+        )
 
         AppearanceModeCard(appearanceMode, onAppearanceModeChange)
         WidgetOpacityCard(widgetOpacity, onWidgetOpacityChange)
@@ -2004,6 +2048,296 @@ private fun DiagnosticLogDialog(onDismiss: () -> Unit) {
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("关闭") }
+        }
+    )
+}
+
+@Composable
+private fun VehicleCustomImageCard(
+    vehicleVin: String,
+    vehicleImageVersion: Int,
+    onSelectImageUri: (Uri) -> Unit,
+    onResetToDefault: () -> Unit
+) {
+    val context = LocalContext.current
+    val hasCustomImage = remember(vehicleVin, vehicleImageVersion) {
+        if (vehicleVin.isNotBlank()) VehicleImageCache.hasCustomImage(context, vehicleVin) else false
+    }
+    var showResetConfirmDialog by remember { mutableStateOf(false) }
+    var showGuideDialog by remember { mutableStateOf(false) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            onSelectImageUri(uri)
+        }
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.glassSurface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = glassCardBorder(),
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // 第一行：标题 + 右侧无轮廓文字操作按钮
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "爱车主图定制",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (hasCustomImage) {
+                        TextButton(
+                            onClick = { showResetConfirmDialog = true },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                "恢复官图",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    TextButton(
+                        onClick = { imagePickerLauncher.launch("image/*") },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = if (hasCustomImage) "更换图片" else "相册选择",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            // 第二行：当前状态标签 + 快速指南胶囊
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = if (hasCustomImage) {
+                        MaterialTheme.statusGood.copy(alpha = 0.12f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    },
+                    border = BorderStroke(
+                        0.5.dp,
+                        if (hasCustomImage) MaterialTheme.statusGood.copy(alpha = 0.35f)
+                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    )
+                ) {
+                    Text(
+                        text = if (hasCustomImage) "已应用自定义主图" else "当前：官方 3D 渲染图",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = if (hasCustomImage) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { showGuideDialog = true },
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_phosphor_info_circle),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            "AI 生图指南",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showResetConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirmDialog = false },
+            title = { Text("恢复官方车模") },
+            text = { Text("确定要清除当前自定义主图，恢复为官方提供的标准车模渲染图吗？") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showResetConfirmDialog = false
+                        onResetToDefault()
+                    }
+                ) {
+                    Text("恢复")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirmDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (showGuideDialog) {
+        VehicleCustomImageGuideDialog(onDismiss = { showGuideDialog = false })
+    }
+}
+
+@Composable
+private fun VehicleCustomImageGuideDialog(
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val universalPromptCn = "一艘宏伟的现代化航空母舰/东风导弹发射车/超级跑车（可替换您想生成的任意物品），主体朝向侧前方45度角（3/4侧透视视角），完整位于画面正中央，四周留出15%安全留白，无任何局部被裁切。影棚商业级布光，金属质感细腻，反光真实，细节极其丰富。背景必须为纯白单一纯色实心背景，无渐变、无阴影、无多余杂物、无地平线、无倒影。图片尺寸：1200 × 522 像素，宽高比 2.3:1。"
+
+    val highlightColor = MaterialTheme.colorScheme.primary
+    val promptAnnotated = remember(highlightColor) {
+        buildAnnotatedString {
+            append("一艘宏伟的现代化航空母舰/东风导弹发射车/超级跑车")
+            withStyle(
+                SpanStyle(
+                    color = highlightColor,
+                    fontWeight = FontWeight.Bold,
+                    background = highlightColor.copy(alpha = 0.12f)
+                )
+            ) {
+                append("（可替换您想生成的任意物品）")
+            }
+            append("，主体朝向侧前方45度角（3/4侧透视视角），完整位于画面正中央，四周留出15%安全留白，无任何局部被裁切。影棚商业级布光，金属质感细腻，反光真实，细节极其丰富。背景必须为纯白单一纯色实心背景，无渐变、无阴影、无多余杂物、无地平线、无倒影。图片尺寸：1200 × 522 像素，宽高比 2.3:1。")
+        }
+    }
+
+    fun copyText(text: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+        clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("ai_prompt", text))
+        Toast.makeText(context, "提示词已复制到剪贴板", Toast.LENGTH_SHORT).show()
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_phosphor_info_circle),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Text(
+                    "AI 生图与抠图指南",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // 通用提示词卡片
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "AI 提示词（侧前方 45 度透视）",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = promptAnnotated,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp, lineHeight = 16.sp),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(
+                                    onClick = { copyText(universalPromptCn) },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_phosphor_copy),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("复制提示词", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 手机相册 1 秒抠图出图流程
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "手机相册 1 秒抠图出图流程",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "1. 发送上方提示词给 AI，生成纯白底图片并保存到手机相册（纯白底避免 AI 画出假棋盘格，抠图边缘最平滑）\n" +
+                        "2. 在手机自带相册打开图片，手指长按主体 1 秒（小米澎湃/华为鸿蒙/vivo/OPPO/iPhone 均支持系统级长按抠图发光）\n" +
+                        "3. 弹出菜单点击「存储为图像 / 拷贝」，存为真正的无损透明 PNG\n" +
+                        "4. 回到 App 点击「相册选择」上传即可！系统将自动紧凑裁切与合成接地柔光暗影",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp, lineHeight = 17.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("知道了")
+            }
         }
     )
 }
@@ -4590,9 +4924,7 @@ fun VehicleStatusCell(
 }
 
 private fun batteryPercentage(status: VehicleStatus?): String =
-    VehicleStatusMapper.displayPreciseSoc(status?.soc)
-        ?: VehicleStatusMapper.displayPreciseSoc(status?.preciseSoc)
-        ?: "--"
+    VehicleHomeStatus.resolvedSocLabel(status?.preciseSoc, status?.soc)
 
 fun chargeProgress(soc: String?): Float = VehicleStatusMapper.socFraction(soc)
 

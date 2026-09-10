@@ -35,9 +35,9 @@ object VehicleHomeStatus {
     fun windowSummary(available: Boolean, openWindows: List<String>): String =
         if (windowWarningVisible(available, openWindows)) "车窗未关闭" else ""
 
-    /** 1204/soc is the confirmed source; retain 100003 as a compatibility fallback. */
+    /** preciseSoc (100003) is preferred for high-precision battery percentage; retain 1204/soc as fallback. */
     fun resolvedSoc(preciseSoc: String?, soc: String?): String? =
-        listOf(soc, preciseSoc).firstOrNull { VehicleStatusMapper.displayPreciseSoc(it) != null }
+        listOf(preciseSoc, soc).firstOrNull { VehicleStatusMapper.displayPreciseSoc(it) != null }
 
     fun resolvedSocLabel(preciseSoc: String?, soc: String?): String =
         resolvedSoc(preciseSoc, soc)?.let { VehicleStatusMapper.displayPreciseSoc(it) } ?: "--"

@@ -318,12 +318,12 @@ class VehicleStatusMapperTest {
     }
 
     @Test
-    fun `confirmed electric and fuel percentages use 1204 and 3235`() {
+    fun `confirmed electric and fuel percentages prefer precise signal when available`() {
         val values = SignalTable.decode(
             org.json.JSONObject("""{"1204":76.6,"100003":99.9,"3235":12.8}""")
         )
 
-        assertEquals(77, VehicleStatusMapper.electricSocPercent(values))
+        assertEquals(100, VehicleStatusMapper.electricSocPercent(values))
         assertEquals(13, VehicleStatusMapper.fuelSocPercent(values))
     }
 

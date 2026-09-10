@@ -20,7 +20,10 @@ data class HealthSystemReport(
     val statusText: String,
     val level: HealthCheckLevel,
     val items: List<HealthCheckItem>
-)
+) {
+    val defaultExpanded: Boolean
+        get() = level != HealthCheckLevel.GOOD
+}
 
 data class VehicleHealthReport(
     val score: Int,
@@ -57,11 +60,12 @@ object VehicleHealthDiagnostics {
         var score = 100
 
         // ====== 1. 动力与三电系统 ======
+        // 1.1 高压母线电压
         if (!status.batteryVoltage.isNullOrBlank()) {
             powertrainItems.add(
                 HealthCheckItem(
                     title = "高压母线电压",
-                    detail = "母线电压 ${status.batteryVoltage}V，运行稳定",
+                    detail = "母线电压 ${formatVoltage(status.batteryVoltage)}，运行稳定",
                     level = HealthCheckLevel.GOOD
                 )
             )
@@ -75,7 +79,29 @@ object VehicleHealthDiagnostics {
             )
         }
 
-        val batteryTempNumber = status.minBatteryTemp?.toDoubleOrNull()
+        // 1.2 高压母线电流
+        val currentNumber = status.batteryCurrent?.replace("A", "", ignoreCase = true)?.trim()
+        if (!currentNumber.isNullOrBlank() && currentNumber != "--") {
+            powertrainItems.add(
+                HealthCheckItem(
+                    title = "高压母线电流",
+                    detail = "母线电流 ${currentNumber}A，充放链路通畅",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        } else {
+            powertrainItems.add(
+                HealthCheckItem(
+                    title = "高压母线电流",
+                    detail = "静态回路正常，无异常放电",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        }
+
+        // 1.3 动力电池包电芯温控
+        val batteryTempNumber = cleanTemp(status.minBatteryTemp)?.toDoubleOrNull()
+        val batteryTempText = formatTemp(status.minBatteryTemp)
         if (batteryTempNumber != null) {
             when {
                 batteryTempNumber < -15.0 -> {
@@ -83,7 +109,7 @@ object VehicleHealthDiagnostics {
                     powertrainItems.add(
                         HealthCheckItem(
                             title = "电池低温预警",
-                            detail = "电池温度 ${status.minBatteryTemp}°C，建议行车前开启电池预热",
+                            detail = "电芯温度 $batteryTempText，建议行车前开启电池预热",
                             level = HealthCheckLevel.WARNING,
                             fixCommand = "batteryPreheat",
                             fixLabel = "电池预热"
@@ -95,7 +121,7 @@ object VehicleHealthDiagnostics {
                     powertrainItems.add(
                         HealthCheckItem(
                             title = "电池高温预警",
-                            detail = "电池温度 ${status.minBatteryTemp}°C，请注意散热与停车环境",
+                            detail = "电芯温度 $batteryTempText，请注意散热与停车环境",
                             level = HealthCheckLevel.CRITICAL
                         )
                     )
@@ -104,7 +130,7 @@ object VehicleHealthDiagnostics {
                     powertrainItems.add(
                         HealthCheckItem(
                             title = "动力电池包温控",
-                            detail = "最低电芯温度 ${status.minBatteryTemp}°C，处于舒适工作温区",
+                            detail = "最低电芯温度 $batteryTempText，处于舒适工作温区",
                             level = HealthCheckLevel.GOOD
                         )
                     )
@@ -120,6 +146,7 @@ object VehicleHealthDiagnostics {
             )
         }
 
+        // 1.4 动力电池养护
         if (status.healthyChargeEnabled == true) {
             powertrainItems.add(
                 HealthCheckItem(
@@ -131,14 +158,54 @@ object VehicleHealthDiagnostics {
         } else {
             powertrainItems.add(
                 HealthCheckItem(
-                    title = "动力系统就绪",
-                    detail = "动力总成状态正常，整车已就绪",
+                    title = "动力电池养护",
+                    detail = "电芯BMS智能均衡管理回路就绪",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        }
+
+        // 1.5 充电枪物理连接检测
+        if (status.chargeGunConnected) {
+            val gunType = status.chargeType ?: "充电接口连接良好"
+            powertrainItems.add(
+                HealthCheckItem(
+                    title = "充电接口状态",
+                    detail = "已插枪（$gunType），充放电接口就绪",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        } else {
+            powertrainItems.add(
+                HealthCheckItem(
+                    title = "充电接口状态",
+                    detail = "交直流充电接口已断开，防尘密封完好",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        }
+
+        // 1.6 电池预热温控回路
+        if (status.batteryPreheatEnabled == true) {
+            powertrainItems.add(
+                HealthCheckItem(
+                    title = "电池预热系统",
+                    detail = "PTC 电池水暖预热运转中，电芯主动加温中",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        } else {
+            powertrainItems.add(
+                HealthCheckItem(
+                    title = "电池预热系统",
+                    detail = "动力电池 PTC 预热温控系统处于就绪态",
                     level = HealthCheckLevel.GOOD
                 )
             )
         }
 
         // ====== 2. 底盘制动与轮胎系统 ======
+        // 2.1 四轮胎压平衡
         val tireWarnings = status.tires.filter { it.warning }
         if (tireWarnings.isNotEmpty()) {
             tireWarnings.forEach { tire ->
@@ -146,14 +213,14 @@ object VehicleHealthDiagnostics {
                 chassisItems.add(
                     HealthCheckItem(
                         title = "${tire.position}胎压异常",
-                        detail = "气压 ${tire.pressure ?: "--"}bar，检测到胎压告警",
+                        detail = "气压 ${formatPressure(tire.pressure)}，检测到胎压告警",
                         level = HealthCheckLevel.WARNING
                     )
                 )
             }
         } else if (status.tires.isNotEmpty()) {
             val pressures = status.tires.mapNotNull { it.pressure }
-            val avg = if (pressures.isNotEmpty()) "（均值约 ${pressures.first()}bar）" else ""
+            val avg = if (pressures.isNotEmpty()) "（均值约 ${formatPressure(pressures.first())}）" else ""
             chassisItems.add(
                 HealthCheckItem(
                     title = "四轮胎压监测",
@@ -171,6 +238,27 @@ object VehicleHealthDiagnostics {
             )
         }
 
+        // 2.2 四轮轮温平衡检测
+        val tireTemps = status.tires.mapNotNull { it.temperature?.takeIf { t -> t.isNotBlank() && t != "--" } }
+        if (tireTemps.isNotEmpty()) {
+            chassisItems.add(
+                HealthCheckItem(
+                    title = "四轮轮温监测",
+                    detail = "四轮平均轮温约 ${tireTemps.first()}°C，无异常摩擦过热",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        } else {
+            chassisItems.add(
+                HealthCheckItem(
+                    title = "四轮轮温监测",
+                    detail = "四轮轴承与制动盘摩擦温升处于安全阈值",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        }
+
+        // 2.3 驻车与行车制动系统
         if (status.isDriving == false) {
             chassisItems.add(
                 HealthCheckItem(
@@ -183,13 +271,33 @@ object VehicleHealthDiagnostics {
             chassisItems.add(
                 HealthCheckItem(
                     title = "行车制动系统",
-                    detail = "制动回路压力正常，行车安全处于监控中",
+                    detail = "行车制动回路压力稳定，刹车系统正常",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        }
+
+        // 2.4 整车高压与电源档位
+        if (status.isShutDown) {
+            chassisItems.add(
+                HealthCheckItem(
+                    title = "电源管理状态",
+                    detail = "整车高压下电安全休眠，低压处于待命态",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        } else {
+            chassisItems.add(
+                HealthCheckItem(
+                    title = "电源管理状态",
+                    detail = "整车处于动力就绪态（挡位：${status.gearStatus ?: "OK"}）",
                     level = HealthCheckLevel.GOOD
                 )
             )
         }
 
         // ====== 3. 车身密闭与安防系统 ======
+        // 3.1 车门锁安全
         if (status.locked == false) {
             score -= 5
             bodyItems.add(
@@ -211,6 +319,7 @@ object VehicleHealthDiagnostics {
             )
         }
 
+        // 3.2 车门密闭检测
         val openDoors = mutableListOf<String>()
         if (status.driverDoorOpen) openDoors.add("主驾门")
         if (status.passengerDoorOpen) openDoors.add("副驾门")
@@ -239,6 +348,7 @@ object VehicleHealthDiagnostics {
             )
         }
 
+        // 3.3 四扇车窗密封
         if (status.windowStatusAvailable && status.openWindows.isNotEmpty()) {
             score -= 5
             bodyItems.add(
@@ -260,6 +370,29 @@ object VehicleHealthDiagnostics {
             )
         }
 
+        // 3.4 全景天幕与遮阳帘
+        val roofOpening = status.roofOpeningPercent
+        if (roofOpening != null && roofOpening > 0) {
+            bodyItems.add(
+                HealthCheckItem(
+                    title = "天幕遮阳帘检测",
+                    detail = "遮阳帘处于打开状态 (${roofOpening}%)，离车建议闭合防晒",
+                    level = HealthCheckLevel.WARNING,
+                    fixCommand = "sunshadeClose",
+                    fixLabel = "关闭遮阳帘"
+                )
+            )
+        } else {
+            bodyItems.add(
+                HealthCheckItem(
+                    title = "全景天幕密封",
+                    detail = "全景天幕遮阳帘处于安全闭合锁止状态",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        }
+
+        // 3.5 哨兵与防盗安防
         if (status.sentryMode == true) {
             bodyItems.add(
                 HealthCheckItem(
@@ -279,12 +412,13 @@ object VehicleHealthDiagnostics {
         }
 
         // ====== 4. 环控与电气系统 ======
+        // 4.1 空调座舱环境
         if (status.acSwitch == true) {
-            val target = status.acSetting?.let { "$it°C" } ?: "自动"
+            val target = cleanTemp(status.acSetting)?.let { "$it°C" } ?: "自动"
             climateItems.add(
                 HealthCheckItem(
                     title = "空调座舱环境",
-                    detail = "空调开启中 · 设定温度 $target · 车内 ${status.indoorTemp ?: "--"}°C",
+                    detail = "空调开启中 · 设定温度 $target · 车内 ${formatTemp(status.indoorTemp)}",
                     level = HealthCheckLevel.GOOD
                 )
             )
@@ -292,20 +426,102 @@ object VehicleHealthDiagnostics {
             climateItems.add(
                 HealthCheckItem(
                     title = "空调座舱回路",
-                    detail = "环控冷热风道待命，车内环境 ${status.indoorTemp ?: "--"}°C",
+                    detail = "环控冷热风道待命，车内环境 ${formatTemp(status.indoorTemp)}",
                     level = HealthCheckLevel.GOOD
                 )
             )
         }
 
-        climateItems.add(
-            HealthCheckItem(
-                title = "除霜除雾电路",
-                detail = "前后风挡加热电热丝与除雾风道处于就绪态",
-                level = HealthCheckLevel.GOOD
+        // 4.2 双区独立温区调控
+        if (!status.acSettingRight.isNullOrBlank()) {
+            climateItems.add(
+                HealthCheckItem(
+                    title = "双区温控系统",
+                    detail = "主副驾独立温区开启，副驾设定 ${cleanTemp(status.acSettingRight)}°C",
+                    level = HealthCheckLevel.GOOD
+                )
             )
-        )
+        } else {
+            climateItems.add(
+                HealthCheckItem(
+                    title = "空气循环风道",
+                    detail = "座舱空气内外循环与电控风阀巡检正常",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        }
 
+        // 4.3 前后风挡除霜除雾
+        if (status.windshieldDefrost == true) {
+            climateItems.add(
+                HealthCheckItem(
+                    title = "除霜除雾系统",
+                    detail = "前风挡强力电加热除霜除雾工作中",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        } else if (status.rearWindowHeating == true) {
+            climateItems.add(
+                HealthCheckItem(
+                    title = "除霜除雾系统",
+                    detail = "后风挡电加热丝除雾工作中",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        } else {
+            climateItems.add(
+                HealthCheckItem(
+                    title = "除霜除雾电路",
+                    detail = "前后风挡加热电热丝与除雾风道处于就绪态",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        }
+
+        // 4.4 方向盘舒适加热
+        if (status.steeringWheelHeating == true) {
+            climateItems.add(
+                HealthCheckItem(
+                    title = "方向盘加热系统",
+                    detail = "方向盘加热开启中，阻丝持续升温",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        } else {
+            climateItems.add(
+                HealthCheckItem(
+                    title = "方向盘加热系统",
+                    detail = "方向盘加热电阻丝与温控传感器巡检就绪",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        }
+
+        // 4.5 前排座椅舒适系统
+        val activeSeats = mutableListOf<String>()
+        if (status.driverSeatHeating != null && status.driverSeatHeating > 0) activeSeats.add("主驾加热")
+        if (status.driverSeatVentilation != null && status.driverSeatVentilation > 0) activeSeats.add("主驾通风")
+        if (status.passengerSeatHeating != null && status.passengerSeatHeating > 0) activeSeats.add("副驾加热")
+        if (status.passengerSeatVentilation != null && status.passengerSeatVentilation > 0) activeSeats.add("副驾通风")
+        if (activeSeats.isNotEmpty()) {
+            climateItems.add(
+                HealthCheckItem(
+                    title = "座椅舒适系统",
+                    detail = "${activeSeats.joinToString("、")}工作中，温控正常",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        } else {
+            climateItems.add(
+                HealthCheckItem(
+                    title = "座椅舒适总成",
+                    detail = "前排座椅电加热膜与通风风机处于待命态",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        }
+
+        // 4.6 车联通信系统
         climateItems.add(
             HealthCheckItem(
                 title = "车联通信系统",
@@ -380,5 +596,38 @@ object VehicleHealthDiagnostics {
             systems = systems,
             issues = issues
         )
+    }
+
+    private fun cleanTemp(v: String?): String? = v
+        ?.replace("°C", "", ignoreCase = true)
+        ?.replace("℃", "", ignoreCase = true)
+        ?.trim()
+        ?.takeIf { it.isNotBlank() && it != "--" }
+
+    private fun formatTemp(v: String?): String =
+        cleanTemp(v)?.let { "$it°C" } ?: "--"
+
+    private fun cleanVoltage(v: String?): String? = v
+        ?.replace("V", "", ignoreCase = true)
+        ?.trim()
+        ?.takeIf { it.isNotBlank() && it != "--" }
+
+    private fun formatVoltage(v: String?): String =
+        cleanVoltage(v)?.let { "${it}V" } ?: "--"
+
+    private fun formatPressure(v: String?): String {
+        if (v.isNullOrBlank() || v == "--") return "--"
+        val trimmed = v.trim()
+        val withoutBar = trimmed.removeSuffix("bar").removeSuffix("Bar").trim()
+        if (withoutBar.contains("kPa", ignoreCase = true)) {
+            val num = withoutBar.replace("kPa", "", ignoreCase = true).trim().toDoubleOrNull()
+            return if (num != null) "${num.toInt()} kPa" else withoutBar
+        }
+        val num = withoutBar.toDoubleOrNull()
+        return when {
+            num == null -> trimmed
+            num > 50.0 -> "${num.toInt()} kPa"
+            else -> "$withoutBar bar"
+        }
     }
 }

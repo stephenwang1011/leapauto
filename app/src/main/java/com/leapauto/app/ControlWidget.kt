@@ -272,6 +272,9 @@ class ControlWidget : AppWidgetProvider() {
             }
             val powerType = effectivePowerType?.let { if (it == SessionStore.VehiclePowerType.PURE_ELECTRIC) VehicleStatusMapper.PowerType.PURE_ELECTRIC else VehicleStatusMapper.PowerType.RANGE_EXTENDER }
             val soc = VehicleStatusMapper.electricSocPercent(displayStatus)
+            val preciseSocText = VehicleStatusMapper.displayPreciseSoc(
+                displayStatus.opt("preciseSoc") ?: displayStatus.opt("soc")
+            )
             views.setTextViewText(R.id.txtWRange, VehicleStatusMapper.widgetRange(displayStatus, carType, powerType) ?: "--")
             applyRangePresentation(
                 themeContext,
@@ -287,7 +290,7 @@ class ControlWidget : AppWidgetProvider() {
                     powerType = effectivePowerType
                 )
             )
-            applyPureRangeTone(themeContext, views, soc, effectivePowerType)
+            applyPureRangeTone(themeContext, views, soc, effectivePowerType, preciseSocText)
             setWidgetStatusText(themeContext, views, WidgetStatusMapper.presentation(displayStatus, carType))
             val acEnabled = WidgetAcMapper.state(displayStatus)
             val acTone = ClimateTemperatureToneResolver.tone(
@@ -695,7 +698,8 @@ class ControlWidget : AppWidgetProvider() {
             context: Context,
             views: RemoteViews,
             soc: Int?,
-            powerType: SessionStore.VehiclePowerType?
+            powerType: SessionStore.VehiclePowerType?,
+            socText: String? = null
         ) {
             val progress = soc?.coerceIn(0, 100) ?: 0
             val tone = if (powerType == SessionStore.VehiclePowerType.PURE_ELECTRIC && soc != null) {
@@ -736,7 +740,11 @@ class ControlWidget : AppWidgetProvider() {
             )
             views.setTextColor(R.id.txtWRange, color)
             views.setTextColor(R.id.txtWRangeUnit, color)
-            views.setTextViewText(R.id.txtWPureSoc, if (soc != null) "$progress%" else "--%")
+            val cleanSoc = (socText?.takeIf { it.isNotBlank() } ?: if (soc != null) "$progress%" else "")
+                .removePrefix("·")
+                .trim()
+            val formattedSoc = if (cleanSoc.isNotBlank()) "· $cleanSoc" else ""
+            views.setTextViewText(R.id.txtWPureSoc, formattedSoc)
             views.setTextColor(R.id.txtWPureSoc, color)
         }
 

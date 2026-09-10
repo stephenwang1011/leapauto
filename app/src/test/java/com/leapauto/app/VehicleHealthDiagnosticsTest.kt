@@ -146,4 +146,95 @@ class VehicleHealthDiagnosticsTest {
         assertNotNull(trunkIssue)
         assertEquals("关后备箱", trunkIssue?.fixLabel)
     }
+
+    @Test
+    fun `healthy vehicle systems are all collapsed by default`() {
+        val status = createBaseStatus()
+        val report = VehicleHealthDiagnostics.evaluate(status)
+
+        assertTrue(report.systems.all { !it.defaultExpanded })
+    }
+
+    @Test
+    fun `abnormal systems are expanded by default while healthy systems remain collapsed`() {
+        val status = createBaseStatus().copy(
+            tires = listOf(
+                TireStatus("左前", "1.6", "26", true),
+                TireStatus("右前", "2.4", "26", false),
+                TireStatus("左后", "2.5", "26", false),
+                TireStatus("右后", "2.5", "26", false)
+            )
+        )
+        val report = VehicleHealthDiagnostics.evaluate(status)
+
+        val chassisSystem = report.systems.first { it.name == "底盘与制动" }
+        assertTrue("异常分类应默认展开", chassisSystem.defaultExpanded)
+
+        val otherSystems = report.systems.filter { it.name != "底盘与制动" }
+        assertTrue("正常分类应默认收起", otherSystems.all { !it.defaultExpanded })
+    }
+
+    @Test
+    fun `unit formatting avoids duplicate symbols for voltage, tire pressure and temperature`() {
+        val status = createBaseStatus().copy(
+            batteryVoltage = "384.5 V",
+            tires = listOf(
+                TireStatus("左前", "256 kPa", "26", false),
+                TireStatus("右前", "256 kPa", "26", false),
+                TireStatus("左后", "256 kPa", "26", false),
+                TireStatus("右后", "256 kPa", "26", false)
+            ),
+            minBatteryTemp = "25 °C",
+            indoorTemp = "22 °C",
+            acSetting = "24 °C",
+            acSwitch = true
+        )
+        val report = VehicleHealthDiagnostics.evaluate(status)
+
+        val powertrain = report.systems.first { it.name == "动力与三电" }
+        val voltageItem = powertrain.items.first { it.title == "高压母线电压" }
+        assertTrue("母线电压不应包含双重单位VV", voltageItem.detail.contains("384.5V") && !voltageItem.detail.contains("VV"))
+
+        val batteryTempItem = powertrain.items.first { it.title == "动力电池包温控" }
+        assertTrue("电池温度不应包含双重摄氏度符号", batteryTempItem.detail.contains("25°C") && !batteryTempItem.detail.contains("°C°C"))
+
+        val chassis = report.systems.first { it.name == "底盘与制动" }
+        val tireItem = chassis.items.first { it.title == "四轮胎压监测" }
+        assertTrue("胎压不应包含混杂的kPabar单位", !tireItem.detail.contains("kPabar") && tireItem.detail.contains("256 kPa"))
+
+        val climate = report.systems.first { it.name == "环控与电气" }
+        val acItem = climate.items.first { it.title == "空调座舱环境" }
+        assertTrue("空调温度不应包含双重摄氏度符号", !acItem.detail.contains("°C°C") && acItem.detail.contains("24°C") && acItem.detail.contains("22°C"))
+    }
+
+    @Test
+    fun `diagnostics comprehensively checks 21 total items across all four vehicle domains`() {
+        val status = createBaseStatus()
+        val report = VehicleHealthDiagnostics.evaluate(status)
+
+        assertEquals(21, report.systems.sumOf { it.items.size })
+        val powertrain = report.systems.first { it.name == "动力与三电" }
+        assertEquals(6, powertrain.items.size)
+
+        val chassis = report.systems.first { it.name == "底盘与制动" }
+        assertEquals(4, chassis.items.size)
+
+        val body = report.systems.first { it.name == "车身与密闭" }
+        assertEquals(5, body.items.size)
+
+        val climate = report.systems.first { it.name == "环控与电气" }
+        assertEquals(6, climate.items.size)
+    }
+
+    @Test
+    fun `open sunshade flags body system and provides sunshade close fix`() {
+        val status = createBaseStatus().copy(
+            roofOpeningPercent = 80
+        )
+        val report = VehicleHealthDiagnostics.evaluate(status)
+
+        val sunshadeIssue = report.issues.firstOrNull { it.fixCommand == "sunshadeClose" }
+        assertNotNull("遮阳帘未关应提供关闭快捷修复", sunshadeIssue)
+        assertEquals("关闭遮阳帘", sunshadeIssue?.fixLabel)
+    }
 }

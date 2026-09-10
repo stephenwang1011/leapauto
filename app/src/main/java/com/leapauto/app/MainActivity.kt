@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.MotionEvent
 import android.widget.Toast
 import java.util.Locale
@@ -91,7 +92,8 @@ data class VehicleStatus(
     val chargeScheduleCirculation: Int? = null,
     val chargeScheduleRecharge: Boolean? = null,
     val chargeScheduleSocLimit: Int? = null,
-    val chargeGunConnected: Boolean = false
+    val chargeGunConnected: Boolean = false,
+    val roofOpeningPercent: Int? = null
 )
 
 data class TireStatus(
@@ -152,6 +154,7 @@ class MainActivity : ComponentActivity() {
     private var pendingStatusRefreshCompletion: ((Boolean) -> Unit)? = null
     private var pinSaved by mutableStateOf(false)
     private var pinSetupInProgress by mutableStateOf(false)
+    private var pinSetupErrorMessage by mutableStateOf("")
     private var pendingPinProtectedAction: (() -> Unit)? = null
     private var pendingPinProtectedCancelAction: (() -> Unit)? = null
     private var showVehicleConfigConfirmationPrompt by mutableStateOf(false)
@@ -184,6 +187,7 @@ class MainActivity : ComponentActivity() {
     private var showAuthorSupportDialog by mutableStateOf(false)
     private var showSessionExpiredDialog by mutableStateOf(false)
     private var availableVehicles by mutableStateOf<List<Vehicle>>(emptyList())
+    private var vehicleImageVersion by mutableIntStateOf(0)
 
     private val authorSupportPromptRunnable = Runnable {
         if (canShowAuthorSupportPrompt()) {
@@ -267,6 +271,7 @@ class MainActivity : ComponentActivity() {
                     ),
                     pinSaved = pinSaved,
                     pinSetupInProgress = pinSetupInProgress,
+                    pinSetupErrorMessage = pinSetupErrorMessage,
                     showVehicleConfigConfirmationPrompt = showVehicleConfigConfirmationPrompt,
                     availableVehicles = availableVehicles,
                     onSwitchVehicle = ::switchVehicle,
@@ -286,6 +291,9 @@ class MainActivity : ComponentActivity() {
                     onApplyChargingSettings = ::applyHealthyAndScheduledCharging,
                     onApplyScheduledPreheat = ::applyScheduledBatteryPreheat,
                     networkDebugEnabled = networkDebugEnabled,
+                    vehicleImageVersion = vehicleImageVersion,
+                    onSelectCustomVehicleImage = ::handleCustomVehicleImage,
+                    onResetCustomVehicleImage = ::resetCustomVehicleImage,
                     currentVersion = AppReleaseInfo.currentVersion,
                     currentReleaseNotes = AppReleaseInfo.currentReleaseNotes,
                     versionUpdateState = versionUpdateState,
@@ -594,6 +602,7 @@ class MainActivity : ComponentActivity() {
         pendingPinProtectedAction = null
         pendingPinProtectedCancelAction = null
         pinSetupInProgress = false
+        pinSetupErrorMessage = ""
         pin = ""
         toast("操控密码已保存")
         pendingAction?.invoke()
@@ -602,6 +611,7 @@ class MainActivity : ComponentActivity() {
     private fun cancelPinSetup() {
         pin = ""
         pinSetupInProgress = false
+        pinSetupErrorMessage = ""
         clearPendingPinProtectedAction(cancel = true)
         maybeShowAuthorSupportPrompt()
     }
@@ -613,8 +623,23 @@ class MainActivity : ComponentActivity() {
         pendingPinProtectedAction = action
         pendingPinProtectedCancelAction = onCancel
         pin = ""
+        pinSetupErrorMessage = ""
         pinSetupInProgress = true
         mainHandler.removeCallbacks(authorSupportPromptRunnable)
+    }
+
+    private fun promptUpdateOperationPassword(
+        errorMessage: String = OperationPasswordErrorPolicy.ERROR_PROMPT_MESSAGE,
+        retryAction: (() -> Unit)? = null
+    ) {
+        sessionStore.saveOpPassword("")
+        pinSaved = false
+        pin = ""
+        pinSetupErrorMessage = errorMessage
+        pendingPinProtectedAction = retryAction
+        pinSetupInProgress = true
+        controlFeedback = ControlFeedback(errorMessage, ControlFeedbackKind.ERROR)
+        toast(errorMessage)
     }
 
     private fun clearPendingPinProtectedAction(cancel: Boolean) {
@@ -1427,6 +1452,9 @@ class MainActivity : ComponentActivity() {
                 val api = LeapmotorApi(session)
                 val updated = VehicleImageCache.sync(this@MainActivity, api, vin)
                 if (updated) {
+                    runOnUiThread {
+                        vehicleImageVersion++
+                    }
                     ControlWidget.refreshData(this@MainActivity)
                 }
             } catch (_: Exception) {
@@ -1435,6 +1463,51 @@ class MainActivity : ComponentActivity() {
                 vehicleImageSyncInFlight.set(false)
             }
         }
+    }
+
+    private fun handleCustomVehicleImage(uri: Uri) {
+        val vin = session.selectedVin
+        if (vin.isBlank()) return
+        worker.execute {
+            try {
+                val original = VehicleImageProcessor.decodeBitmapFromUri(
+                    contentResolver = contentResolver,
+                    uri = uri,
+                    reqWidth = 1920,
+                    reqHeight = 1920
+                )
+                if (original == null) {
+                    runOnUiThread {
+                        toast("图片解析失败，请重试")
+                    }
+                    return@execute
+                }
+                val processed = VehicleImageProcessor.processUserVehicleImage(original)
+                if (processed !== original) {
+                    original.recycle()
+                }
+                VehicleImageCache.saveCustomImage(this@MainActivity, vin, processed)
+                runOnUiThread {
+                    vehicleImageVersion++
+                    toast("爱车主图已更新")
+                }
+                ControlWidget.refreshData(this@MainActivity)
+            } catch (e: Exception) {
+                Log.e("LeapVehiclePic", "处理自定义车图失败", e)
+                runOnUiThread {
+                    toast("保存主图失败: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun resetCustomVehicleImage() {
+        val vin = session.selectedVin
+        if (vin.isBlank()) return
+        VehicleImageCache.removeCustomImage(this, vin)
+        vehicleImageVersion++
+        toast("已恢复默认官方车模")
+        ControlWidget.refreshData(this)
     }
 
     private fun switchVehicle(targetVin: String) {
@@ -1481,6 +1554,7 @@ class MainActivity : ComponentActivity() {
         lastGeocodedLocation = null
         energyState = EnergyAnalyticsState.Idle
         energyLastSuccessAt = 0L
+        vehicleImageVersion++
 
         ControlWidget.refreshData(this)
         refreshStatus()
@@ -1685,6 +1759,13 @@ class MainActivity : ComponentActivity() {
             climatePreControlStatus = null
             climateOptimisticGuard = null
             pendingClimateConfirmation = null
+            if (OperationPasswordErrorPolicy.isPasswordError(error)) {
+                promptUpdateOperationPassword(
+                    errorMessage = OperationPasswordErrorPolicy.ERROR_PROMPT_MESSAGE,
+                    retryAction = null
+                )
+                return@runOnMain
+            }
             controlFeedback = ControlFeedback(
                 climateControlFailureMessage(command.label, error),
                 ControlFeedbackKind.ERROR
@@ -1850,6 +1931,7 @@ class MainActivity : ComponentActivity() {
     private fun climateControlFailureMessage(label: String, error: Exception): String {
         val raw = error.message.orEmpty()
         return when {
+            OperationPasswordErrorPolicy.isPasswordError(error) -> OperationPasswordErrorPolicy.ERROR_PROMPT_MESSAGE
             raw.contains("token", ignoreCase = true) || raw.contains("鉴权") -> "登录已失效"
             raw.contains("timeout", ignoreCase = true) || raw.contains("超时") -> "空调响应超时"
             raw.contains("网络") || raw.contains("连接") -> "空调网络异常"
@@ -2028,9 +2110,14 @@ class MainActivity : ComponentActivity() {
                 VehicleStatusMapper.combinedRange(m) ?: VehicleStatusMapper.remainingRange(m, session.selectedCarType, displayPowerType)
             else -> VehicleStatusMapper.remainingRange(m, session.selectedCarType, displayPowerType)
         }
+        val preciseSocStr = VehicleStatusMapper.displayPreciseSoc(m.opt("preciseSoc"))
+            ?: formatPercentage(m.opt("preciseSoc"))
+        val standardSocStr = VehicleStatusMapper.displayPreciseSoc(m.opt("soc"))
+            ?: formatPercentage(m.opt("soc"))
+        val effectiveSoc = preciseSocStr ?: standardSocStr
         return VehicleStatus(
-            soc = formatPercentage(m.opt("soc")),
-            preciseSoc = formatPercentage(m.opt("preciseSoc")),
+            soc = effectiveSoc,
+            preciseSoc = preciseSocStr ?: standardSocStr,
             fuelSoc = formatPercentage(m.opt("fuelSoc")),
             mileage = displayMileage?.let { "${it}km" },
             fuelMileage = if (rangeExtender) fuelMileage else null,
@@ -2100,7 +2187,8 @@ class MainActivity : ComponentActivity() {
             chargeScheduleCirculation = m.opt("chargeScheduleCirculation")?.toString()?.toIntOrNull(),
             chargeScheduleRecharge = m.opt("chargeScheduleRecharge")?.let { it.toString() == "1" },
             chargeScheduleSocLimit = m.opt("chargesocSetting")?.toString()?.toIntOrNull(),
-            chargeGunConnected = ChargeStatus.isGunConnected(m)
+            chargeGunConnected = ChargeStatus.isGunConnected(m),
+            roofOpeningPercent = m.opt("roofOpening")?.toString()?.toIntOrNull()
         )
     }
 
@@ -2397,6 +2485,13 @@ class MainActivity : ComponentActivity() {
                     )
                 )
                 runOnMain(generation) {
+                    if (OperationPasswordErrorPolicy.isPasswordError(e)) {
+                        promptUpdateOperationPassword(
+                            errorMessage = OperationPasswordErrorPolicy.ERROR_PROMPT_MESSAGE,
+                            retryAction = { control(command, commandName) }
+                        )
+                        return@runOnMain
+                    }
                     handleSessionFailure(e)
                     val errMsg = controlFailureMessage(command.label, e)
                     controlFeedback = ControlFeedback(errMsg, ControlFeedbackKind.ERROR)
@@ -2409,6 +2504,7 @@ class MainActivity : ComponentActivity() {
     private fun controlFailureMessage(label: String, error: Exception): String {
         val raw = error.message.orEmpty()
         return when {
+            OperationPasswordErrorPolicy.isPasswordError(error) -> OperationPasswordErrorPolicy.ERROR_PROMPT_MESSAGE
             raw.contains("token", ignoreCase = true) || raw.contains("鉴权") -> "登录状态已过期，请重新登录"
             raw.contains("timeout", ignoreCase = true) || raw.contains("超时") -> "${label}超时，请稍后重试"
             raw.contains("网络") || raw.contains("连接") -> "网络异常，${label}未完成"

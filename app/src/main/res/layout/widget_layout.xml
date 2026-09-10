@@ -91,13 +91,14 @@
                     android:shadowRadius="1.5"
                     android:text="--"
                     android:textColor="@color/widget_on_surface"
-                    android:textSize="26sp" />
+                    android:textSize="26sp"
+                    android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/txtWRangeUnit"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="2dp"
+                    android:layout_marginStart="3dp"
                     android:includeFontPadding="false"
                     android:shadowColor="@color/widget_text_shadow"
                     android:shadowDx="0"
@@ -105,20 +106,36 @@
                     android:shadowRadius="1.5"
                     android:text="km"
                     android:textColor="@color/widget_on_surface"
-                    android:textSize="20sp" />
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/txtWPureSoc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="3dp"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:shadowColor="@color/widget_text_shadow"
+                    android:shadowDx="0"
+                    android:shadowDy="0"
+                    android:shadowRadius="1.5"
+                    android:text=""
+                    android:textColor="@color/widget_on_surface"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:gravity="center_vertical"
+                android:gravity="start|center_vertical"
                 android:orientation="horizontal">
 
                 <FrameLayout
-                    android:layout_width="0dp"
-                    android:layout_height="3dp"
-                    android:layout_weight="0.75">
+                    android:layout_width="110dp"
+                    android:layout_height="4.5dp">
 
                     <ProgressBar
                         android:id="@+id/progressWCharge"
@@ -153,27 +170,6 @@
                         android:visibility="gone" />
 
                 </FrameLayout>
-
-                <TextView
-                    android:id="@+id/txtWPureSoc"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:shadowColor="@color/widget_text_shadow"
-                    android:shadowDx="0"
-                    android:shadowDy="0"
-                    android:shadowRadius="1.5"
-                    android:text="--%"
-                    android:textColor="@color/widget_on_surface"
-                    android:textSize="11sp"
-                    android:textStyle="bold" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="0.25" />
             </LinearLayout>
 
         </LinearLayout>

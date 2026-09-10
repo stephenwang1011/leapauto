@@ -213,10 +213,10 @@ object VehicleStatusMapper {
 
     fun soc(values: Map<String, Any?>): Int = ceil(socFraction(values) * 100f).toInt()
 
-    /** The confirmed 1204 signal is the pure-electric remaining percentage. */
+    /** Prefer preciseSoc (signal 100003) for pure-electric remaining percentage, falling back to soc (1204). */
     fun electricSocPercent(status: JSONObject): Int? =
-        percentagePercent(status.opt("soc"))
-            ?: preciseSocPercent(status.opt("preciseSoc"))
+        preciseSocPercent(status.opt("preciseSoc"))
+            ?: percentagePercent(status.opt("soc"))
 
     /** The confirmed 3235 signal is the range-extender fuel remaining percentage. */
     fun fuelSocPercent(status: JSONObject): Int? = percentagePercent(status.opt("fuelSoc"))
@@ -232,7 +232,7 @@ object VehicleStatusMapper {
         if (value == null || value == JSONObject.NULL) return null
         val raw = value.toString().trim().removeSuffix("%").trim()
         val percentage = runCatching { BigDecimal(raw) }.getOrNull() ?: return null
-        val bounded = percentage.max(BigDecimal.ZERO).min(BigDecimal(100))
+        val bounded = percentage.max(BigDecimal.ZERO).min(BigDecimal(100)).setScale(1, RoundingMode.HALF_UP)
         return "${bounded.stripTrailingZeros().toPlainString()}%"
     }
 

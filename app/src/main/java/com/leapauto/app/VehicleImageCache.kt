@@ -28,15 +28,56 @@ object VehicleImageCache {
         return File(getCacheDir(context), "${vin}.png")
     }
 
+    fun getCustomFile(context: Context, vin: String): File {
+        return File(getCacheDir(context), "${vin}_custom.png")
+    }
+
+    fun hasCustomImage(context: Context, vin: String): Boolean {
+        if (vin.isBlank()) return false
+        val file = getCustomFile(context, vin)
+        return file.exists() && file.length() > 0
+    }
+
+    fun saveCustomImage(context: Context, vin: String, bitmap: Bitmap) {
+        if (vin.isBlank()) return
+        val file = getCustomFile(context, vin)
+        val tmpFile = File(getCacheDir(context), "${vin}_custom.tmp")
+        FileOutputStream(tmpFile).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        if (file.exists()) file.delete()
+        if (!tmpFile.renameTo(file)) {
+            tmpFile.copyTo(file, overwrite = true)
+            tmpFile.delete()
+        }
+        synchronized(memoryCache) {
+            memoryCache.put(vin, bitmap)
+        }
+    }
+
+    fun removeCustomImage(context: Context, vin: String) {
+        if (vin.isBlank()) return
+        val file = getCustomFile(context, vin)
+        if (file.exists()) file.delete()
+        synchronized(memoryCache) {
+            memoryCache.remove(vin)
+        }
+    }
+
     fun loadCachedBitmap(context: Context, vin: String): Bitmap? {
         if (vin.isBlank()) return null
         synchronized(memoryCache) {
             memoryCache.get(vin)?.let { return it }
         }
-        val file = getCacheFile(context, vin)
-        if (!file.exists() || file.length() <= 0) return null
+        val customFile = getCustomFile(context, vin)
+        val targetFile = if (customFile.exists() && customFile.length() > 0) {
+            customFile
+        } else {
+            getCacheFile(context, vin)
+        }
+        if (!targetFile.exists() || targetFile.length() <= 0) return null
         return try {
-            val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+            val bitmap = BitmapFactory.decodeFile(targetFile.absolutePath)
             if (bitmap != null) {
                 synchronized(memoryCache) {
                     memoryCache.put(vin, bitmap)
@@ -59,6 +100,8 @@ object VehicleImageCache {
         }
         val file = getCacheFile(context, vin)
         if (file.exists()) file.delete()
+        val customFile = getCustomFile(context, vin)
+        if (customFile.exists()) customFile.delete()
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .remove("$KEY_PREFIX_URL$vin")

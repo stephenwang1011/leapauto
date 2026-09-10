@@ -37,8 +37,8 @@ class VehicleHomeStatusTest {
     }
 
     @Test
-    fun `resolved soc prefers confirmed 1204 over legacy precise signal`() {
-        assertEquals("30%", VehicleHomeStatus.resolvedSoc("99%", "30%"))
+    fun `resolved soc prefers precise signal over standard soc`() {
+        assertEquals("99%", VehicleHomeStatus.resolvedSoc("99%", "30%"))
     }
 
     @Test

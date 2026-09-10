@@ -901,3 +901,20 @@ object QuickCommandOrderPolicy {
         return order.toMutableList().apply { add(to, removeAt(from)) }
     }
 }
+
+object OperationPasswordErrorPolicy {
+    const val ERROR_PROMPT_MESSAGE = "密码错误，请更新密码"
+
+    fun isPasswordError(error: Throwable?): Boolean {
+        val raw = error?.message.orEmpty().lowercase()
+        return raw.contains("密码错误") ||
+               raw.contains("密码不正确") ||
+               raw.contains("密码校验失败") ||
+               raw.contains("操作密码") ||
+               raw.contains("oppwd") ||
+               raw.contains("password error") ||
+               raw.contains("invalid password") ||
+               raw.contains("wrong password") ||
+               (raw.contains("密码") && (raw.contains("错") || raw.contains("不对") || raw.contains("失效") || raw.contains("失败") || raw.contains("重试")))
+    }
+}
