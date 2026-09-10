@@ -34,18 +34,28 @@ class CompactControlWidget : AppWidgetProvider() {
                 setInt(
                     R.id.compactWidgetRoot,
                     "setBackgroundResource",
-                    ControlWidget.widgetBackgroundResource(opacity, darkTheme)
+                    ControlWidget.resolveWidgetCardBackground(context, opacity, darkTheme)
                 )
                 setVehicleImage(this, appearance, session.selectedVin, context)
                 applyStaticAppearance(themeContext, this, opacity)
                 setTextViewText(R.id.txtWCTitle, ControlWidget.widgetTitle(config, appearance))
+                val isHybridCarType = (snapshot?.carType ?: session.selectedCarType).let {
+                    it.contains("增程") || it.contains("REEV", ignoreCase = true)
+                }
+                val resolvedPowerType = when {
+                    config.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+                    snapshot?.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+                    isHybridCarType -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+                    snapshot?.fuelRange != null || snapshot?.fuelSoc != null -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+                    else -> snapshot?.powerType ?: config.powerType
+                }
                 applyRangePresentation(
                     themeContext,
                     this,
                     CompactWidgetRangePresentationMapper.fromValues(
                         range = snapshot?.range,
                         soc = snapshot?.soc,
-                        powerType = snapshot?.powerType ?: config.powerType,
+                        powerType = resolvedPowerType,
                         electricRange = snapshot?.electricRange,
                         fuelRange = snapshot?.fuelRange,
                         electricSoc = snapshot?.soc,
@@ -61,34 +71,35 @@ class CompactControlWidget : AppWidgetProvider() {
             }
 
         fun refreshData(context: Context) {
-            val appContext = context.applicationContext
-            val ids = widgetIds(appContext)
+            val manager = AppWidgetManager.getInstance(context)
+            val ids = manager.getAppWidgetIds(ComponentName(context, CompactControlWidget::class.java))
             if (ids.isEmpty()) return
-            AppWidgetManager.getInstance(appContext).updateAppWidget(ids, baseViews(appContext))
+            manager.updateAppWidget(ids, baseViews(context))
         }
 
         fun refreshAppearance(context: Context) {
-            val ids = widgetIds(context)
+            val manager = AppWidgetManager.getInstance(context)
+            val ids = manager.getAppWidgetIds(ComponentName(context, CompactControlWidget::class.java))
             if (ids.isEmpty()) return
             // Re-render the complete tree so values-night text/icon resources are rebound too.
-            AppWidgetManager.getInstance(context).updateAppWidget(ids, baseViews(context))
+            manager.updateAppWidget(ids, baseViews(context))
         }
 
         fun showControlStatus(context: Context, acEnabled: Boolean?, acTone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT) {
-            val appContext = context.applicationContext
-            val ids = widgetIds(appContext)
+            val manager = AppWidgetManager.getInstance(context)
+            val ids = manager.getAppWidgetIds(ComponentName(context, CompactControlWidget::class.java))
             if (ids.isEmpty()) return
-            val views = baseViews(appContext)
+            val views = baseViews(context)
             if (acEnabled != null) {
-                applyAcPresentation(appContext, views, acEnabled, acTone)
+                applyAcPresentation(context, views, acEnabled, acTone)
             }
-            AppWidgetManager.getInstance(appContext).partiallyUpdateAppWidget(ids, views)
+            manager.partiallyUpdateAppWidget(ids, views)
         }
 
-        private fun widgetIds(context: Context): IntArray =
-            AppWidgetManager.getInstance(context.applicationContext).getAppWidgetIds(
-                ComponentName(context.applicationContext, CompactControlWidget::class.java)
-            )
+        internal fun widgetIds(context: Context): IntArray {
+            val manager = AppWidgetManager.getInstance(context)
+            return manager.getAppWidgetIds(ComponentName(context, CompactControlWidget::class.java))
+        }
 
         private fun setVehicleImage(
             views: RemoteViews,
@@ -181,8 +192,8 @@ class CompactControlWidget : AppWidgetProvider() {
             views.setTextColor(R.id.txtWCElectricSoc, electricColor)
             views.setTextColor(R.id.txtWCFuelRange, fuelColor)
             views.setTextColor(R.id.txtWCFuelSoc, fuelColor)
-            views.setInt(R.id.imgWCElectricIcon, "setColorFilter", electricColor)
-            views.setInt(R.id.imgWCFuelIcon, "setColorFilter", fuelColor)
+            ControlWidget.setImageTint(views, R.id.imgWCElectricIcon, electricColor)
+            ControlWidget.setImageTint(views, R.id.imgWCFuelIcon, fuelColor)
             views.setContentDescription(
                 R.id.compactHybridRange,
                 "总续航 ${presentation.totalRangeLabel}，纯电 ${presentation.electricRangeLabel} ${presentation.electricSocLabel}，燃油 ${presentation.fuelRangeLabel} ${presentation.fuelSocLabel}"
@@ -216,16 +227,10 @@ class CompactControlWidget : AppWidgetProvider() {
                 false -> R.drawable.ic_phosphor_lock_open
                 null -> R.drawable.ic_phosphor_lock
             }
-            val colorResource = when (presentation.locked) {
-                true, false -> R.color.energy_green
-                null -> R.color.widget_action_icon
-            }
+            val iconColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
             views.setImageViewResource(R.id.imgWCLock, iconResource)
-            views.setInt(
-                R.id.imgWCLock,
-                "setColorFilter",
-                ContextCompat.getColor(themeContext, colorResource)
-            )
+            ControlWidget.setImageTint(views, R.id.imgWCLock, iconColor)
+            views.setFloat(R.id.imgWCLock, "setAlpha", if (presentation.locked == null) 0.65f else 1f)
             views.setInt(
                 R.id.btnWCLock,
                 "setBackgroundResource",
@@ -249,7 +254,7 @@ class CompactControlWidget : AppWidgetProvider() {
             val presentation = WidgetAcMapper.presentation(acEnabled, tone)
             val themeContext = ControlWidget.widgetThemeContext(context)
             val actionColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
-            views.setInt(R.id.imgWCAcOff, "setColorFilter", actionColor)
+            ControlWidget.setImageTint(views, R.id.imgWCAcOff, actionColor)
 
             val showCooling = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.COOLING
             val showHeating = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.HEATING
@@ -291,8 +296,8 @@ class CompactControlWidget : AppWidgetProvider() {
             views.setTextColor(R.id.txtWCRange, onSurfaceVariant)
             views.setViewVisibility(R.id.txtWCLock, View.GONE)
             views.setViewVisibility(R.id.txtWCAc, View.GONE)
-            views.setInt(R.id.imgWCLock, "setColorFilter", actionIcon)
-            views.setInt(R.id.imgWCAcOff, "setColorFilter", actionIcon)
+            ControlWidget.setImageTint(views, R.id.imgWCLock, actionIcon)
+            ControlWidget.setImageTint(views, R.id.imgWCAcOff, actionIcon)
             views.setInt(
                 R.id.btnWCLock,
                 "setBackgroundResource",

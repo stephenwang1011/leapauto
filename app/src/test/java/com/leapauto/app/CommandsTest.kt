@@ -18,49 +18,6 @@ class CommandsTest {
     }
 
     @Test
-    fun seatHeatingAndVentilationBuildCommandsCorrectly() {
-        // 主驾加热 (映射实际位置1)
-        val driverHeat3 = Commands.build("driverSeatHeat3")
-        assertEquals("301", driverHeat3.cmdid)
-        assertEquals("""{"position":1,"level":3,"seatHeatStatus":"3","enable":true}""", driverHeat3.stateJson)
-        assertEquals("主驾座椅加热3档", driverHeat3.label)
-
-        val driverHeat0 = Commands.build("driverSeatHeat0")
-        assertEquals("301", driverHeat0.cmdid)
-        assertEquals("""{"position":1,"level":0,"seatHeatStatus":"0","enable":false}""", driverHeat0.stateJson)
-        assertEquals("主驾座椅加热关闭", driverHeat0.label)
-
-        // 副驾加热 (位置2)
-        val copilotHeat2 = Commands.build("passengerSeatHeat2")
-        assertEquals("301", copilotHeat2.cmdid)
-        assertEquals("""{"position":2,"level":2,"seatHeatStatus":"2","enable":true}""", copilotHeat2.stateJson)
-        assertEquals("副驾座椅加热2档", copilotHeat2.label)
-
-        // 主驾通风 (位置1)
-        val driverVent1 = Commands.build("driverSeatVent1")
-        assertEquals("370", driverVent1.cmdid)
-        assertEquals("""{"position":1,"level":1,"seatVentStatus":"1","enable":true}""", driverVent1.stateJson)
-        assertEquals("主驾座椅通风1档", driverVent1.label)
-
-        // 副驾通风 (位置2)
-        val copilotVent0 = Commands.build("passengerSeatVent0")
-        assertEquals("370", copilotVent0.cmdid)
-        assertEquals("""{"position":2,"level":0,"seatVentStatus":"0","enable":false}""", copilotVent0.stateJson)
-        assertEquals("副驾座椅通风关闭", copilotVent0.label)
-
-        // 方向盘加热
-        val wheelOn = Commands.build("steeringWheelHeatOn")
-        assertEquals("360", wheelOn.cmdid)
-        assertEquals("""{"steeringWheelHeatCtrl":{"enable":true,"level":3}}""", wheelOn.stateJson)
-        assertEquals("开启方向盘加热", wheelOn.label)
-
-        val wheelOff = Commands.build("steeringWheelHeatOff")
-        assertEquals("360", wheelOff.cmdid)
-        assertEquals("""{"steeringWheelHeatCtrl":{"enable":false,"level":0}}""", wheelOff.stateJson)
-        assertEquals("关闭方向盘加热", wheelOff.label)
-    }
-
-    @Test
     fun sentryModeUsesTheVerifiedCommandAndExplicitTargetState() {
         val enable = Commands.build("sentryOn")
         val disable = Commands.build("sentryOff")

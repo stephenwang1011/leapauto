@@ -667,74 +667,7 @@ object Commands {
         "startCharging" -> ControlCommand("193", """{"value":"start"}""", "开始充电")
         "stopCharging" -> ControlCommand("193", """{"value":"stop"}""", "停止充电")
         "unlockCharger" -> ControlCommand("192", """{"operation":"unlock"}""", "解锁充电枪")
-        "driverSeatHeat0" -> buildSeatHeat(3, 0)
-        "driverSeatHeat1" -> buildSeatHeat(3, 1)
-        "driverSeatHeat2" -> buildSeatHeat(3, 2)
-        "driverSeatHeat3" -> buildSeatHeat(3, 3)
-        "passengerSeatHeat0" -> buildSeatHeat(2, 0)
-        "passengerSeatHeat1" -> buildSeatHeat(2, 1)
-        "passengerSeatHeat2" -> buildSeatHeat(2, 2)
-        "passengerSeatHeat3" -> buildSeatHeat(2, 3)
-        "driverSeatVent0" -> buildSeatVentilation(3, 0)
-        "driverSeatVent1" -> buildSeatVentilation(3, 1)
-        "driverSeatVent2" -> buildSeatVentilation(3, 2)
-        "driverSeatVent3" -> buildSeatVentilation(3, 3)
-        "passengerSeatVent0" -> buildSeatVentilation(2, 0)
-        "passengerSeatVent1" -> buildSeatVentilation(2, 1)
-        "passengerSeatVent2" -> buildSeatVentilation(2, 2)
-        "passengerSeatVent3" -> buildSeatVentilation(2, 3)
-        "steeringWheelHeatOn" -> buildSteeringWheelHeat(true)
-        "steeringWheelHeatOff" -> buildSteeringWheelHeat(false)
         else -> throw ApiException("未知命令: $name")
-    }
-
-    fun buildSeatHeat(position: Int, level: Int): ControlCommand {
-        require(position in 1..6) { "座椅位置需在1-6之间" }
-        require(level in 0..3) { "加热档位需在0-3之间" }
-        val actualPos = if (position == 3) 1 else position
-        val posLabel = when (position) {
-            1, 3 -> "主驾"
-            2 -> "副驾"
-            5 -> "二排左"
-            6 -> "二排右"
-            else -> "位置$position"
-        }
-        val lvlLabel = if (level == 0) "关闭" else "${level}档"
-        val enabled = level > 0
-        return ControlCommand(
-            "301",
-            """{"position":$actualPos,"level":$level,"seatHeatStatus":"$level","enable":$enabled}""",
-            "${posLabel}座椅加热$lvlLabel"
-        )
-    }
-
-    fun buildSeatVentilation(position: Int, level: Int): ControlCommand {
-        require(position in 1..6) { "座椅位置需在1-6之间" }
-        require(level in 0..3) { "通风档位需在0-3之间" }
-        val actualPos = if (position == 3) 1 else position
-        val posLabel = when (position) {
-            1, 3 -> "主驾"
-            2 -> "副驾"
-            5 -> "二排左"
-            6 -> "二排右"
-            else -> "位置$position"
-        }
-        val lvlLabel = if (level == 0) "关闭" else "${level}档"
-        val enabled = level > 0
-        return ControlCommand(
-            "370",
-            """{"position":$actualPos,"level":$level,"seatVentStatus":"$level","enable":$enabled}""",
-            "${posLabel}座椅通风$lvlLabel"
-        )
-    }
-
-    fun buildSteeringWheelHeat(enabled: Boolean): ControlCommand {
-        val level = if (enabled) 3 else 0
-        return ControlCommand(
-            "360",
-            """{"steeringWheelHeatCtrl":{"enable":$enabled,"level":$level}}""",
-            if (enabled) "开启方向盘加热" else "关闭方向盘加热"
-        )
     }
 
     /** 快捷空调：按自定义温度下发（≤26°C 制冷，≥27°C 制热）。 */

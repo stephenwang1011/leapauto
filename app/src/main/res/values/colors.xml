@@ -24,6 +24,10 @@
     <color name="widget_fuel_range_high_contrast">#C56F00</color>
     <color name="widget_fuel_range_track_high_contrast">#B8A07A</color>
     <color name="widget_text_shadow">#FFFFFFFF</color>
+    <color name="widget_card_border">#B3FFFFFF</color>
+    <color name="widget_surface_75">#CCF4F6F8</color>
+    <color name="widget_surface_50">#80F4F6F8</color>
+    <color name="widget_surface_25">#40F4F6F8</color>
     <color name="widget_compact_action_neutral">#F1F3F6</color>
     <color name="widget_compact_action_success">#DDF3E6</color>
     <color name="widget_compact_action_primary">#E5EEFF</color>

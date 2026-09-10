@@ -144,9 +144,10 @@ class CompactWidgetSpecTest {
         assertTrue(compactWidget.contains("ControlWidget.widgetThemeContext(context)"))
         assertTrue(compactWidget.contains("widget_compact_action_neutral_light"))
         assertTrue(compactWidget.contains("widget_compact_action_neutral_dark"))
-        assertTrue(wideWidget.contains("views.setInt(id, \"setColorFilter\", actionIcon)"))
+        assertTrue(wideWidget.contains("setImageTint(views, id, actionIcon)"))
         assertTrue(wideWidget.contains("views.setInt(id, \"setBackgroundResource\", actionBackground)"))
-        assertTrue(compactWidget.contains("views.setInt(R.id.imgWCAcOff, \"setColorFilter\", actionColor)"))
+        assertTrue(compactWidget.contains("ControlWidget.setImageTint(views, R.id.imgWCAcOff, actionColor)"))
+        assertTrue(compactWidget.contains("ControlWidget.setImageTint(views, R.id.imgWCLock, iconColor)"))
     }
 
     @Test
@@ -170,6 +171,7 @@ class CompactWidgetSpecTest {
             assertTrue(colors.contains("widget_range_track_high_contrast"))
             assertTrue(colors.contains("widget_range_good_high_contrast"))
             assertTrue(colors.contains("widget_text_shadow"))
+            assertTrue(colors.contains("widget_card_border"))
         }
     }
 

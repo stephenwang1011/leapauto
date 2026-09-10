@@ -68,7 +68,7 @@ object EnergyCompositionPresentation {
 
 /** Formats verified weekly ISO dates for the compact chart labels. */
 object EnergyWeekPeriodFormatter {
-    private val isoDatePrefix = Regex("^\\s*(?:\\d{4}[-/])?(\\d{1,2})[-/](\\d{1,2})")
+    private val isoDatePrefix = Regex("^\\s*(?:(\\d{4})[-/])?(\\d{1,2})[-/](\\d{1,2})")
 
     fun format(start: String, end: String?): String {
         val startLabel = monthDay(start)
@@ -76,10 +76,41 @@ object EnergyWeekPeriodFormatter {
         return if (endLabel == null) startLabel else "$startLabel-$endLabel"
     }
 
+    fun weekEndDate(start: String, end: String?): String {
+        val formattedEnd = end?.takeIf { it.isNotBlank() }?.let(::monthDay)
+        if (formattedEnd != null) return formattedEnd
+
+        return runCatching {
+            val match = isoDatePrefix.find(start) ?: return monthDay(start)
+            val year = match.groupValues[1].toIntOrNull() ?: java.time.LocalDate.now().year
+            val month = match.groupValues[2].toInt()
+            val day = match.groupValues[3].toInt()
+            val sunday = java.time.LocalDate.of(year, month, day).plusDays(6)
+            "${sunday.monthValue}/${sunday.dayOfMonth}"
+        }.getOrDefault(monthDay(start))
+    }
+
+    fun isCurrentWeek(start: String, end: String?): Boolean {
+        return runCatching {
+            val today = java.time.LocalDate.now()
+            val matchStart = isoDatePrefix.find(start) ?: return false
+            val yearStart = matchStart.groupValues[1].toIntOrNull() ?: today.year
+            val startDate = java.time.LocalDate.of(yearStart, matchStart.groupValues[2].toInt(), matchStart.groupValues[3].toInt())
+            val endDate = if (!end.isNullOrBlank()) {
+                val matchEnd = isoDatePrefix.find(end) ?: return false
+                val yearEnd = matchEnd.groupValues[1].toIntOrNull() ?: today.year
+                java.time.LocalDate.of(yearEnd, matchEnd.groupValues[2].toInt(), matchEnd.groupValues[3].toInt())
+            } else {
+                startDate.plusDays(6)
+            }
+            !today.isBefore(startDate) && !today.isAfter(endDate)
+        }.getOrDefault(false)
+    }
+
     fun monthDay(value: String): String {
         val match = isoDatePrefix.find(value) ?: return value.trim()
-        val month = match.groupValues[1].toIntOrNull() ?: return value.trim()
-        val day = match.groupValues[2].toIntOrNull() ?: return value.trim()
+        val month = match.groupValues[2].toIntOrNull() ?: return value.trim()
+        val day = match.groupValues[3].toIntOrNull() ?: return value.trim()
         return "$month/$day"
     }
 }

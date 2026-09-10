@@ -39,8 +39,18 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                     powerType = config.powerType
                 )
                 ChargeNotificationManager.process(context, store, current.selectedVin, status)
+                val hasFuel = VehicleStatusMapper.fuelRemainingRange(status) != null ||
+                    VehicleStatusMapper.fuelSocPercent(status) != null ||
+                    current.selectedCarType.contains("增程") ||
+                    current.selectedCarType.contains("REEV", ignoreCase = true) ||
+                    config.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER
+                val workerPowerType = if (hasFuel) {
+                    SessionStore.VehiclePowerType.RANGE_EXTENDER
+                } else {
+                    config.powerType
+                }
+                val powerType = workerPowerType?.let { if (it == SessionStore.VehiclePowerType.PURE_ELECTRIC) VehicleStatusMapper.PowerType.PURE_ELECTRIC else VehicleStatusMapper.PowerType.RANGE_EXTENDER }
                 ControlWidget.renderStatus(context, views, status, current.selectedCarType)
-                val powerType = config.powerType?.let { if (it == SessionStore.VehiclePowerType.PURE_ELECTRIC) VehicleStatusMapper.PowerType.PURE_ELECTRIC else VehicleStatusMapper.PowerType.RANGE_EXTENDER }
                 store.save(current)
                 val updated = formatUpdatedTime()
                 views.setTextViewText(R.id.txtWUpdated, updated)
@@ -52,7 +62,7 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                         ?: VehicleStatusMapper.soc(status),
                     fuelSoc = VehicleStatusMapper.fuelSocPercent(status),
                     updated = updated,
-                    powerType = config.powerType,
+                    powerType = workerPowerType,
                     electricRange = VehicleStatusMapper.electricRemainingRange(status),
                     fuelRange = VehicleStatusMapper.fuelRemainingRange(status),
                     electricTotalRange = VehicleStatusMapper.electricTotalRange(status),

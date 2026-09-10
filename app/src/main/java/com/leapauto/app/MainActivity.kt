@@ -203,12 +203,17 @@ class MainActivity : ComponentActivity() {
         energyCacheStore = EnergyCacheStore(this)
         session = sessionStore.load()
         hvacCapability = session.hvacCapability
+        val defaultPower = when {
+            session.selectedCarType.isPureElectricModel() -> SessionStore.VehiclePowerType.PURE_ELECTRIC
+            session.selectedCarType.contains("增程") || session.selectedCarType.contains("REEV", ignoreCase = true) -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+            else -> null
+        }
         vehicleConfig = sessionStore.loadVehicleConfig(
             vin = session.selectedVin,
             defaultModel = session.selectedCarType,
             defaultNickname = session.selectedNickname,
             defaultYear = session.selectedYear.ifBlank { "2026" },
-            defaultPowerType = SessionStore.VehiclePowerType.PURE_ELECTRIC
+            defaultPowerType = defaultPower
         )
         pin = sessionStore.loadOpPassword() ?: ""
         pinSaved = pin.isNotBlank()
@@ -1219,15 +1224,25 @@ class MainActivity : ComponentActivity() {
                 }
                 ChargeNotificationManager.process(this@MainActivity, sessionStore, session.selectedVin, signalMap)
                 sessionStore.save(session)
+                val hasFuel = VehicleStatusMapper.fuelRemainingRange(signalMap) != null ||
+                    VehicleStatusMapper.fuelSocPercent(signalMap) != null ||
+                    session.selectedCarType.contains("增程") ||
+                    session.selectedCarType.contains("REEV", ignoreCase = true) ||
+                    vehicleConfig.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER
+                val snapshotPowerType = if (hasFuel) {
+                    SessionStore.VehiclePowerType.RANGE_EXTENDER
+                } else {
+                    vehicleConfig.powerType
+                }
                 sessionStore.saveWidgetSnapshot(
                     vin = session.selectedVin,
                     carType = session.selectedCarType,
-                    range = VehicleStatusMapper.widgetRange(signalMap, session.selectedCarType, vehicleConfig.powerType?.let { if (it == SessionStore.VehiclePowerType.PURE_ELECTRIC) VehicleStatusMapper.PowerType.PURE_ELECTRIC else VehicleStatusMapper.PowerType.RANGE_EXTENDER }) ?: "--",
+                    range = VehicleStatusMapper.widgetRange(signalMap, session.selectedCarType, snapshotPowerType?.let { if (it == SessionStore.VehiclePowerType.PURE_ELECTRIC) VehicleStatusMapper.PowerType.PURE_ELECTRIC else VehicleStatusMapper.PowerType.RANGE_EXTENDER }) ?: "--",
                     soc = VehicleStatusMapper.electricSocPercent(signalMap)
                         ?: VehicleStatusMapper.soc(signalMap),
                     fuelSoc = VehicleStatusMapper.fuelSocPercent(signalMap),
                     updated = ControlWidget.formatUpdatedTime(),
-                    powerType = vehicleConfig.powerType,
+                    powerType = snapshotPowerType,
                     electricRange = VehicleStatusMapper.electricRemainingRange(signalMap),
                     fuelRange = VehicleStatusMapper.fuelRemainingRange(signalMap),
                     electricTotalRange = VehicleStatusMapper.electricTotalRange(signalMap),
@@ -2236,27 +2251,6 @@ class MainActivity : ComponentActivity() {
                 }
                 val result = api.sendControl(command, savedPin)
                 sessionStore.save(session)
-
-                val isComfortCommand = command.cmdid in setOf("301", "370", "320", "360")
-                if (isComfortCommand) {
-                    ErrorLogs.repository.record(
-                        ErrorLogEntry(
-                            timestampMs = System.currentTimeMillis(),
-                            category = ErrorLogCategory.CONTROL_LOG,
-                            stage = "comfort_send_${command.cmdid}",
-                            httpStatus = 200,
-                            durationMs = System.currentTimeMillis() - started,
-                            retryCount = 0,
-                            appVersion = BuildConfig.VERSION_NAME,
-                            message = "下发指令: ${command.label}\n" +
-                                "cmdid: ${command.cmdid}\n" +
-                                "state: ${command.stateJson}\n" +
-                                "网关响应 msgID: ${result.msgID.ifBlank { "无 (非轮询)" }}\n" +
-                                "网关响应报文: ${result.raw}"
-                        )
-                    )
-                }
-
                 val shouldQueryControlResult = result.hasPollingId()
                 if (!shouldQueryControlResult) {
                     runOnMain(generation) {
@@ -2278,21 +2272,11 @@ class MainActivity : ComponentActivity() {
                 var finalText = "${command.label}：已发送，暂未收到车辆响应"
                 var completed = false
                 var sentryQuerySucceeded = false
-                var lastPollResp: String? = null
                 for (i in 0 until ControlResultPollingPolicy.appMaxAttempts) {
                     Thread.sleep(ControlResultPollingPolicy.delayBeforeAttempt(i))
                     val resp = api.queryControlResult(result.msgID)
                     sessionStore.save(session)
-                    lastPollResp = resp.toString()
-                    val qResult = resp.opt("result")
-                    val qCode = resp.opt("code")
-                    val qData = resp.opt("data")
-                    val dataSuccess = qData == 1 || qData == "1" || qData == true
-
-                    if (SentryModeControlPolicy.querySucceeded(qResult, qCode)) {
-                        if (isComfortCommand && !dataSuccess) {
-                            continue
-                        }
+                    if (SentryModeControlPolicy.querySucceeded(resp.opt("result"), resp.opt("code"))) {
                         if (sentryTarget != null) {
                             sentryQuerySucceeded = true
                             val latest = VehicleStatusMapper.withFuelMock(
@@ -2312,28 +2296,8 @@ class MainActivity : ComponentActivity() {
                         break
                     }
                 }
-                if (!completed) {
-                    if (sentryTarget != null && sentryQuerySucceeded) {
-                        finalText = "${command.label}：命令已执行，车辆状态待确认"
-                    } else if (isComfortCommand) {
-                        finalText = "${command.label}：车端未确认执行 (data=0)"
-                    }
-                }
-                if (isComfortCommand) {
-                    ErrorLogs.repository.record(
-                        ErrorLogEntry(
-                            timestampMs = System.currentTimeMillis(),
-                            category = ErrorLogCategory.CONTROL_LOG,
-                            stage = "comfort_poll_${command.cmdid}",
-                            httpStatus = 200,
-                            durationMs = System.currentTimeMillis() - started,
-                            retryCount = 0,
-                            appVersion = BuildConfig.VERSION_NAME,
-                            message = "指令结果: $finalText\n" +
-                                "cmdid: ${command.cmdid}, msgID: ${result.msgID}\n" +
-                                "车机轮询响应: ${lastPollResp ?: "未收到响应"}"
-                        )
-                    )
+                if (!completed && sentryTarget != null && sentryQuerySucceeded) {
+                    finalText = "${command.label}：命令已执行，车辆状态待确认"
                 }
                 runOnMain(generation) {
                     controlFeedback = ControlFeedback(
@@ -2351,28 +2315,22 @@ class MainActivity : ComponentActivity() {
             } catch (e: Exception) {
                 val elapsed = System.currentTimeMillis() - started
                 val apiError = e as? ApiException
-                val isComfort = command.cmdid in setOf("301", "370", "320", "360")
-                if (isComfort) {
-                    ErrorLogs.repository.record(
-                        ErrorLogEntry(
-                            timestampMs = System.currentTimeMillis(),
-                            category = ErrorLogCategory.CONTROL_FAILURE,
-                            stage = "comfort_control_error_${command.cmdid}",
-                            httpStatus = apiError?.httpStatus,
-                            durationMs = elapsed,
-                            retryCount = 0,
-                            appVersion = BuildConfig.VERSION_NAME,
-                            message = buildString {
-                                appendLine("座舱舒适指令下发/执行失败: ${command.label} (cmdid=${command.cmdid})")
-                                appendLine("请求载荷: ${command.stateJson}")
-                                appendLine("错误信息: ${e.message ?: e.toString()}")
-                                if (apiError?.httpStatus != null) {
-                                    appendLine("HTTP状态: ${apiError.httpStatus}")
-                                }
-                            }
-                        )
+                ErrorLogs.repository.record(
+                    ErrorLogEntry(
+                        timestampMs = System.currentTimeMillis(),
+                        category = ErrorLogCategory.CONTROL_FAILURE,
+                        stage = "control_${command.cmdid}",
+                        httpStatus = apiError?.httpStatus,
+                        durationMs = elapsed,
+                        retryCount = 0,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        message = buildString {
+                            appendLine("控车异常: ${command.label} (cmdid=${command.cmdid})")
+                            appendLine("载荷: ${command.stateJson}")
+                            appendLine("错误: ${e.message ?: e.toString()}")
+                        }
                     )
-                }
+                )
                 runOnMain(generation) {
                     handleSessionFailure(e)
                     val errMsg = controlFailureMessage(command.label, e)

@@ -37,14 +37,13 @@ object WidgetRangePresentationMapper {
         val electric = electricRange.cleanRange()
         val fuel = fuelRange.cleanRange()
         val hasHybridComponents = electric != null || fuel != null
-        // A confirmed fuel percentage is exclusive to range-extender telemetry.
-        // It lets the widget render a split range before a VIN power-type
-        // preference has been saved.
-        val inferredRangeExtender = powerType == null && fuelSocPercent != null
-        return if (
-            (powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER || inferredRangeExtender) &&
-            hasHybridComponents
-        ) {
+        val hasFuelData = fuel != null || fuelSocPercent != null
+        val isRangeExtender = when (powerType) {
+            SessionStore.VehiclePowerType.RANGE_EXTENDER -> true
+            SessionStore.VehiclePowerType.PURE_ELECTRIC -> false
+            null -> hasFuelData
+        }
+        return if (isRangeExtender && hasHybridComponents) {
             WidgetRangePresentation(
                 rangeExtender = true,
                 totalRange = total,

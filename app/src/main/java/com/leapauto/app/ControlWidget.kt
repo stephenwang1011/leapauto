@@ -39,13 +39,14 @@ class ControlWidget : AppWidgetProvider() {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, ControlWidget::class.java))
             if (ids.isEmpty()) return
+            val themeContext = widgetThemeContext(context)
             val update = baseViews(context).apply {
                 setTextViewText(R.id.txtWUpdated, text)
                 if (acEnabled != null) {
                     val store = SessionStore(context)
                     val snapshot = store.loadWidgetSnapshot(store.load().selectedVin)
                     applyActionSlots(
-                        context = context,
+                        context = themeContext,
                         views = this,
                         actions = store.loadWidget4x2Actions(),
                         locked = snapshot?.locked,
@@ -167,7 +168,7 @@ class ControlWidget : AppWidgetProvider() {
             val store = SessionStore(context)
             val themeContext = widgetThemeContext(context)
             val opacity = store.loadWidgetOpacity()
-            applyWidgetOpacity(this, opacity, widgetUsesDarkAppearance(context))
+            applyWidgetOpacity(context, this, opacity, widgetUsesDarkAppearance(context))
             applyStaticAppearance(themeContext, this, opacity)
             val snapshot = store.loadSelectedWidgetSnapshot()
             val session = store.load()
@@ -176,11 +177,20 @@ class ControlWidget : AppWidgetProvider() {
             setVehicleImage(this, appearance, session.selectedVin, context)
             setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
             snapshot?.let { snapshot ->
-                val widgetPowerType = snapshot.powerType ?: config.powerType
+                val isHybridCarType = (snapshot.carType.ifBlank { session.selectedCarType }).let {
+                    it.contains("增程") || it.contains("REEV", ignoreCase = true)
+                }
+                val widgetPowerType = when {
+                    config.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+                    snapshot.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+                    isHybridCarType -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+                    snapshot.fuelRange != null || snapshot.fuelSoc != null -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+                    else -> snapshot.powerType ?: config.powerType
+                }
                 setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
                 setTextViewText(R.id.txtWRange, snapshot.range)
                 applyRangePresentation(
-                    context,
+                    themeContext,
                     this,
                     WidgetRangePresentationMapper.fromValues(
                         totalRange = snapshot.range,
@@ -193,9 +203,9 @@ class ControlWidget : AppWidgetProvider() {
                         powerType = widgetPowerType
                     )
                 )
-                applyPureRangeTone(context, this, snapshot.soc, widgetPowerType)
+                applyPureRangeTone(themeContext, this, snapshot.soc, widgetPowerType)
                 setWidgetStatusText(
-                    context,
+                    themeContext,
                     this,
                     WidgetStatusMapper.presentation(
                         chargeState = snapshot.chargeState,
@@ -209,9 +219,9 @@ class ControlWidget : AppWidgetProvider() {
                     SessionStore.WidgetAccess.NO_SESSION -> "请打开App登录"
                 })
             } ?: run {
-                applyRangePresentation(context, this, WidgetRangePresentationMapper.fromValues(null, null, null, null))
-                applyPureRangeTone(context, this, null, null)
-                setWidgetStatusText(context, this, null)
+                applyRangePresentation(themeContext, this, WidgetRangePresentationMapper.fromValues(null, null, null, null))
+                applyPureRangeTone(themeContext, this, null, null)
+                setWidgetStatusText(themeContext, this, null)
                 setTextViewText(
                     R.id.txtWUpdated,
                     when (store.widgetAccess(null, session)) {
@@ -222,7 +232,7 @@ class ControlWidget : AppWidgetProvider() {
             }
             setOnClickPendingIntent(R.id.widgetRoot, openAppPendingIntent(context))
             applyActionSlots(
-                context = context,
+                context = themeContext,
                 views = this,
                 actions = store.loadWidget4x2Actions(),
                 locked = snapshot?.locked,
@@ -238,7 +248,7 @@ class ControlWidget : AppWidgetProvider() {
             val opacity = store.loadWidgetOpacity()
             val themeContext = widgetThemeContext(context)
             val darkTheme = widgetUsesDarkAppearance(context)
-            applyWidgetOpacity(views, opacity, darkTheme)
+            applyWidgetOpacity(context, views, opacity, darkTheme)
             applyStaticAppearance(themeContext, views, opacity)
             val session = store.load()
             val config = store.loadVehicleConfig(session.selectedVin, carType)
@@ -250,11 +260,21 @@ class ControlWidget : AppWidgetProvider() {
             val appearance = resolveWidgetAppearance(config, carType)
             setVehicleImage(views, appearance, session.selectedVin, context)
             views.setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
-            val powerType = config.powerType?.let { if (it == SessionStore.VehiclePowerType.PURE_ELECTRIC) VehicleStatusMapper.PowerType.PURE_ELECTRIC else VehicleStatusMapper.PowerType.RANGE_EXTENDER }
+            val isHybridCarType = (carType.ifBlank { session.selectedCarType }).let {
+                it.contains("增程") || it.contains("REEV", ignoreCase = true)
+            }
+            val hasFuel = VehicleStatusMapper.fuelRemainingRange(displayStatus) != null ||
+                VehicleStatusMapper.fuelSocPercent(displayStatus) != null
+            val effectivePowerType = when {
+                config.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+                isHybridCarType || hasFuel -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+                else -> config.powerType
+            }
+            val powerType = effectivePowerType?.let { if (it == SessionStore.VehiclePowerType.PURE_ELECTRIC) VehicleStatusMapper.PowerType.PURE_ELECTRIC else VehicleStatusMapper.PowerType.RANGE_EXTENDER }
             val soc = VehicleStatusMapper.electricSocPercent(displayStatus)
             views.setTextViewText(R.id.txtWRange, VehicleStatusMapper.widgetRange(displayStatus, carType, powerType) ?: "--")
             applyRangePresentation(
-                context,
+                themeContext,
                 views,
                 WidgetRangePresentationMapper.fromValues(
                     totalRange = VehicleStatusMapper.widgetRange(displayStatus, carType, powerType),
@@ -264,11 +284,11 @@ class ControlWidget : AppWidgetProvider() {
                     fuelTotalRange = VehicleStatusMapper.fuelTotalRange(displayStatus),
                     electricSocPercent = VehicleStatusMapper.electricSocPercent(displayStatus),
                     fuelSocPercent = VehicleStatusMapper.fuelSocPercent(displayStatus),
-                    powerType = config.powerType
+                    powerType = effectivePowerType
                 )
             )
-            applyPureRangeTone(context, views, soc, config.powerType)
-            setWidgetStatusText(context, views, WidgetStatusMapper.presentation(displayStatus, carType))
+            applyPureRangeTone(themeContext, views, soc, effectivePowerType)
+            setWidgetStatusText(themeContext, views, WidgetStatusMapper.presentation(displayStatus, carType))
             val acEnabled = WidgetAcMapper.state(displayStatus)
             val acTone = ClimateTemperatureToneResolver.tone(
                 acEnabled = acEnabled,
@@ -277,7 +297,7 @@ class ControlWidget : AppWidgetProvider() {
                 targetTemperature = displayStatus.opt("acSetting")?.toString()?.toIntOrNull()
             )
             applyActionSlots(
-                context = context,
+                context = themeContext,
                 views = views,
                 actions = store.loadWidget4x2Actions(),
                 locked = WidgetStatusMapper.locked(displayStatus),
@@ -294,7 +314,7 @@ class ControlWidget : AppWidgetProvider() {
             val opacity = store.loadWidgetOpacity()
             val themeContext = widgetThemeContext(context)
             val darkTheme = widgetUsesDarkAppearance(context)
-            applyWidgetOpacity(views, opacity, darkTheme)
+            applyWidgetOpacity(context, views, opacity, darkTheme)
             applyStaticAppearance(themeContext, views, opacity)
             val session = store.load()
             val configVin = session.selectedVin.ifBlank { snapshot.vin }
@@ -305,10 +325,19 @@ class ControlWidget : AppWidgetProvider() {
             )
             setVehicleImage(views, appearance, configVin, context)
             views.setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
-            val widgetPowerType = snapshot.powerType ?: config.powerType
+            val isHybridCarType = (snapshot.carType.ifBlank { session.selectedCarType }).let {
+                it.contains("增程") || it.contains("REEV", ignoreCase = true)
+            }
+            val hasFuel = snapshot.fuelRange != null || snapshot.fuelSoc != null
+            val widgetPowerType = when {
+                config.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+                snapshot.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+                isHybridCarType || hasFuel -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+                else -> snapshot.powerType ?: config.powerType
+            }
             views.setTextViewText(R.id.txtWRange, snapshot.range)
             applyRangePresentation(
-                context,
+                themeContext,
                 views,
                 WidgetRangePresentationMapper.fromValues(
                     totalRange = snapshot.range,
@@ -321,9 +350,9 @@ class ControlWidget : AppWidgetProvider() {
                     powerType = widgetPowerType
                 )
             )
-            applyPureRangeTone(context, views, snapshot.soc, widgetPowerType)
+            applyPureRangeTone(themeContext, views, snapshot.soc, widgetPowerType)
             setWidgetStatusText(
-                context,
+                themeContext,
                 views,
                 WidgetStatusMapper.presentation(
                     chargeState = snapshot.chargeState,
@@ -335,7 +364,7 @@ class ControlWidget : AppWidgetProvider() {
             )
             views.setTextViewText(R.id.txtWUpdated, snapshot.updated)
             applyActionSlots(
-                context = context,
+                context = themeContext,
                 views = views,
                 actions = store.loadWidget4x2Actions(),
                 locked = snapshot.locked,
@@ -359,7 +388,7 @@ class ControlWidget : AppWidgetProvider() {
         ) {
             val themeContext = widgetThemeContext(context)
             val iconColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
-            val background = widgetActionBackgroundResource(widgetUsesDarkAppearance(context))
+            val background = resolveWidgetActionBackground(context)
 
             val slotIds = listOf(R.id.slotW1, R.id.slotW2, R.id.slotW3, R.id.slotW4, R.id.slotW5)
             val imgIds = listOf(R.id.imgWSlot1, R.id.imgWSlot2, R.id.imgWSlot3, R.id.imgWSlot4, R.id.imgWSlot5)
@@ -394,7 +423,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_lock_open)
-                        views.setInt(imgId, "setColorFilter", iconColor)
+                        setImageTint(views, imgId, iconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, if (locked == false) "解锁（当前已解锁）" else "解锁")
                         views.setOnClickPendingIntent(slotId, click(context, "unlock"))
@@ -405,7 +434,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_lock)
-                        views.setInt(imgId, "setColorFilter", iconColor)
+                        setImageTint(views, imgId, iconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, if (locked == true) "上锁（当前已上锁）" else "上锁")
                         views.setOnClickPendingIntent(slotId, click(context, "lock"))
@@ -422,7 +451,7 @@ class ControlWidget : AppWidgetProvider() {
                         } else {
                             iconColor
                         }
-                        views.setInt(imgId, "setColorFilter", sentryColor)
+                        setImageTint(views, imgId, sentryColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, presentation.contentDescription)
                         views.setOnClickPendingIntent(slotId, click(context, presentation.command))
@@ -440,7 +469,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(ventId, if (showVent) View.VISIBLE else View.GONE)
 
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_fan)
-                        views.setInt(imgId, "setColorFilter", iconColor)
+                        setImageTint(views, imgId, iconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, presentation.contentDescription)
                         val pendingIntent = presentation.command
@@ -455,7 +484,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(ventId, View.GONE)
                         val presentation = TrunkControlPresentationMapper.fromState(trunkState)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_trunk_open)
-                        views.setInt(imgId, "setColorFilter", iconColor)
+                        setImageTint(views, imgId, iconColor)
                         views.setFloat(imgId, "setAlpha", if (trunkState == TrunkState.UNKNOWN) 0.65f else 1f)
                         views.setContentDescription(slotId, presentation.contentDescription)
                         views.setOnClickPendingIntent(
@@ -469,7 +498,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_trunk_open)
-                        views.setInt(imgId, "setColorFilter", iconColor)
+                        setImageTint(views, imgId, iconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, "开前备箱")
                         views.setOnClickPendingIntent(slotId, click(context, "frunkOpen"))
@@ -480,7 +509,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_wind)
-                        views.setInt(imgId, "setColorFilter", iconColor)
+                        setImageTint(views, imgId, iconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, "车窗半开")
                         views.setOnClickPendingIntent(slotId, click(context, "windowOpen"))
@@ -491,7 +520,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_wind)
-                        views.setInt(imgId, "setColorFilter", iconColor)
+                        setImageTint(views, imgId, iconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, "车窗通风")
                         views.setOnClickPendingIntent(slotId, click(context, "windowVent"))
@@ -502,7 +531,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_wind)
-                        views.setInt(imgId, "setColorFilter", iconColor)
+                        setImageTint(views, imgId, iconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, "一键关窗")
                         views.setOnClickPendingIntent(slotId, click(context, "windowClose"))
@@ -513,7 +542,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_sun)
-                        views.setInt(imgId, "setColorFilter", iconColor)
+                        setImageTint(views, imgId, iconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, "遮阳帘")
                         views.setOnClickPendingIntent(slotId, click(context, "sunshadeOpen"))
@@ -524,7 +553,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_bell_ringing)
-                        views.setInt(imgId, "setColorFilter", iconColor)
+                        setImageTint(views, imgId, iconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, "鸣笛寻车")
                         views.setOnClickPendingIntent(slotId, click(context, "horn"))
@@ -541,7 +570,7 @@ class ControlWidget : AppWidgetProvider() {
                         } else {
                             iconColor
                         }
-                        views.setInt(imgId, "setColorFilter", preheatColor)
+                        setImageTint(views, imgId, preheatColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, if (preheatActive) "电池预热（开启中）" else "电池预热")
                         views.setOnClickPendingIntent(
@@ -620,8 +649,8 @@ class ControlWidget : AppWidgetProvider() {
             )
             views.setImageViewResource(R.id.imgWElectricRangeIcon, R.drawable.ic_hybrid_electric)
             views.setImageViewResource(R.id.imgWFuelRangeIcon, R.drawable.ic_hybrid_fuel)
-            views.setInt(R.id.imgWElectricRangeIcon, "setColorFilter", electricColorValue)
-            views.setInt(R.id.imgWFuelRangeIcon, "setColorFilter", fuelColorValue)
+            setImageTint(views, R.id.imgWElectricRangeIcon, electricColorValue)
+            setImageTint(views, R.id.imgWFuelRangeIcon, fuelColorValue)
             views.setTextColor(R.id.txtWElectricRange, electricColorValue)
             views.setTextColor(R.id.txtWFuelRange, fuelColorValue)
             views.setContentDescription(
@@ -849,8 +878,23 @@ class ControlWidget : AppWidgetProvider() {
         private fun widgetActionBackgroundResource(darkTheme: Boolean): Int =
             if (darkTheme) R.drawable.widget_action_background_dark else R.drawable.widget_action_background_light
 
-        private fun applyWidgetOpacity(views: RemoteViews, opacity: Int, darkTheme: Boolean) {
-            views.setInt(R.id.widgetRoot, "setBackgroundResource", widgetBackgroundResource(opacity, darkTheme))
+        internal fun resolveWidgetActionBackground(context: Context, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int =
+            widgetActionBackgroundResource(darkTheme)
+
+        internal fun resolveWidgetCardBackground(context: Context, opacity: Int, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int =
+            widgetBackgroundResource(opacity, darkTheme)
+
+        /** Uses the standard RemoteViews tint operation where supported, with a legacy fallback. */
+        internal fun setImageTint(views: RemoteViews, viewId: Int, color: Int) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                views.setColorStateList(viewId, "setImageTintList", ColorStateList.valueOf(color))
+            } else {
+                views.setInt(viewId, "setColorFilter", color)
+            }
+        }
+
+        private fun applyWidgetOpacity(context: Context, views: RemoteViews, opacity: Int, darkTheme: Boolean) {
+            views.setInt(R.id.widgetRoot, "setBackgroundResource", resolveWidgetCardBackground(context, opacity, darkTheme))
         }
 
         private fun applyStaticAppearance(context: Context, views: RemoteViews, opacity: Int) {
@@ -866,12 +910,11 @@ class ControlWidget : AppWidgetProvider() {
             val slotIds = listOf(R.id.slotW1, R.id.slotW2, R.id.slotW3, R.id.slotW4, R.id.slotW5)
             val imgIds = listOf(R.id.imgWSlot1, R.id.imgWSlot2, R.id.imgWSlot3, R.id.imgWSlot4, R.id.imgWSlot5)
             imgIds.forEach { id ->
-                views.setInt(id, "setColorFilter", actionIcon)
+                setImageTint(views, id, actionIcon)
             }
-            val actionBackground = widgetActionBackgroundResource(
-                context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
-                    Configuration.UI_MODE_NIGHT_YES
-            )
+            // Use the widget's resolved appearance, including the user's explicit
+            // light/dark preference, instead of the device configuration alone.
+            val actionBackground = resolveWidgetActionBackground(context)
             slotIds.forEach { id ->
                 views.setInt(id, "setBackgroundResource", actionBackground)
             }

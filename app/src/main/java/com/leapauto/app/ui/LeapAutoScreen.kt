@@ -39,6 +39,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -99,6 +100,7 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -114,6 +116,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
@@ -122,8 +125,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
@@ -334,6 +339,7 @@ fun LeapAutoScreen(
     var showClimateControl by rememberSaveable { mutableStateOf(false) }
     var showHealthyChargingSheet by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirmationDialog by rememberSaveable { mutableStateOf(false) }
+
     val destination = when {
         !loggedIn -> ScreenDestination.LOGIN
         showVehicleLocation && selectedTab == MainNavigationTabs.VEHICLE -> ScreenDestination.LOCATION_DETAIL
@@ -752,34 +758,33 @@ fun LeapAutoScreen(
                     onDismissControlFeedback = onDismissControlFeedback,
                     onRefresh = onRefresh,
                     onControl = onControl,
-                    onApplyClimateSettings = onApplyClimateSettings,
-                    vehicleModel = vehicleModel
+                    onApplyClimateSettings = onApplyClimateSettings
                 )
                 ScreenDestination.ACCOUNT -> MyContent(
-                    phone,
-                    pinSaved,
-                    pin,
-                    onPinChange,
-                    onSavePin,
-                    pinSetupInProgress,
-                    onCancelPinSetup,
-                    widgetOpacity,
-                    onWidgetOpacityChange,
-                    widgetSensitiveActionVerificationEnabled,
-                    onWidgetSensitiveActionVerificationChange,
-                    widget4x2Actions,
-                    onWidget4x2ActionsChange,
-                    appearanceMode,
-                    onAppearanceModeChange,
-                    vehicleModel,
-                    vehicleConfig,
-                    onSaveVehicleConfig,
-                    currentVersion,
-                    currentReleaseNotes,
-                    versionUpdateState,
-                    onCheckForUpdate,
-                    onOpenUpdate,
-                    onLogout
+                    phone = phone,
+                    pinSaved = pinSaved,
+                    pin = pin,
+                    onPinChange = onPinChange,
+                    onSavePin = onSavePin,
+                    pinSetupInProgress = pinSetupInProgress,
+                    onCancelPinSetup = onCancelPinSetup,
+                    widgetOpacity = widgetOpacity,
+                    onWidgetOpacityChange = onWidgetOpacityChange,
+                    widgetSensitiveActionVerificationEnabled = widgetSensitiveActionVerificationEnabled,
+                    onWidgetSensitiveActionVerificationChange = onWidgetSensitiveActionVerificationChange,
+                    widget4x2Actions = widget4x2Actions,
+                    onWidget4x2ActionsChange = onWidget4x2ActionsChange,
+                    appearanceMode = appearanceMode,
+                    onAppearanceModeChange = onAppearanceModeChange,
+                    vehicleModel = vehicleModel,
+                    vehicleConfig = vehicleConfig,
+                    onSaveVehicleConfig = onSaveVehicleConfig,
+                    currentVersion = currentVersion,
+                    currentReleaseNotes = currentReleaseNotes,
+                    versionUpdateState = versionUpdateState,
+                    onCheckForUpdate = onCheckForUpdate,
+                    onOpenUpdate = onOpenUpdate,
+                    onLogout = onLogout
                 )
             }
         }
@@ -1018,67 +1023,95 @@ private fun HomeContent(
         },
         modifier = Modifier.fillMaxSize()
     ) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(start = 12.dp, top = 4.dp, end = 12.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            VehicleHero(
-                vehicleDisplayModel,
-                vehicleAppearance,
-                status,
-                statusUpdatedAtEpochMs,
-                vehicleNickname,
-                onOpenAccount,
-                vehicleAddress = vehicleAddress?.shortAddress,
-                onAddressClick = {
-                    if (locationSnapshot != null) {
-                        showAddressNavigationDialog = true
-                    }
-                },
-                vehicleVin = vehicleVin,
-                vehicleImageVersion = vehicleImageVersion,
-                onControl = onControl,
-                onOpenHealthyCharging = onOpenHealthyCharging
-            )
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val viewportHeight = maxHeight
+            val density = LocalDensity.current
+            var topContentHeightPx by remember { mutableIntStateOf(0) }
+            val minCardHeight = 184.dp
+            val dynamicCardHeight = remember(topContentHeightPx, viewportHeight) {
+                if (topContentHeightPx > 0) {
+                    val topPaddingPx = with(density) { 4.dp.roundToPx() }
+                    val spacingPx = with(density) { 8.dp.roundToPx() }
+                    val remainingPx = with(density) { viewportHeight.roundToPx() } -
+                        topContentHeightPx - topPaddingPx - spacingPx
+                    val remainingDp = with(density) { remainingPx.toDp() }
+                    maxOf(minCardHeight, remainingDp)
+                } else {
+                    minCardHeight
+                }
+            }
+
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 12.dp, top = 4.dp, end = 12.dp, bottom = 0.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                HomeTirePressureCard(status, Modifier.weight(1f))
-                VehicleStatusCard(
-                    status = status,
-                    todayMileage = EnergyHomeCardPolicy.todayMileage((energyState as? EnergyAnalyticsState.Success)?.data),
-                    onOpenHealthyCharging = onOpenHealthyCharging,
-                    modifier = Modifier.weight(1f)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onSizeChanged { topContentHeightPx = it.height },
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    VehicleHero(
+                        vehicleDisplayModel,
+                        vehicleAppearance,
+                        status,
+                        statusUpdatedAtEpochMs,
+                        vehicleNickname,
+                        onOpenAccount,
+                        vehicleAddress = vehicleAddress?.shortAddress,
+                        onAddressClick = {
+                            if (locationSnapshot != null) {
+                                showAddressNavigationDialog = true
+                            }
+                        },
+                        vehicleVin = vehicleVin,
+                        vehicleImageVersion = vehicleImageVersion,
+                        onControl = onControl,
+                        onOpenHealthyCharging = onOpenHealthyCharging
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        HomeTirePressureCard(status, Modifier.weight(1f))
+                        VehicleStatusCard(
+                            status = status,
+                            todayMileage = EnergyHomeCardPolicy.todayMileage((energyState as? EnergyAnalyticsState.Success)?.data),
+                            onOpenHealthyCharging = onOpenHealthyCharging,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    controlFeedback?.let { feedback ->
+                        ControlFeedbackBanner(feedback, onDismissControlFeedback)
+                    }
+                    QuickVehicleActions(
+                        vehicleVin = vehicleVin,
+                        vehicleModel = vehicleModel,
+                        status = status,
+                        locationSnapshot = locationSnapshot,
+                        onControl = onControl
+                    )
+                    ClimateOverviewCard(
+                        status = status,
+                        onOpenClimate = onOpenClimateControl,
+                        onQuickAcToggle = onControl,
+                        controlBusy = isRefreshing,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                EnergyHomePagerCard(
+                    state = energyState,
+                    vehicleTotalMileage = status?.totalMileage,
+                    vehicleModel = vehicleDisplayModel.ifBlank { vehicleModel },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(dynamicCardHeight)
                 )
             }
-            controlFeedback?.let { feedback ->
-                ControlFeedbackBanner(feedback, onDismissControlFeedback)
-            }
-            QuickVehicleActions(
-                vehicleVin = vehicleVin,
-                vehicleModel = vehicleModel,
-                status = status,
-                locationSnapshot = locationSnapshot,
-                onControl = onControl
-            )
-            ClimateOverviewCard(
-                status = status,
-                onOpenClimate = onOpenClimateControl,
-                onQuickAcToggle = onControl,
-                controlBusy = isRefreshing,
-                modifier = Modifier.fillMaxWidth()
-            )
-            EnergyHomePagerCard(
-                state = energyState,
-                vehicleTotalMileage = status?.totalMileage,
-                vehicleModel = vehicleDisplayModel.ifBlank { vehicleModel },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(8.dp))
         }
     }
 
@@ -2445,8 +2478,8 @@ fun VehicleHero(
         shadowElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.padding(top = 10.dp, bottom = 0.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             // ====== 1. 顶部区域：左侧昵称+更新时间+续航电量(整体紧密靠拢)，右侧设置按钮+位置信息 ======
             Row(
@@ -2459,7 +2492,7 @@ fun VehicleHero(
                 // 左侧列：座驾名称 + 状态更新时间 + 公里数 + 进度条 (紧密纵向堆叠)
                 Column(
                     modifier = Modifier.weight(1f, fill = false),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -2504,32 +2537,46 @@ fun VehicleHero(
 
                     Column(
                         modifier = Modifier
-                            .offset(y = (-5).dp)
+                            .offset(y = (-4).dp)
                             .clip(RoundedCornerShape(6.dp))
                             .clickable(onClick = onOpenHealthyCharging),
                         verticalArrangement = Arrangement.spacedBy(0.dp)
                     ) {
-                        // 公里数大字 + 紧随其后的 km 单位
+                        val pureElectricSocLabel = if (!isRangeExtender) {
+                            VehicleHomeStatus.resolvedSocLabel(status?.preciseSoc, status?.soc)
+                        } else null
+
+                        // 公里数大字 + 紧随其后的 km 单位 + 纯电模式下融合电量百分比
                         Row(
                             verticalAlignment = Alignment.Bottom,
                             horizontalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
                             Text(
                                 text = if (mileageHasUnit) mileageLabel.dropLast(2) else mileageLabel,
-                                fontSize = 32.sp,
-                                lineHeight = 30.sp,
+                                fontSize = 26.sp,
+                                lineHeight = 26.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = mileageDisplayColor,
                                 maxLines = 1
                             )
                             Text(
                                 text = "km",
-                                fontSize = 14.sp,
-                                lineHeight = 16.sp,
+                                fontSize = 12.sp,
+                                lineHeight = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = unitDisplayColor,
-                                modifier = Modifier.padding(bottom = 2.dp)
+                                modifier = Modifier.padding(bottom = 1.5.dp)
                             )
+                            if (pureElectricSocLabel != null) {
+                                Text(
+                                    text = "· $pureElectricSocLabel",
+                                    fontSize = 13.sp,
+                                    lineHeight = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = rangeColor,
+                                    modifier = Modifier.padding(bottom = 1.5.dp)
+                                )
+                            }
                         }
 
                         // 下方进度条与电量百分比 / 增程双胶囊 (向上贴紧大数字至 3~4dp)
@@ -2552,8 +2599,8 @@ fun VehicleHero(
 
                             Column(
                                 modifier = Modifier
-                                    .padding(top = 2.dp),
-                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                                    .padding(top = 1.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
                                 // 1. 一体化双段双拼能量微高光槽 (左纯电·右燃油，中间留微缝)
                                 Row(
@@ -2639,28 +2686,16 @@ fun VehicleHero(
                                 )
                             }
                         } else {
-                            val electricSocLabel = VehicleHomeStatus.resolvedSocLabel(status?.preciseSoc, status?.soc)
                             Column(
                                 modifier = Modifier.padding(top = 2.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    EnergyCapsuleProgressBar(
-                                        progress = chargeProgress(normalizedSoc),
-                                        color = rangeColor,
-                                        isCharging = status?.chargeState == 1,
-                                        modifier = Modifier.width(96.dp).height(4.5.dp)
-                                    )
-                                    Text(
-                                        text = electricSocLabel,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = rangeColor
-                                    )
-                                }
+                                EnergyCapsuleProgressBar(
+                                    progress = chargeProgress(normalizedSoc),
+                                    color = rangeColor,
+                                    isCharging = status?.chargeState == 1,
+                                    modifier = Modifier.width(110.dp).height(4.5.dp)
+                                )
                                 ChargingCenterPill(
                                     isCharging = status?.chargeState == 1,
                                     chargeRemainTime = status?.chargeRemainTime,
@@ -2671,7 +2706,7 @@ fun VehicleHero(
                     }
                 }
 
-                // 右侧列：设置按钮 + 位置信息 (放在设置按钮正下方)
+                // 右侧列：设置按钮 + 位置信息
                 Column(
                     horizontalAlignment = Alignment.End
                 ) {
@@ -2772,98 +2807,14 @@ fun VehicleHero(
                 }
             }
 
-            // ====== 2. 方案1: 私家展厅·极简光影地台 + 100% 原始饱满比例车模 ======
-            val isDarkHero = LocalAppDarkTheme.current
+            // ====== 2. 100% 原始饱满比例车身主图 (纯净无额外背景杂质) ======
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(148.dp),
+                    .offset(y = (-8).dp)
+                    .height(130.dp),
                 contentAlignment = Alignment.Center
             ) {
-                // 方案1: 极简展厅光影背景层 (背部柔和泛光 + 哑光地平线地台，车轮自然着地)
-                Canvas(modifier = Modifier.matchParentSize()) {
-                    val w = size.width
-                    val h = size.height
-                    val cx = w * 0.5f
-
-                    // 1. 车身后方环形柔和泛光 (Backdrop Spotlight Halo)
-                    val haloCenterY = h * 0.46f
-                    val haloColors = if (isDarkHero) {
-                        listOf(
-                            Color(0xFF2A3448).copy(alpha = 0.55f),
-                            Color(0xFF1C2433).copy(alpha = 0.25f),
-                            Color.Transparent
-                        )
-                    } else {
-                        listOf(
-                            Color.White.copy(alpha = 0.85f),
-                            Color(0xFFE4E9F2).copy(alpha = 0.40f),
-                            Color.Transparent
-                        )
-                    }
-                    drawOval(
-                        brush = Brush.radialGradient(
-                            colors = haloColors,
-                            center = Offset(cx, haloCenterY),
-                            radius = w * 0.45f
-                        ),
-                        topLeft = Offset(cx - w * 0.45f, haloCenterY - h * 0.40f),
-                        size = Size(w * 0.90f, h * 0.80f)
-                    )
-
-                    // 2. 哑光科技展厅地台 (Showroom Ground Floor)
-                    val groundY = h * 0.80f
-                    val floorColors = if (isDarkHero) {
-                        listOf(
-                            Color(0xFF1A202C).copy(alpha = 0.65f),
-                            Color(0xFF141822).copy(alpha = 0.85f)
-                        )
-                    } else {
-                        listOf(
-                            Color(0xFFE2E7EF).copy(alpha = 0.55f),
-                            Color(0xFFD6DCE6).copy(alpha = 0.75f)
-                        )
-                    }
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            colors = floorColors,
-                            startY = groundY,
-                            endY = h
-                        ),
-                        topLeft = Offset(0f, groundY),
-                        size = Size(w, h - groundY)
-                    )
-
-                    // 3. 极简展厅地平线光带 (Horizon Line with horizontal fade)
-                    val horizonLineColors = if (isDarkHero) {
-                        listOf(
-                            Color.Transparent,
-                            Color(0xFF3B4860).copy(alpha = 0.45f),
-                            Color(0xFF5A6D90).copy(alpha = 0.65f),
-                            Color(0xFF3B4860).copy(alpha = 0.45f),
-                            Color.Transparent
-                        )
-                    } else {
-                        listOf(
-                            Color.Transparent,
-                            Color(0xFFCAD1DC).copy(alpha = 0.35f),
-                            Color.White.copy(alpha = 0.85f),
-                            Color(0xFFCAD1DC).copy(alpha = 0.35f),
-                            Color.Transparent
-                        )
-                    }
-                    drawLine(
-                        brush = Brush.horizontalGradient(
-                            colors = horizonLineColors,
-                            startX = 0f,
-                            endX = w
-                        ),
-                        start = Offset(0f, groundY),
-                        end = Offset(w, groundY),
-                        strokeWidth = 1.dp.toPx()
-                    )
-                }
-
                 if (remoteBitmap != null) {
                     Image(
                         bitmap = remoteBitmap,
@@ -2871,8 +2822,8 @@ fun VehicleHero(
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(148.dp)
-                            .padding(horizontal = 20.dp)
+                            .height(130.dp)
+                            .padding(horizontal = 16.dp)
                     )
                 } else {
                     Image(
@@ -2881,8 +2832,8 @@ fun VehicleHero(
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(148.dp)
-                            .padding(horizontal = 20.dp)
+                            .height(130.dp)
+                            .padding(horizontal = 16.dp)
                     )
                 }
             }
@@ -4733,7 +4684,7 @@ fun EnergyHomePagerCard(
 ) {
     val pagerState = rememberPagerState(initialPage = EnergyHomePage.RECENT_MILEAGE.ordinal) { EnergyHomePage.entries.size }
     Surface(
-        modifier = modifier.height(184.dp),
+        modifier = modifier.heightIn(min = 184.dp),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -4834,58 +4785,152 @@ fun EnergyHomeSummaryPage(
     data: EnergyAnalyticsData,
     vehicleTotalMileage: String? = null
 ) {
-    val totalMileageDisplay = data.totalMileage?.let { displayEnergyMetric(it, "km") }
-        ?: vehicleTotalMileage?.takeIf { it.isNotBlank() && it != "--" }
+    val totalMileageDisplay = data.totalMileage?.value?.trim()?.removeSuffix("km")?.trim()
+        ?: vehicleTotalMileage?.trim()?.removeSuffix("km")?.trim()?.takeIf { it.isNotBlank() && it != "--" }
         ?: "—"
     val daysHasValue = data.ownershipDays?.value != null
     val mileageHasValue = totalMileageDisplay != "—" && totalMileageDisplay != "--"
     val energyHasValue = data.cumulativeEnergy != null
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center
+    val daysText = data.ownershipDays?.value?.toString() ?: "--"
+    val energyText = data.cumulativeEnergy?.value?.trim()?.removeSuffix("kWh")?.trim() ?: "--"
+
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        EnergyHomeMetricLine(
+        EnergyMetricCard(
             label = "提车时长",
-            value = data.ownershipDays?.value?.let { "$it 天" } ?: "--",
+            value = daysText,
+            unit = "天",
             valueColor = if (daysHasValue) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant,
-            valueBold = daysHasValue
+            accentColor = MaterialTheme.statusGood,
+            modifier = Modifier.weight(1f)
         )
-        Spacer(Modifier.height(8.dp))
-        EnergyHomeMetricLine(
+        EnergyMetricCard(
             label = "累计里程",
             value = totalMileageDisplay,
-            valueColor = if (mileageHasValue) MaterialTheme.statusWarn else MaterialTheme.colorScheme.onSurfaceVariant,
-            valueBold = mileageHasValue
+            unit = "km",
+            valueColor = if (mileageHasValue) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            accentColor = MaterialTheme.statusWarn,
+            modifier = Modifier.weight(1f)
         )
-        Spacer(Modifier.height(8.dp))
-        EnergyHomeMetricLine(
+        EnergyMetricCard(
             label = "累计能耗",
-            value = displayEnergyMetric(data.cumulativeEnergy, "kWh"),
-            valueColor = if (energyHasValue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-            valueBold = energyHasValue
+            value = energyText,
+            unit = "kWh",
+            valueColor = if (energyHasValue) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            accentColor = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f)
         )
+    }
+}
+
+@Composable
+private fun EnergyMetricCard(
+    label: String,
+    value: String,
+    unit: String,
+    valueColor: Color,
+    accentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxHeight(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.glassInsetSurface,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 6.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(5.dp)
+                        .clip(CircleShape)
+                        .background(accentColor)
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1
+                )
+            }
+
+            Text(
+                text = value,
+                fontSize = 17.sp,
+                lineHeight = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = valueColor,
+                style = MaterialTheme.typography.titleMedium.energyStyle(),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = unit,
+                style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 10.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+        }
     }
 }
 
 @Composable
 fun EnergyHomeWeeklyPage(data: EnergyAnalyticsData) {
     val points = EnergyHomeCardPolicy.recentTrend(data, limit = 6)
+    val overallNumber = data.overallConsumption?.value?.trim()?.removeSuffix("kWh/100km")?.trim() ?: "--"
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            displayEnergyMetric(data.overallConsumption, "kWh/100km"),
-            style = MaterialTheme.typography.titleMedium.energyStyle(),
-            fontWeight = FontWeight.Bold,
-            color = if (data.overallConsumption == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.statusGood,
-            maxLines = 1
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = overallNumber,
+                    fontSize = 22.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (data.overallConsumption == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.statusGood,
+                    style = MaterialTheme.typography.titleLarge.energyStyle()
+                )
+                Text(
+                    text = "kWh/100km",
+                    style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 11.sp),
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+            }
+        }
         if (points.isEmpty()) {
             EnergyHomeMissingData("暂无近 6 周能耗数据")
         } else {
-            EnergyHomeBars(points, modifier = Modifier.padding(bottom = 2.dp))
+            EnergyHomeBars(points, modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp, bottom = 2.dp))
         }
     }
 }
@@ -4907,7 +4952,7 @@ fun EnergyHomeMileagePage(data: EnergyAnalyticsData) {
         if (points.isEmpty()) {
             EnergyHomeMissingData("暂无近 7 天里程数据")
         } else {
-            EnergyHomeLineChart(points)
+            EnergyHomeLineChart(points, modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 4.dp, bottom = 2.dp))
         }
     }
 }
@@ -4949,40 +4994,93 @@ private fun EnergyHomeBars(
     modifier: Modifier = Modifier
 ) {
     val max = points.maxOfOrNull { it.value }?.takeIf { it > 0.0 } ?: 1.0
-    Row(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .height(72.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.Bottom
+            .heightIn(min = 72.dp)
     ) {
-        points.forEachIndexed { index, point ->
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Bottom
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(6.dp)
-                        .height((10 + 38 * (point.value / max).toFloat().coerceIn(0f, 1f)).dp)
-                        .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
-                        .background(
-                            if (index == points.lastIndex) MaterialTheme.statusGood
-                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+        val totalHeight = maxHeight
+        val valueLabelHeight = 18.dp
+        val dateLabelHeight = 16.dp
+        val spacing = 8.dp
+        val trackHeight = (totalHeight - valueLabelHeight - dateLabelHeight - spacing).coerceAtLeast(32.dp)
+
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            points.forEachIndexed { index, point ->
+                val isLast = index == points.lastIndex
+                val ratio = (point.value / max).toFloat().coerceIn(0f, 1f)
+                val barHeight = (trackHeight * 0.15f + trackHeight * 0.85f * ratio).coerceIn(6.dp, trackHeight)
+                val barBrush = if (isLast) {
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.statusGood,
+                            MaterialTheme.statusGood.copy(alpha = 0.70f)
                         )
-                )
-                Text(
-                    point.value.formatEnergyNumber(),
-                    modifier = Modifier.padding(top = 4.dp),
-                    style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 9.sp),
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    softWrap = false
-                )
+                    )
+                } else {
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                        )
+                    )
+                }
+                val dateLabel = if (EnergyWeekPeriodFormatter.isCurrentWeek(point.label, point.endLabel)) {
+                    "本周"
+                } else {
+                    EnergyWeekPeriodFormatter.weekEndDate(point.label, point.endLabel)
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // 柱顶能耗数值
+                    Text(
+                        text = point.value.formatEnergyNumber(),
+                        style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 10.sp),
+                        fontWeight = if (isLast) FontWeight.Bold else FontWeight.SemiBold,
+                        color = if (isLast) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+
+                    // 能量仓胶囊轨道
+                    Box(
+                        modifier = Modifier
+                            .width(18.dp)
+                            .height(trackHeight)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(MaterialTheme.glassInsetSurface)
+                            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f), RoundedCornerShape(9.dp)),
+                        contentAlignment = Alignment.BottomCenter
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(barHeight)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(barBrush)
+                        )
+                    }
+
+                    // 柱底时间标签
+                    Text(
+                        text = dateLabel,
+                        style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 9.5.sp),
+                        fontWeight = if (isLast) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isLast) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
             }
         }
     }
@@ -5006,55 +5104,82 @@ fun EnergyHomeCompositionPage(data: EnergyAnalyticsData) {
                 EnergyHomeCompositionDonut(
                     categories = categories,
                     total = total,
-                    modifier = Modifier.padding(start = 4.dp)
+                    modifier = Modifier.padding(start = 2.dp)
                 )
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(16.dp))
                 Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    verticalArrangement = Arrangement.SpaceEvenly
                 ) {
                     categories.take(3).forEachIndexed { index, category ->
                         val label = EnergyCompositionPresentation.displayLabel(category.label)
-                        val percent = EnergyCompositionPresentation.displayPercent(category.value, total)
-                        val energyValue = "${category.value.formatEnergyNumber()}kWh"
+                        val percentInt = if (total > 0.0) {
+                            (category.value.coerceAtLeast(0.0) / total * 100.0).roundToInt().coerceIn(0, 100)
+                        } else 0
+                        val energyValue = "${category.value.formatEnergyNumber()} kWh"
                         val typeColor = energyCompositionColor(category.label, index)
-                        Row(
+                        val fraction = if (total > 0.0) (category.value.coerceAtLeast(0.0) / total).toFloat().coerceIn(0f, 1f) else 0f
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(typeColor)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    label,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    energyValue,
+                                    style = MaterialTheme.typography.bodySmall.energyStyle(),
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = typeColor.copy(alpha = 0.12f),
+                                    contentColor = typeColor
+                                ) {
+                                    Text(
+                                        text = "$percentInt%",
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                        style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 11.sp),
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
                             Box(
-                                Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(typeColor)
-                            )
-                            Spacer(Modifier.width(5.dp))
-                            Text(
-                                label,
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                energyValue,
-                                style = MaterialTheme.typography.labelSmall.energyStyle(),
-                                fontWeight = FontWeight.Bold,
-                                color = typeColor,
-                                maxLines = 1
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                percent,
-                                modifier = Modifier.width(46.dp),
-                                style = MaterialTheme.typography.labelSmall.energyStyle(),
-                                fontWeight = FontWeight.Bold,
-                                color = typeColor,
-                                textAlign = TextAlign.End,
-                                maxLines = 1
-                            )
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.20f))
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(fraction.coerceAtLeast(0.03f))
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(typeColor)
+                                )
+                            }
                         }
                     }
                 }
@@ -5072,52 +5197,55 @@ private fun EnergyHomeCompositionDonut(
     val chartColors = categories.mapIndexed { index, category ->
         energyCompositionColor(category.label, index)
     }
+    val trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
     val emptyChartColor = MaterialTheme.colorScheme.surfaceContainerHighest
     Box(
-        modifier = modifier.size(72.dp),
+        modifier = modifier.size(86.dp),
         contentAlignment = Alignment.Center
     ) {
-        Canvas(Modifier.fillMaxSize()) {
-            var start = -90f
-            val stroke = 7.dp.toPx()
-            if (total <= 0.0) {
-                drawArc(
-                    color = emptyChartColor,
-                    startAngle = 0f,
-                    sweepAngle = 360f,
-                    useCenter = false,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
-                )
-            } else {
+        Canvas(Modifier.fillMaxSize().padding(5.dp)) {
+            val stroke = 8.dp.toPx()
+            drawArc(
+                color = trackColor,
+                startAngle = 0f,
+                sweepAngle = 360f,
+                useCenter = false,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+            if (total > 0.0) {
+                var start = -90f
+                val gap = if (categories.size > 1) 4f else 0f
                 categories.forEachIndexed { index, category ->
                     val sweep = (category.value.coerceAtLeast(0.0) / total * 360.0).toFloat()
-                    drawArc(
-                        color = chartColors[index % chartColors.size],
-                        startAngle = start,
-                        sweepAngle = sweep,
-                        useCenter = false,
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
-                    )
+                    if (sweep > gap) {
+                        drawArc(
+                            color = chartColors[index % chartColors.size],
+                            startAngle = start + gap / 2f,
+                            sweepAngle = sweep - gap,
+                            useCenter = false,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke, cap = StrokeCap.Round)
+                        )
+                    }
                     start += sweep
                 }
             }
         }
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy((-2).dp)
+            verticalArrangement = Arrangement.Center
         ) {
             val totalNumber = if (total > 0.0) total.formatEnergyNumber() else "--"
             Text(
                 text = totalNumber,
-                style = MaterialTheme.typography.titleSmall.energyStyle(),
+                style = MaterialTheme.typography.titleMedium.energyStyle(),
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1
             )
             Text(
-                text = "kWh",
+                text = "总能耗 kWh",
                 style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 9.sp),
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1
             )
@@ -5126,23 +5254,25 @@ private fun EnergyHomeCompositionDonut(
 }
 
 @Composable
-private fun EnergyHomeLineChart(points: List<com.leapauto.app.EnergySeriesPoint>) {
-    val max = points.maxOfOrNull { it.value }?.takeIf { it > 0.0 } ?: 1.0
-    val min = points.minOfOrNull { it.value } ?: 0.0
+private fun EnergyHomeLineChart(
+    points: List<com.leapauto.app.EnergySeriesPoint>,
+    modifier: Modifier = Modifier
+) {
+    val plotMax = points.maxOfOrNull { it.value }?.takeIf { it > 0.0 } ?: 1.0
     val chartColor = MaterialTheme.statusGood
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
     Canvas(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .height(72.dp)
+            .heightIn(min = 72.dp)
     ) {
-        val pointRadius = 2.5.dp.toPx()
+        val pointRadius = 3.dp.toPx()
         val horizontalInset = 16.dp.toPx()
-        val labelReserve = 14.dp.toPx()
+        val labelReserve = 15.dp.toPx()
         val dateReserve = 16.dp.toPx()
         val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = labelColor.toArgb()
-            textSize = 9.sp.toPx()
+            textSize = 9.5.sp.toPx()
             textAlign = Paint.Align.CENTER
             isFakeBoldText = true
         }
@@ -5157,7 +5287,9 @@ private fun EnergyHomeLineChart(points: List<com.leapauto.app.EnergySeriesPoint>
                 x = size.width / 2,
                 y = plotTop + plotHeight / 2
             )
+            drawCircle(chartColor.copy(alpha = 0.25f), radius = 6.dp.toPx(), center = center)
             drawCircle(chartColor, radius = pointRadius, center = center)
+            drawCircle(Color.White, radius = pointRadius * 0.5f, center = center)
             drawContext.canvas.nativeCanvas.drawText(
                 points.single().value.formatEnergyNumber(),
                 center.x,
@@ -5172,18 +5304,54 @@ private fun EnergyHomeLineChart(points: List<com.leapauto.app.EnergySeriesPoint>
             )
         } else {
             val step = (xEnd - xStart) / (points.size - 1)
-            val range = (max - min).takeIf { it > 0.0 } ?: 1.0
             val coords = points.mapIndexed { index, point ->
                 Offset(
                     x = xStart + index * step,
-                    y = plotBottom - ((point.value - min) / range).toFloat().coerceIn(0f, 1f) * plotHeight
+                    y = plotBottom - (point.value / plotMax).toFloat().coerceIn(0f, 1f) * plotHeight
                 )
             }
-            coords.zipWithNext().forEach { (start, end) ->
-                drawLine(chartColor, start, end, strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+            val strokePath = Path().apply {
+                moveTo(coords.first().x, coords.first().y)
+                for (i in 0 until coords.size - 1) {
+                    val p0 = coords[i]
+                    val p1 = coords[i + 1]
+                    val midX = (p0.x + p1.x) / 2f
+                    cubicTo(midX, p0.y, midX, p1.y, p1.x, p1.y)
+                }
             }
+            val fillPath = Path().apply {
+                addPath(strokePath)
+                lineTo(coords.last().x, plotBottom)
+                lineTo(coords.first().x, plotBottom)
+                close()
+            }
+            drawPath(
+                path = fillPath,
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        chartColor.copy(alpha = 0.25f),
+                        chartColor.copy(alpha = 0.03f)
+                    ),
+                    startY = plotTop,
+                    endY = plotBottom
+                )
+            )
+            drawPath(
+                path = strokePath,
+                color = chartColor,
+                style = Stroke(
+                    width = 2.5.dp.toPx(),
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
+            )
             coords.forEachIndexed { index, point ->
+                val isLast = index == points.lastIndex
+                if (isLast) {
+                    drawCircle(chartColor.copy(alpha = 0.25f), radius = 6.dp.toPx(), center = point)
+                }
                 drawCircle(chartColor, radius = pointRadius, center = point)
+                drawCircle(Color.White, radius = pointRadius * 0.5f, center = point)
                 drawContext.canvas.nativeCanvas.drawText(
                     points[index].value.formatEnergyNumber(),
                     point.x,
@@ -5456,8 +5624,7 @@ fun ClimateControlContent(
     onDismissControlFeedback: () -> Unit,
     onRefresh: () -> Unit,
     onControl: (String) -> Unit,
-    onApplyClimateSettings: (AirConditioningCommand) -> Unit,
-    vehicleModel: String = ""
+    onApplyClimateSettings: (AirConditioningCommand) -> Unit
 ) {
     LaunchedEffect(Unit) { onRefresh() }
     val actionsEnabled = Commands.canSubmitClimateControl(status != null, busy)
@@ -5717,202 +5884,6 @@ fun ClimateControlContent(
                             }
                             onControl(cmd)
                         }
-                    )
-                }
-            }
-
-            // ====== 座舱舒适控制面板 (座椅加热/通风与方向盘控制) ======
-            val isT03 = vehicleModel.contains("T03", ignoreCase = true)
-            if (!isT03) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.glassSurface,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    border = glassCardBorder(),
-                    shadowElevation = 0.dp
-                ) {
-                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("座舱舒适控制", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "点击循环切换档位",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ComfortSeatControlCard(
-                                seatLabel = "主驾座椅",
-                                heatLevel = status?.driverSeatHeating,
-                                ventLevel = status?.driverSeatVentilation,
-                                onHeatClick = { level -> onControl("driverSeatHeat$level") },
-                                onVentClick = { level -> onControl("driverSeatVent$level") },
-                                modifier = Modifier.weight(1f)
-                            )
-                            ComfortSeatControlCard(
-                                seatLabel = "副驾座椅",
-                                heatLevel = status?.passengerSeatHeating,
-                                ventLevel = status?.passengerSeatVentilation,
-                                onHeatClick = { level -> onControl("passengerSeatHeat$level") },
-                                onVentClick = { level -> onControl("passengerSeatVent$level") },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        // 方向盘加热
-                        val steeringActive = status?.steeringWheelHeating == true
-                        val steeringBg = if (steeringActive) MaterialTheme.statusWarn.copy(alpha = 0.12f) else MaterialTheme.glassInsetSurface
-                        val steeringBorder = if (steeringActive) BorderStroke(1.dp, MaterialTheme.statusWarn.copy(alpha = 0.65f)) else BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable {
-                                    onControl(if (steeringActive) "steeringWheelHeatOff" else "steeringWheelHeatOn")
-                                },
-                            shape = RoundedCornerShape(12.dp),
-                            color = steeringBg,
-                            border = steeringBorder
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        "方向盘加热",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        "点击${if (steeringActive) "关闭" else "开启"}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Text(
-                                    text = if (steeringActive) "♨️ 加热中" else "未开启",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (steeringActive) MaterialTheme.statusWarn else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ComfortSeatControlCard(
-    seatLabel: String,
-    heatLevel: Int?,
-    ventLevel: Int?,
-    onHeatClick: (Int) -> Unit,
-    onVentClick: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.glassInsetSurface,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(
-                seatLabel,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            // 加热控制胶囊按钮
-            val currentHeat = heatLevel ?: 0
-            val nextHeat = (currentHeat + 1) % 4
-            val heatActive = currentHeat > 0
-            val heatBg = if (heatActive) MaterialTheme.statusWarn.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-            val heatBorder = if (heatActive) BorderStroke(1.dp, MaterialTheme.statusWarn.copy(alpha = 0.70f)) else BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f))
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable { onHeatClick(nextHeat) },
-                shape = RoundedCornerShape(10.dp),
-                color = heatBg,
-                border = heatBorder
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "♨️ 加热",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (heatActive) MaterialTheme.statusWarn else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = if (currentHeat == 0) "关闭" else "${currentHeat} 挡",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (heatActive) MaterialTheme.statusWarn else MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-
-            // 通风控制胶囊按钮
-            val currentVent = ventLevel ?: 0
-            val nextVent = (currentVent + 1) % 4
-            val ventActive = currentVent > 0
-            val ventBg = if (ventActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-            val ventBorder = if (ventActive) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.70f)) else BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f))
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable { onVentClick(nextVent) },
-                shape = RoundedCornerShape(10.dp),
-                color = ventBg,
-                border = ventBorder
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "❄️ 通风",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (ventActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = if (currentVent == 0) "关闭" else "${currentVent} 挡",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (ventActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     )
                 }
             }

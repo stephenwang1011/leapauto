@@ -206,7 +206,7 @@ implementation work when an owned specialist already covers it.
   or equivalent delivery artifact. Completing an implementation, test, product
   acceptance, or documentation task does not by itself authorize or trigger a
   package.
-- Release packaging requires implementation evidence, test evidence, and product
+- Release packaging requires implementation evidence, test evidence (including a mandatory full pass of all unit tests via `.\gradlew.bat :app:testDebugUnitTest`), and product
   acceptance. External PGYER publication still requires explicit user authorization.
 - Handoff order is: product requirements/acceptance criteria -> specialist
   implementation -> testing evidence -> product acceptance -> release packaging or
@@ -254,6 +254,19 @@ For a UI or configuration change, normally run `:app:testDebugUnitTest`,
 `:app:assembleRelease`, and `:app:lintRelease`. For parser/model-only changes, run the
 relevant unit tests and `:app:assembleRelease`. Record commands, results, unavailable
 device coverage, and residual risk in the handoff.
+
+### Unit Testing Constraints (单元测试强制约束)
+
+- **新功能必须添加单元测试 (New Features Require Unit Tests)**:
+  凡是新增功能、数据模型、信号解析、控制指令或业务逻辑，必须在 `app/src/test/` 下同步编写对应的单元测试，覆盖正常路径、边界条件与异常处理分支。
+- **修改功能必须同步修改测试 (Modified Features Require Test Updates)**:
+  凡是修改既有功能、调整业务逻辑、重构模型或修改 UI 展示映射，必须同步检查、修改并补充现有的单元测试，确保测试用例准确反映最新行为且无任何回归。
+- **打包前必须全量执行单元测试 (Full Test Suite Must Pass Before Packaging)**:
+  在执行任何打包流程（包括运行 `.\scripts\package-release.ps1`、`.\scripts\publish-pgyer.ps1` 或生成 Release 交付 APK）之前，必须**全量执行并通过全部单元测试**：
+  ```powershell
+  .\gradlew.bat :app:testDebugUnitTest
+  ```
+  全量单元测试 100% 通过是打包与发布的前置硬性门禁。严禁在测试未执行或存在任何测试失败的情况下进行打包或发布。
 
 Never use a Debug APK as a deliverable. A user-requested package delivery builds
 the signed Release variant and copies it to:
@@ -339,6 +352,7 @@ Use four-space Kotlin indentation, immutable-first state, focused composables, a
 snake case for Android resources. When adding a signal, update `SignalTable.kt`, the
 consuming model/formatter, tests, and `API.md` together. When adding a command,
 update `Models.kt`, confirmation/feedback behavior, tests, and `API.md` together.
+Every new feature requires corresponding unit tests; every modified feature requires updating existing unit tests to ensure behavior consistency and prevent regressions.
 
 Every implementation handoff must include:
 
@@ -361,6 +375,10 @@ project’s delivery work. Do not reset or discard unrelated user changes.
 - 用户说“发布”时，默认指将最新签名 Release APK 发布到蒲公英；除非用户明确指定其他平台或仅要求打包。
 - 用户说“打包”或“3D 包”时，生成唯一受支持的 3D 签名 Release APK。Lite 构建已移除。
 - 用户说“发布”时，默认发布最新 3D 签名 Release APK 到蒲公英。
+- **打包与发布前测试门禁**：在执行打包（`.\scripts\package-release.ps1`）或发布（`.\scripts\publish-pgyer.ps1`）前，必须**全量执行并通过全部单元测试**（`.\gradlew.bat :app:testDebugUnitTest`），确保测试全部通过（100% SUCCESS）；严禁在测试未执行或有任何测试失败的情况下进行打包或发布。
+- **功能与测试同步约束**：
+  - 新增功能必须同步添加对应的单元测试；
+  - 修改既有功能或业务逻辑必须同步更新已有单元测试，确保测试覆盖度并防止逻辑回归。
 - 每次蒲公英发布必须附带简洁、面向用户的更新日志。
 - 更新日志必须使用带编号的条目，并且每条单独换行显示，例如：
   `1. 适配增程车型，显示燃油和纯电续航`

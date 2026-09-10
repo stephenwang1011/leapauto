@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="energy_green">#4ADE80</color>
     <color name="feedback_icon">#E6EAF2</color>
     <color name="widget_surface">#20242D</color>
+    <color name="widget_card_border">#33FFFFFF</color>
+    <color name="widget_surface_75">#C020242D</color>
+    <color name="widget_surface_50">#8020242D</color>
+    <color name="widget_surface_25">#4020242D</color>
     <color name="widget_on_surface">#E6EAF2</color>
     <color name="widget_on_surface_variant">#A3ADBB</color>
     <color name="widget_action_pressed">#334A5568</color>

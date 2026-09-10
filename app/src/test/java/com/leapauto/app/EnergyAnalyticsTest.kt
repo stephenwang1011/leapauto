@@ -198,6 +198,26 @@ class EnergyAnalyticsTest {
         assertEquals("custom-label", EnergyWeekPeriodFormatter.format("custom-label", null))
     }
 
+    @Test
+    fun `weekEndDate prefers end date and falls back to start date plus 6 days`() {
+        assertEquals("8/2", EnergyWeekPeriodFormatter.weekEndDate("2026-07-27", "2026-08-02"))
+        assertEquals("8/2", EnergyWeekPeriodFormatter.weekEndDate("2026-07-27", null))
+        assertEquals("8/9", EnergyWeekPeriodFormatter.weekEndDate("2026-08-03", ""))
+        assertEquals("8/16", EnergyWeekPeriodFormatter.weekEndDate("2026-08-10", null))
+        assertEquals("8/23", EnergyWeekPeriodFormatter.weekEndDate("2026-08-17", null))
+        assertEquals("8/30", EnergyWeekPeriodFormatter.weekEndDate("2026-08-24", null))
+        assertEquals("9/6", EnergyWeekPeriodFormatter.weekEndDate("2026-08-31", "2026-09-06"))
+    }
+
+    @Test
+    fun `isCurrentWeek checks if current date falls within the week interval`() {
+        val today = java.time.LocalDate.now()
+        val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
+        val sunday = monday.plusDays(6)
+        assertTrue(EnergyWeekPeriodFormatter.isCurrentWeek(monday.toString(), sunday.toString()))
+        assertFalse(EnergyWeekPeriodFormatter.isCurrentWeek(monday.minusWeeks(1).toString(), sunday.minusWeeks(1).toString()))
+    }
+
     @Test(expected = EnergyAnalyticsBusinessException::class)
     fun `previous week composition business failure is rejected`() {
         LastWeekEnergyCompositionParser.parse(JSONObject("""{"result":2,"data":{}}"""))

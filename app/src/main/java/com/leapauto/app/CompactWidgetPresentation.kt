@@ -40,12 +40,8 @@ object CompactWidgetRangePresentationMapper {
         val normalizedSoc = soc?.coerceIn(0, 100)
         val normalizedElectricRange = cleanRange(electricRange)
         val normalizedFuelRange = cleanRange(fuelRange)
-        // Electric-only telemetry is also present on pure-electric vehicles;
-        // infer a hybrid widget only from fuel-specific data when no vehicle
-        // power-type preference has been saved.
-        val inferredRangeExtender = powerType == null &&
-            (normalizedFuelRange != null || fuelSoc != null)
-        val rangeExtender = powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER || inferredRangeExtender
+        val hasFuelTelemetry = normalizedFuelRange != null || fuelSoc != null
+        val rangeExtender = powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER || hasFuelTelemetry
         val electricProgress = electricSoc?.coerceIn(0, 100)
             ?: ratioProgress(normalizedElectricRange, cleanRange(electricTotalRange))
         val fuelProgress = fuelSoc?.coerceIn(0, 100)

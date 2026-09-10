@@ -167,7 +167,17 @@ class ControlService : Service() {
             vin = session.selectedVin,
             powerType = config.powerType
         )
-        val powerType = config.powerType?.let {
+        val hasFuel = VehicleStatusMapper.fuelRemainingRange(displayStatus) != null ||
+            VehicleStatusMapper.fuelSocPercent(displayStatus) != null ||
+            session.selectedCarType.contains("增程") ||
+            session.selectedCarType.contains("REEV", ignoreCase = true) ||
+            config.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER
+        val resolvedPowerType = if (hasFuel) {
+            SessionStore.VehiclePowerType.RANGE_EXTENDER
+        } else {
+            config.powerType
+        }
+        val powerType = resolvedPowerType?.let {
             if (it == SessionStore.VehiclePowerType.PURE_ELECTRIC) {
                 VehicleStatusMapper.PowerType.PURE_ELECTRIC
             } else {
@@ -185,7 +195,7 @@ class ControlService : Service() {
                 ?: VehicleStatusMapper.soc(displayStatus),
             fuelSoc = VehicleStatusMapper.fuelSocPercent(displayStatus),
             updated = ControlWidget.formatUpdatedTime(),
-            powerType = config.powerType,
+            powerType = resolvedPowerType,
             electricRange = VehicleStatusMapper.electricRemainingRange(displayStatus),
             fuelRange = VehicleStatusMapper.fuelRemainingRange(displayStatus),
             electricTotalRange = VehicleStatusMapper.electricTotalRange(displayStatus),
