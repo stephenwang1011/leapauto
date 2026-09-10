@@ -87,7 +87,33 @@ data class Vehicle(
     val year: String = "",
     val color: String = "",
     val powerType: SessionStore.VehiclePowerType = SessionStore.VehiclePowerType.PURE_ELECTRIC
-)
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("vin", vin)
+        put("carType", carType)
+        put("hvacCapability", hvacCapability.toJson())
+        put("nickname", nickname)
+        put("year", year)
+        put("color", color)
+        put("powerType", powerType.name)
+    }
+
+    companion object {
+        fun fromJson(json: JSONObject): Vehicle = Vehicle(
+            vin = json.optString("vin"),
+            carType = json.optString("carType"),
+            hvacCapability = json.optJSONObject("hvacCapability")?.let { HvacCapability.fromJson(it) }
+                ?: HvacCapability.fallback(),
+            nickname = json.optString("nickname"),
+            year = json.optString("year"),
+            color = json.optString("color"),
+            powerType = json.optString("powerType").let {
+                runCatching { SessionStore.VehiclePowerType.valueOf(it) }
+                    .getOrDefault(SessionStore.VehiclePowerType.PURE_ELECTRIC)
+            }
+        )
+    }
+}
 
 data class VehiclePictureMeta(
     val pictureKey: String,

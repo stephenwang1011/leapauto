@@ -183,6 +183,7 @@ class MainActivity : ComponentActivity() {
     private var handledUpdateVersion by mutableStateOf<String?>(null)
     private var showAuthorSupportDialog by mutableStateOf(false)
     private var showSessionExpiredDialog by mutableStateOf(false)
+    private var availableVehicles by mutableStateOf<List<Vehicle>>(emptyList())
 
     private val authorSupportPromptRunnable = Runnable {
         if (canShowAuthorSupportPrompt()) {
@@ -203,6 +204,7 @@ class MainActivity : ComponentActivity() {
         energyCacheStore = EnergyCacheStore(this)
         session = sessionStore.load()
         hvacCapability = session.hvacCapability
+        availableVehicles = sessionStore.loadVehicles()
         val defaultPower = when {
             session.selectedCarType.isPureElectricModel() -> SessionStore.VehiclePowerType.PURE_ELECTRIC
             session.selectedCarType.contains("增程") || session.selectedCarType.contains("REEV", ignoreCase = true) -> SessionStore.VehiclePowerType.RANGE_EXTENDER
@@ -266,6 +268,8 @@ class MainActivity : ComponentActivity() {
                     pinSaved = pinSaved,
                     pinSetupInProgress = pinSetupInProgress,
                     showVehicleConfigConfirmationPrompt = showVehicleConfigConfirmationPrompt,
+                    availableVehicles = availableVehicles,
+                    onSwitchVehicle = ::switchVehicle,
                     widgetOpacity = widgetOpacity,
                     appearanceMode = appearanceMode,
                     energyState = energyState,
@@ -511,6 +515,7 @@ class MainActivity : ComponentActivity() {
             api.loginWithSms(phone, code)
             val vehicles = api.listVehicles()
             if (vehicles.isEmpty()) throw ApiException("账号下没有找到车辆")
+            sessionStore.saveVehicles(vehicles)
             val selected = vehicles.firstOrNull { it.vin == session.selectedVin } ?: vehicles.first()
             vehicleConfig = sessionStore.loadVehicleConfig(
                 vin = session.selectedVin,
@@ -521,6 +526,7 @@ class MainActivity : ComponentActivity() {
             )
             sessionStore.save(session)
             runOnMain(generation) {
+                availableVehicles = vehicles
                 hvacCapability = session.hvacCapability
                 toast("登录成功")
                 loggedIn = true
@@ -549,6 +555,7 @@ class MainActivity : ComponentActivity() {
         session = sessionStore.load()
         hvacCapability = session.hvacCapability
         vehicleConfig = SessionStore.VehicleConfig()
+        availableVehicles = emptyList()
         clearEnergyState()
         pin = ""
         pinSaved = false
@@ -1379,6 +1386,12 @@ class MainActivity : ComponentActivity() {
             try {
                 val api = LeapmotorApi(session)
                 val vehicles = api.listVehicles()
+                if (vehicles.isNotEmpty()) {
+                    sessionStore.saveVehicles(vehicles)
+                    runOnMain {
+                        availableVehicles = vehicles
+                    }
+                }
                 val selected = vehicles.firstOrNull { it.vin == session.selectedVin } ?: vehicles.firstOrNull()
                 if (selected != null) {
                     sessionStore.save(session)
@@ -1422,6 +1435,58 @@ class MainActivity : ComponentActivity() {
                 vehicleImageSyncInFlight.set(false)
             }
         }
+    }
+
+    private fun switchVehicle(targetVin: String) {
+        if (targetVin.isBlank() || targetVin == session.selectedVin) return
+        val target = availableVehicles.firstOrNull { it.vin == targetVin } ?: return
+        session.selectedVin = target.vin
+        session.selectedCarType = target.carType
+        session.selectedNickname = target.nickname
+        session.selectedYear = target.year
+        session.route = null
+        session.hvacCapability = target.hvacCapability
+        sessionStore.save(session)
+
+        val defaultPower = when {
+            target.carType.isPureElectricModel() -> SessionStore.VehiclePowerType.PURE_ELECTRIC
+            target.carType.contains("增程") || target.carType.contains("REEV", ignoreCase = true) -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+            else -> target.powerType
+        }
+        vehicleConfig = sessionStore.loadVehicleConfig(
+            vin = target.vin,
+            defaultModel = target.carType,
+            defaultNickname = target.nickname,
+            defaultYear = target.year.ifBlank { "2026" },
+            defaultPowerType = defaultPower
+        )
+
+        healthyChargeLimitSoc = sessionStore.loadHealthyChargeLimit(target.vin)
+        scheduledChargeEnabled = sessionStore.loadScheduledChargeEnabled(target.vin)
+        scheduledChargeStartTime = sessionStore.loadScheduledChargeStartTime(target.vin)
+        scheduledChargeEndTime = sessionStore.loadScheduledChargeEndTime(target.vin)
+        scheduledChargeContinueUntilLimit = sessionStore.loadScheduledChargeContinueUntilLimit(target.vin)
+        scheduledChargeCirculation = sessionStore.loadScheduledChargeCirculation(target.vin)
+        scheduledChargeCycles = sessionStore.loadScheduledChargeCycles(target.vin)
+        scheduledPreheatEnabled = sessionStore.loadScheduledPreheatEnabled(target.vin)
+        scheduledPreheatStartTime = sessionStore.loadScheduledPreheatStartTime(target.vin)
+        scheduledPreheatDays = sessionStore.loadScheduledPreheatDays(target.vin)
+
+        status = null
+        statusError = ""
+        controlFeedback = null
+        vehicleLocationSnapshot = null
+        vehicleLocationSnapshotState = null
+        vehicleAddress = null
+        lastGeocodedLocation = null
+        energyState = EnergyAnalyticsState.Idle
+        energyLastSuccessAt = 0L
+
+        ControlWidget.refreshData(this)
+        refreshStatus()
+        refreshEnergy(force = true)
+        syncVehicleImage(target.vin)
+        toast("已切换至 ${target.nickname.ifBlank { target.carType }}")
     }
 
     /** Reads raw signalMap data only after the user opens the diagnostics page. */

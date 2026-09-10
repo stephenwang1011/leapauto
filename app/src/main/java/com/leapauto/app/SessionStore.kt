@@ -1,6 +1,7 @@
 package com.leapauto.app
 
 import android.content.Context
+import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
 
@@ -125,6 +126,22 @@ class SessionStore(context: Context) {
     fun clear() = synchronized(SESSION_LOCK) {
         val nextGeneration = prefs.getLong(SESSION_GENERATION, 0L) + 1L
         prefs.edit().clear().putLong(SESSION_GENERATION, nextGeneration).commit()
+    }
+
+    fun saveVehicles(vehicles: List<Vehicle>) = synchronized(SESSION_LOCK) {
+        val array = JSONArray()
+        vehicles.forEach { array.put(it.toJson()) }
+        prefs.edit().putString("vehicles", array.toString()).apply()
+    }
+
+    fun loadVehicles(): List<Vehicle> = synchronized(SESSION_LOCK) {
+        val raw = prefs.getString("vehicles", null) ?: return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { i ->
+                array.optJSONObject(i)?.let { Vehicle.fromJson(it) }
+            }
+        }.getOrDefault(emptyList())
     }
 
     fun loadOpPassword(): String? = secureValues.getString("op_password")?.takeIf { it.matches(Regex("\\d{4}")) }

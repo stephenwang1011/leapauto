@@ -44,4 +44,50 @@ class VehicleConfigTest {
                 VehicleConfigStorageKeys.field("VIN-B", "color")
         )
     }
+
+    @Test
+    fun vehicleSerializationAndDeserializationRoundTripsSuccessfully() {
+        val vehicle = Vehicle(
+            vin = "LF3A11C16TEST0001",
+            carType = "C16 增程",
+            hvacCapability = HvacCapability(temperatureMinC = 16, temperatureMaxC = 32, fanMin = 1, fanMax = 7),
+            nickname = "我的C16",
+            year = "2026",
+            color = "pearl_white",
+            powerType = SessionStore.VehiclePowerType.RANGE_EXTENDER
+        )
+        val json = vehicle.toJson()
+        val restored = Vehicle.fromJson(json)
+
+        assertEquals("LF3A11C16TEST0001", restored.vin)
+        assertEquals("C16 增程", restored.carType)
+        assertEquals("我的C16", restored.nickname)
+        assertEquals("2026", restored.year)
+        assertEquals("pearl_white", restored.color)
+        assertEquals(SessionStore.VehiclePowerType.RANGE_EXTENDER, restored.powerType)
+        assertEquals(16, restored.hvacCapability.temperatureMinC)
+        assertEquals(32, restored.hvacCapability.temperatureMaxC)
+    }
+
+    @Test
+    fun vehicleListDistinctAndMultiVehicleSelection() {
+        val car1 = Vehicle(
+            vin = "LF3A11C16TEST0001",
+            carType = "C16 增程",
+            nickname = "大白C16",
+            powerType = SessionStore.VehiclePowerType.RANGE_EXTENDER
+        )
+        val car2 = Vehicle(
+            vin = "LF3A10C10TEST0002",
+            carType = "C10 纯电",
+            nickname = "小灰C10",
+            powerType = SessionStore.VehiclePowerType.PURE_ELECTRIC
+        )
+        val list = listOf(car1, car2)
+        assertEquals(2, list.size)
+        val selectedVin = car2.vin
+        val selected = list.firstOrNull { it.vin == selectedVin }
+        assertEquals("小灰C10", selected?.nickname)
+        assertEquals("C10 纯电", selected?.carType)
+    }
 }

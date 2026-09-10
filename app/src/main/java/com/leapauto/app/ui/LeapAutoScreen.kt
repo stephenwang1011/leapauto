@@ -108,6 +108,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -196,6 +197,7 @@ import com.leapauto.app.VehicleAppearanceCatalog
 import com.leapauto.app.VehicleConfigConfirmationPolicy
 import com.leapauto.app.VehicleHomeStatus
 import com.leapauto.app.VehicleImageCache
+import com.leapauto.app.Vehicle
 import com.leapauto.app.VehicleLocationAvailability
 import com.leapauto.app.VehicleLocationMapDomain
 import com.leapauto.app.VehicleLocationMapModel
@@ -271,6 +273,8 @@ fun LeapAutoScreen(
         vehicleDisplayModel,
         vehicleConfig.color
     ),
+    availableVehicles: List<Vehicle> = emptyList(),
+    onSwitchVehicle: (String) -> Unit = {},
     hvacCapability: HvacCapability = HvacCapability.fallback(),
     pinSaved: Boolean,
     pinSetupInProgress: Boolean,
@@ -741,7 +745,9 @@ fun LeapAutoScreen(
                         showVehicleLocation = false
                         showClimateControl = false
                     },
-                    vehicleImageVersion = vehicleImageVersion
+                    vehicleImageVersion = vehicleImageVersion,
+                    availableVehicles = availableVehicles,
+                    onSwitchVehicle = onSwitchVehicle
                 )
                 ScreenDestination.LOCATION_DETAIL -> VehicleLocationDetailContent(
                     summary = status?.locationSummary,
@@ -784,6 +790,9 @@ fun LeapAutoScreen(
                     versionUpdateState = versionUpdateState,
                     onCheckForUpdate = onCheckForUpdate,
                     onOpenUpdate = onOpenUpdate,
+                    availableVehicles = availableVehicles,
+                    onSwitchVehicle = onSwitchVehicle,
+                    vehicleVin = vehicleVin,
                     onLogout = onLogout
                 )
             }
@@ -1011,7 +1020,9 @@ private fun HomeContent(
     onOpenClimateControl: () -> Unit,
     onOpenHealthyCharging: () -> Unit = {},
     onOpenAccount: () -> Unit,
-    vehicleImageVersion: Int = 0
+    vehicleImageVersion: Int = 0,
+    availableVehicles: List<Vehicle> = emptyList(),
+    onSwitchVehicle: (String) -> Unit = {}
 ) {
     var showAddressNavigationDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -1070,7 +1081,9 @@ private fun HomeContent(
                         vehicleVin = vehicleVin,
                         vehicleImageVersion = vehicleImageVersion,
                         onControl = onControl,
-                        onOpenHealthyCharging = onOpenHealthyCharging
+                        onOpenHealthyCharging = onOpenHealthyCharging,
+                        availableVehicles = availableVehicles,
+                        onSwitchVehicle = onSwitchVehicle
                     )
                     Row(
                         Modifier.fillMaxWidth(),
@@ -1218,9 +1231,13 @@ private fun MyContent(
     versionUpdateState: VersionUpdateState,
     onCheckForUpdate: () -> Unit,
     onOpenUpdate: () -> Unit,
+    availableVehicles: List<Vehicle> = emptyList(),
+    onSwitchVehicle: (String) -> Unit = {},
+    vehicleVin: String = "",
     onLogout: () -> Unit = {}
 ) {
     var showDiagnosticLogDialog by rememberSaveable { mutableStateOf(false) }
+    var showVehicleSelectorInAccount by remember { mutableStateOf(false) }
 
     Column(
         Modifier
@@ -1237,6 +1254,58 @@ private fun MyContent(
             initialSetupInProgress = pinSetupInProgress,
             onCancelInitialSetup = onCancelPinSetup
         )
+
+        if (availableVehicles.size > 1) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { showVehicleSelectorInAccount = true },
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.glassSurface,
+                border = glassCardBorder()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("切换座驾", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "当前选中：${vehicleConfig.nickname.ifBlank { vehicleModel }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(percent = 50),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                        ) {
+                            Text(
+                                "共 ${availableVehicles.size} 台",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Icon(
+                            painter = painterResource(R.drawable.ic_phosphor_caret_right),
+                            contentDescription = "切换",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
 
         VehicleConfigCard(vehicleModel, vehicleConfig, onSaveVehicleConfig)
 
@@ -1266,6 +1335,15 @@ private fun MyContent(
 
     if (showDiagnosticLogDialog) {
         DiagnosticLogDialog(onDismiss = { showDiagnosticLogDialog = false })
+    }
+
+    if (showVehicleSelectorInAccount && availableVehicles.size > 1) {
+        VehicleSelectorDialog(
+            currentVin = vehicleVin,
+            vehicles = availableVehicles,
+            onSelectVehicle = onSwitchVehicle,
+            onDismiss = { showVehicleSelectorInAccount = false }
+        )
     }
 }
 
@@ -2445,7 +2523,9 @@ fun VehicleHero(
     vehicleVin: String = "",
     vehicleImageVersion: Int = 0,
     onControl: ((String) -> Unit)? = null,
-    onOpenHealthyCharging: () -> Unit = {}
+    onOpenHealthyCharging: () -> Unit = {},
+    availableVehicles: List<Vehicle> = emptyList(),
+    onSwitchVehicle: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val remoteBitmap = remember(vehicleVin, vehicleImageVersion) {
@@ -2468,6 +2548,7 @@ fun VehicleHero(
     }
     val mileageLabel = status?.mileage ?: "--"
     val mileageHasUnit = mileageLabel.endsWith("km", ignoreCase = true)
+    var showVehicleSelectorDialog by remember { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -2481,6 +2562,7 @@ fun VehicleHero(
             modifier = Modifier.padding(top = 10.dp, bottom = 0.dp),
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
+
             // ====== 1. 顶部区域：左侧昵称+更新时间+续航电量(整体紧密靠拢)，右侧设置按钮+位置信息 ======
             Row(
                 modifier = Modifier
@@ -2498,14 +2580,36 @@ fun VehicleHero(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            nickname,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .then(
+                                    if (availableVehicles.size > 1) {
+                                        Modifier.clickable { showVehicleSelectorDialog = true }
+                                    } else Modifier
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                nickname,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (availableVehicles.size > 1) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_phosphor_caret_right),
+                                    contentDescription = "切换车辆",
+                                    modifier = Modifier
+                                        .size(13.dp)
+                                        .rotate(90f),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                         if (status?.sentryMode == true) {
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
@@ -2838,7 +2942,156 @@ fun VehicleHero(
                 }
             }
         }
+
+        if (showVehicleSelectorDialog && availableVehicles.size > 1) {
+            VehicleSelectorDialog(
+                currentVin = vehicleVin,
+                vehicles = availableVehicles,
+                onSelectVehicle = onSwitchVehicle,
+                onDismiss = { showVehicleSelectorDialog = false }
+            )
+        }
     }
+}
+
+@Composable
+private fun VehicleSelectorDialog(
+    currentVin: String,
+    vehicles: List<Vehicle>,
+    onSelectVehicle: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "切换座驾",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Surface(
+                    shape = RoundedCornerShape(percent = 50),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                ) {
+                    Text(
+                        text = "共 ${vehicles.size} 台车",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                vehicles.forEach { vehicle ->
+                    val isSelected = vehicle.vin == currentVin
+                    val isReev = vehicle.carType.contains("增程") ||
+                        vehicle.carType.contains("REEV", ignoreCase = true) ||
+                        vehicle.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER
+                    val powerLabel = if (isReev) "增程" else "纯电"
+                    val displayName = vehicle.nickname.ifBlank { vehicle.carType }
+
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable {
+                                onSelectVehicle(vehicle.vin)
+                                onDismiss()
+                            },
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                        } else {
+                            MaterialTheme.glassInsetSurface
+                        },
+                        border = if (isSelected) {
+                            BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                        } else {
+                            BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = displayName,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = (if (isReev) MaterialTheme.statusWarn else MaterialTheme.statusGood).copy(alpha = 0.12f)
+                                    ) {
+                                        Text(
+                                            text = powerLabel,
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isReev) MaterialTheme.statusWarn else MaterialTheme.statusGood
+                                        )
+                                    }
+                                }
+                                val maskedVin = if (vehicle.vin.length >= 8) {
+                                    "${vehicle.vin.take(6)}...${vehicle.vin.takeLast(4)}"
+                                } else vehicle.vin
+                                Text(
+                                    text = "${vehicle.carType} · VIN: $maskedVin",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            if (isSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_phosphor_check),
+                                        contentDescription = "当前选中",
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
 }
 
 @Composable
