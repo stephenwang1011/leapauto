@@ -186,10 +186,17 @@ fun VehicleHealthCheckBottomSheet(
             }
 
             // ====== 2. 全息扫描视觉区 (车模 + 激光雷达扫描波) ======
+            val scanAura = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(
+                        shape = RoundedCornerShape(20.dp),
+                        auraColor = scanAura,
+                        auraCenter = Offset(0.5f, 0.4f)
+                    ),
                 shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.glassSurface,
+                color = Color.Transparent,
                 border = glassCardBorder()
             ) {
                 Column(
@@ -209,16 +216,6 @@ fun VehicleHealthCheckBottomSheet(
                         if (remoteBitmap != null) {
                             Image(
                                 bitmap = remoteBitmap.asImageBitmap(),
-                                contentDescription = "体检车模",
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(130.dp)
-                                    .padding(horizontal = 12.dp)
-                            )
-                        } else {
-                            Image(
-                                painter = painterResource(vehicleAppearance.imageResource),
                                 contentDescription = "体检车模",
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier

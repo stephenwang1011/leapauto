@@ -19,7 +19,6 @@ class WidgetVehicleAppearanceTest {
 
         assertEquals("C10", appearance.model)
         assertEquals("metal_black", appearance.color.id)
-        assertEquals(R.drawable.vehicle_lafa5_liquid_silver, appearance.imageResource)
     }
 
     @Test
@@ -34,7 +33,6 @@ class WidgetVehicleAppearanceTest {
 
         assertEquals("Lafa5", appearance.model)
         assertEquals("speed_orange", appearance.color.id)
-        assertEquals(R.drawable.vehicle_lafa5_liquid_silver, appearance.imageResource)
     }
 
     @Test
@@ -46,6 +44,5 @@ class WidgetVehicleAppearanceTest {
 
         assertEquals("C16", appearance.model)
         assertEquals("liquid_silver", appearance.color.id)
-        assertEquals(R.drawable.vehicle_lafa5_liquid_silver, appearance.imageResource)
     }
 }

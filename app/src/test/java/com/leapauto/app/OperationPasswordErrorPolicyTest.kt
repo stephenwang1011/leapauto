@@ -29,6 +29,8 @@ class OperationPasswordErrorPolicyTest {
         assertFalse(OperationPasswordErrorPolicy.isPasswordError(Exception("未登录")))
         assertFalse(OperationPasswordErrorPolicy.isPasswordError(Exception("车辆已离线")))
         assertFalse(OperationPasswordErrorPolicy.isPasswordError(Exception("系统繁忙，请稍后重试(500)")))
+        assertFalse(OperationPasswordErrorPolicy.isPasswordError(Exception("Token 长度不足，无法加密操作密码")))
+        assertFalse(OperationPasswordErrorPolicy.isPasswordError(Exception("未登录（缺少用于加密操作密码的 Token）")))
         assertFalse(OperationPasswordErrorPolicy.isPasswordError(null))
     }
 }

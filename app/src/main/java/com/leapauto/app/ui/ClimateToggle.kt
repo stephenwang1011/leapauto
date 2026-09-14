@@ -88,8 +88,7 @@ fun ClimateToggle(
     // 轨道：开启使用零跑 Leap Blue，关闭和禁用状态保持中性弱化。
     val trackColor by animateColorAsState(
         targetValue = when {
-            checked && enabled -> LeapBlue
-            checked -> LeapBlue.copy(alpha = 0.38f)
+            checked -> LeapBlue
             enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
             else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.20f)
         },
@@ -99,8 +98,7 @@ fun ClimateToggle(
     // 滑块：开启时使用白色，与蓝色轨道形成清晰对比。
     val thumbColor by animateColorAsState(
         targetValue = when {
-            checked && enabled -> Color.White
-            checked -> Color.White.copy(alpha = 0.70f)
+            checked -> Color.White
             else -> Color.White.copy(alpha = if (enabled) 1f else 0.9f)
         },
         animationSpec = animationSpec,

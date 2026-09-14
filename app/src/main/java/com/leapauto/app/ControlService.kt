@@ -162,11 +162,7 @@ class ControlService : Service() {
         status: org.json.JSONObject
     ): TrunkState {
         val config = store.loadVehicleConfig(session.selectedVin, session.selectedCarType)
-        val displayStatus = VehicleStatusMapper.withFuelMock(
-            status = status,
-            vin = session.selectedVin,
-            powerType = config.powerType
-        )
+        val displayStatus = status
         val hasFuel = VehicleStatusMapper.fuelRemainingRange(displayStatus) != null ||
             VehicleStatusMapper.fuelSocPercent(displayStatus) != null ||
             session.selectedCarType.contains("增程") ||

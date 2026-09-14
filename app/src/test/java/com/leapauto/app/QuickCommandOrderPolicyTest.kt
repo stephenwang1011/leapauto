@@ -1,6 +1,8 @@
 package com.leapauto.app
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class QuickCommandOrderPolicyTest {
@@ -67,5 +69,22 @@ class QuickCommandOrderPolicyTest {
         assertEquals(0, QuickCommandOrderPolicy.targetIndex(8, 100f, 54f, 1))
         assertEquals(0, QuickCommandOrderPolicy.targetIndex(-2, -100f, 54f, 0))
         assertEquals(1, QuickCommandOrderPolicy.targetIndex(1, Float.NaN, 54f, 3))
+    }
+
+    @Test
+    fun quickCommandExecutionPolicyMatchesActiveCommands() {
+        assertTrue(QuickCommandExecutionPolicy.isCommandInProgress("unlock", "unlock"))
+        assertTrue(QuickCommandExecutionPolicy.isCommandInProgress("lock", "lock"))
+        assertTrue(QuickCommandExecutionPolicy.isCommandInProgress("trunk", "trunkOpen"))
+        assertTrue(QuickCommandExecutionPolicy.isCommandInProgress("trunk", "trunkClose"))
+        assertTrue(QuickCommandExecutionPolicy.isCommandInProgress("windowGroup", "windowVent"))
+        assertTrue(QuickCommandExecutionPolicy.isCommandInProgress("windowGroup", "windowOpen"))
+        assertTrue(QuickCommandExecutionPolicy.isCommandInProgress("sunshadeGroup", "sunshadeOpen"))
+        assertTrue(QuickCommandExecutionPolicy.isCommandInProgress("sentry", "sentryOn"))
+
+        assertFalse(QuickCommandExecutionPolicy.isCommandInProgress("unlock", "lock"))
+        assertFalse(QuickCommandExecutionPolicy.isCommandInProgress("trunk", "unlock"))
+        assertFalse(QuickCommandExecutionPolicy.isCommandInProgress("unlock", null))
+        assertFalse(QuickCommandExecutionPolicy.isCommandInProgress("unlock", ""))
     }
 }

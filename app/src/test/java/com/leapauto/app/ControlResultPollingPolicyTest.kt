@@ -7,8 +7,8 @@ import org.junit.Test
 
 class ControlResultPollingPolicyTest {
     @Test
-    fun `polling waits one second then polls every half second`() {
-        assertEquals(1_000L, ControlResultPollingPolicy.delayBeforeAttempt(0))
+    fun `polling waits half second then polls every half second`() {
+        assertEquals(500L, ControlResultPollingPolicy.delayBeforeAttempt(0))
         assertEquals(500L, ControlResultPollingPolicy.delayBeforeAttempt(1))
         assertEquals(500L, ControlResultPollingPolicy.delayBeforeAttempt(20))
         assertThrows(IllegalArgumentException::class.java) {
@@ -18,8 +18,8 @@ class ControlResultPollingPolicyTest {
 
     @Test
     fun `app and widget preserve their existing maximum wait windows`() {
-        assertEquals(47, ControlResultPollingPolicy.appMaxAttempts)
-        assertEquals(23, ControlResultPollingPolicy.widgetMaxAttempts)
+        assertEquals(48, ControlResultPollingPolicy.appMaxAttempts)
+        assertEquals(24, ControlResultPollingPolicy.widgetMaxAttempts)
         assertEquals(
             ControlResultPollingPolicy.APP_MAX_WAIT_MS,
             elapsedBeforeLastAttempt(ControlResultPollingPolicy.appMaxAttempts)

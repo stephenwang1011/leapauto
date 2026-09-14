@@ -1,10 +1,15 @@
 package com.leapauto.app
 
+import com.leapauto.app.bluetooth.BleKeyCertificate
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.Locale
+import java.util.concurrent.TimeUnit
+import okhttp3.FormBody
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
@@ -14,7 +19,20 @@ class ApiException(message: String, val httpStatus: Int? = null, val durationMs:
  * 零跑中国 App 云接口客户端（阻塞式，请在后台线程调用）。
  * 协议移植自 leap-cn-mcp 的 leapmotor-cn-sdk.js。
  */
-class LeapmotorApi(private val session: Session) {
+class LeapmotorApi internal constructor(
+    private val session: Session,
+    private val deviceFingerprintProvider: () -> String,
+    private val loginRequestExecutor: (Request) -> VehicleListRawResponse
+) {
+    constructor(session: Session) : this(
+        session,
+        { ShumeiSecurityManager.requireDeviceId() },
+        { request ->
+            NetworkDebugController.httpClient().newCall(request).execute().use { response ->
+                VehicleListRawResponse(response.code, response.body?.string().orEmpty())
+            }
+        }
+    )
 
     companion object {
         const val APP_USER_HOST = "https://appuser.leapmotor.cn"
@@ -26,6 +44,20 @@ class LeapmotorApi(private val session: Session) {
             "/carownerservice/v3/api/drivingrecord/getLastNweeks100kmECAndRank"
         const val DRIVING_RECORD_DEBUG_PREFIX = "/carownerservice/v3/api/drivingrecord"
         const val LAST_WEEK_EC_PATH = "/carownerservice/v3/api/drivingrecord/getLastweekEC"
+        const val BLUETOOTH_CERTIFICATE_PATH =
+            "/carownerservice/v3/api/bluetoothkey/combine/syncBluetoothKeys"
+
+        // Key material must never enter the opt-in HTTP inspector or a redirect target.
+        internal val bluetoothCertificateHttpClient: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .callTimeout(45, TimeUnit.SECONDS)
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .build()
+        }
 
         /** 新网关 accessToken 剩余不足 5 分钟时提前续期。 */
         private const val ACCESS_REFRESH_LEEWAY_MS = 5 * 60 * 1000L
@@ -198,11 +230,12 @@ class LeapmotorApi(private val session: Session) {
 
     private fun oldAppHeaders(withToken: Boolean = true): Map<String, String> {
         val headers = linkedMapOf(
+            "User-Agent" to "okhttp/4.9.3",
             "APPPlatform" to "Android",
-            "APPVersion" to session.appVersion,
+            "APPVersion" to "3.19.2-2",
             "APPImei" to session.deviceId,
             "C-VERSIONS" to "APP",
-            "XFX-CDN-VRS" to "v4"
+            "XFX-CDN-VRS" to "IPv4"
         )
         if (withToken && session.oldAuth != null) {
             headers["XFX-CDN-CROSS-NODE"] = session.oldAuth!!.token
@@ -278,48 +311,151 @@ class LeapmotorApi(private val session: Session) {
         return headers
     }
 
+    private fun combinedAppAndGatewayHeaders(
+        params: Map<String, String?> = emptyMap(),
+        needLogin: Boolean = true
+    ): Map<String, String> {
+        val headers = oldAppHeaders(true).toMutableMap()
+        if (session.newAuth != null) {
+            headers.putAll(newGatewayHeaders(params, needLogin))
+        }
+        return headers
+    }
+
     // ------------------------------------------------------------------ 登录
 
     fun sendSms(phone: String) {
         check(phone.isNotBlank()) { "手机号不能为空" }
-        val resp = http(
-            "$APP_USER_HOST/app-user/applogin/compliance/sendmessagecode",
-            headers = oldAppHeaders(withToken = false),
-            query = mapOf("phoneNo" to Crypto.rsaEncryptPhone(phone))
+        val request = SmsLoginProtocol.buildSmsRequest(
+            Crypto.rsaEncryptPhone(phone),
+            oldAppHeaders(withToken = false)
         )
-        checkResult(resp, "发送验证码")
+        val response = SmsLoginProtocol.parseHttpResponse(
+            executeLoginRequest(request, SmsLoginProtocol.SMS_STAGE), SmsLoginProtocol.SMS_STAGE
+        )
+        SmsLoginProtocol.checkSmsResponse(response)
     }
 
-    /** 短信验证码登录：旧 token + 换新网关 accessToken/signKey。 */
-    fun loginWithSms(phone: String, smsCode: String) {
+    /** 短信验证码登录：旧 token + 换新网关 accessToken/signKey。可附带极验验证凭据。 */
+    fun loginWithSms(
+        phone: String,
+        smsCode: String,
+        captchaResult: GeetestCaptchaResult? = null
+    ) {
         check(phone.isNotBlank() && smsCode.isNotBlank()) { "手机号和验证码不能为空" }
-        val params = LinkedHashMap<String, String?>()
-        params["phoneNoCiphertext"] = Crypto.rsaEncryptPhone(phone)
-        params["smsCode"] = smsCode
-        params["deviceID"] = session.deviceId
-        params["smDeviceId"] = session.deviceId
-        params["os"] = "android"
-        params["pageUrl"] = ""
-        val resp = http(
-            "$APP_USER_HOST/app-user/applogin/check_login_with_phone",
-            method = "POST",
+        val smId = SmsLoginProtocol.requireDeviceId(deviceFingerprintProvider)
+        val request = SmsLoginProtocol.buildLoginRequest(
+            phoneCiphertext = Crypto.rsaEncryptPhone(phone),
+            phone = phone,
+            smsCode = smsCode,
+            deviceId = session.deviceId,
+            smDeviceId = smId,
             headers = oldAppHeaders(withToken = false),
-            query = params,
-            queryPost = true
+            captchaResult = captchaResult
         )
-        val data = resp.optJSONObject("data")
-        val authObj = data?.optJSONObject("appLoginVO") ?: data?.optJSONObject("appOneLoginVO")
-            ?: findObject(resp) { it.has("accountId") && it.has("token") }
-            ?: throw ApiException(
-                "登录失败: ${resp.optString("msg").ifEmpty { resp.optString("message") }} " +
-                    (data?.optString("risk_type")?.let { "(risk_type=$it)" } ?: "")
-            )
-        val tokenExpired = authObj.optString("tokenExpired", "")
+        val response = SmsLoginProtocol.parseHttpResponse(
+            executeLoginRequest(request, SmsLoginProtocol.LOGIN_STAGE), SmsLoginProtocol.LOGIN_STAGE
+        )
+        val oldAuth = SmsLoginProtocol.parseLoginResponse(response, phone, smsCode)
         session.phone = phone.trim()
+        session.oldAuth = oldAuth
+        exchangeNewGateway()
+    }
+
+    private fun executeLoginRequest(request: Request, stage: String): VehicleListRawResponse =
+        SmsLoginProtocol.executeRequest(stage) { loginRequestExecutor(request) }
+
+    /** 通过抓包或导出的 JSON/Token 快速登录并换取新网关凭据。支持 JSON、纯 appLoginVO、逗号分隔、或含 token/accountId 的文本。 */
+    fun loginWithRawAuth(rawText: String, phoneInput: String = "") {
+        val trimmed = rawText.trim()
+        check(trimmed.isNotBlank()) { "导入内容不能为空" }
+
+        var accountId = ""
+        var token = ""
+        var refreshToken = ""
+        var tokenExpired = "21600"
+        var phone = phoneInput.trim()
+
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            val jsonObj = try {
+                JSONObject(trimmed)
+            } catch (e: Exception) {
+                throw ApiException("JSON 格式错误，请检查粘贴内容: ${e.message}")
+            }
+            val authObj = jsonObj.optJSONObject("appLoginVO")
+                ?: jsonObj.optJSONObject("appOneLoginVO")
+                ?: jsonObj.optJSONObject("data")?.optJSONObject("appLoginVO")
+                ?: jsonObj.optJSONObject("data")?.optJSONObject("appOneLoginVO")
+                ?: findObject(jsonObj) { it.has("accountId") && it.has("token") }
+            if (authObj != null) {
+                accountId = authObj.optString("accountId").ifEmpty { authObj.optString("identifier") }
+                token = authObj.optString("token").ifEmpty { authObj.optString("security") }
+                refreshToken = authObj.optString("refreshToken", "")
+                tokenExpired = authObj.optString("tokenExpired", "21600")
+            } else {
+                accountId = jsonObj.optString("accountId").ifEmpty { jsonObj.optString("identifier") }
+                token = jsonObj.optString("token").ifEmpty { jsonObj.optString("security") }
+                refreshToken = jsonObj.optString("refreshToken", "")
+                tokenExpired = jsonObj.optString("tokenExpired", "21600")
+            }
+            val devId = jsonObj.optString("deviceID").ifEmpty {
+                jsonObj.optString("deviceId").ifEmpty {
+                    jsonObj.optString("deviceid").ifEmpty {
+                        jsonObj.optString("appimei")
+                    }
+                }
+            }.trim()
+            if (devId.isNotBlank()) {
+                session.deviceId = devId
+            }
+            val smId = jsonObj.optString("smDeviceId").ifEmpty {
+                jsonObj.optString("smdeviceid").ifEmpty {
+                    jsonObj.optString("sm_device_id")
+                }
+            }.trim()
+            if (smId.isNotBlank()) {
+                session.smDeviceId = smId
+            }
+            if (phone.isBlank()) {
+                phone = jsonObj.optString("phone").ifEmpty {
+                    jsonObj.optJSONObject("data")?.optString("phone") ?: ""
+                }
+            }
+        } else if (trimmed.contains(",") && !trimmed.contains("\n")) {
+            val parts = trimmed.split(",")
+            accountId = parts[0].trim()
+            token = parts[1].trim()
+            if (parts.size > 2) refreshToken = parts[2].trim()
+        } else {
+            val tokenMatch = Regex("""(?:token|security|XFX-CDN-CROSS-NODE)["':=\s]+([a-zA-Z0-9_-]{16,})""", RegexOption.IGNORE_CASE).find(trimmed)
+            val accountMatch = Regex("""(?:accountId|identifier|userId|account_id)["':=\s]+([a-zA-Z0-9_-]+)""", RegexOption.IGNORE_CASE).find(trimmed)
+            val refreshMatch = Regex("""(?:refreshToken|XFX-CDN-CROSS-REFRESH-NODE)["':=\s]+([a-zA-Z0-9_-]{16,})""", RegexOption.IGNORE_CASE).find(trimmed)
+            val devIdMatch = Regex("""(?:deviceID|deviceId|deviceid|appimei)["':=\s]+([a-zA-Z0-9_-]{16,})""", RegexOption.IGNORE_CASE).find(trimmed)
+            val smMatch = Regex("""(?:smDeviceId|smdeviceid|sm_device_id)["':=\s]+([a-zA-Z0-9_%/+=.-]{16,})""", RegexOption.IGNORE_CASE).find(trimmed)
+            token = tokenMatch?.groupValues?.getOrNull(1) ?: ""
+            accountId = accountMatch?.groupValues?.getOrNull(1) ?: ""
+            refreshToken = refreshMatch?.groupValues?.getOrNull(1) ?: ""
+            val devId = devIdMatch?.groupValues?.getOrNull(1)?.trim() ?: ""
+            if (devId.isNotBlank()) {
+                session.deviceId = devId
+            }
+            val smId = smMatch?.groupValues?.getOrNull(1)?.trim() ?: ""
+            if (smId.isNotBlank()) {
+                session.smDeviceId = smId
+            }
+        }
+
+        check(accountId.isNotBlank() && token.isNotBlank()) {
+            "未能解析出有效的 accountId 和 token，请确保内容包含这两项凭据"
+        }
+
+        if (phone.isNotBlank()) {
+            session.phone = phone
+        }
         session.oldAuth = OldAuth(
-            accountId = authObj.optString("accountId"),
-            token = authObj.optString("token"),
-            refreshToken = authObj.optString("refreshToken", ""),
+            accountId = accountId,
+            token = token,
+            refreshToken = refreshToken,
             tokenExpired = tokenExpired,
             tokenObtainedAt = System.currentTimeMillis()
         )
@@ -418,6 +554,10 @@ class LeapmotorApi(private val session: Session) {
             throw ApiException("网关登录响应缺少 signParam.r2/r3")
         }
         val signKey = Crypto.deriveSignKey(accessToken, r2, r3)
+        val boundDeviceId = Crypto.jwtDeviceId(accessToken)
+        if (!boundDeviceId.isNullOrBlank()) {
+            session.deviceId = boundDeviceId
+        }
         val expiresAt = Crypto.jwtExpiryMs(accessToken).takeIf { it > 0 }
             ?: data.optLong("tokenExpireTime").takeIf { it > 0 }?.let {
                 System.currentTimeMillis() + it * 1000
@@ -441,7 +581,10 @@ class LeapmotorApi(private val session: Session) {
         val vehicles = rawObjects
             .distinctBy { it.optString("vin") }
             .map {
-                val carType = it.optString("carType").ifEmpty { it.optString("cartype") }
+                val carType = it.optString("carType")
+                    .ifEmpty { it.optString("cartype") }
+                    .ifEmpty { it.optJSONObject("modelParam")?.optString("carType").orEmpty() }
+                    .ifEmpty { it.optString("model") }
                 val rightList = it.optString("rightList")
                 val isReev = carType.contains("REEV", ignoreCase = true) ||
                     carType.contains("增程") ||
@@ -451,12 +594,21 @@ class LeapmotorApi(private val session: Session) {
                 } else {
                     SessionStore.VehiclePowerType.PURE_ELECTRIC
                 }
+                val nickname = it.optString("nickName")
+                    .ifEmpty { it.optString("nickname") }
+                    .ifEmpty { it.optString("vehicleName") }
+                    .ifEmpty { it.optString("carName") }
+                val year = it.optString("year")
+                    .ifEmpty { it.optJSONObject("modelParam")?.optString("year").orEmpty() }
+                    .ifEmpty { it.optString("modelYear") }
+                    .ifEmpty { it.optString("modelyear") }
+                    .ifEmpty { it.optString("carYear") }
                 Vehicle(
                     vin = it.optString("vin"),
                     carType = carType,
                     hvacCapability = HvacCapabilityParser.parse(it.optJSONObject("funcConfig")),
-                    nickname = it.optString("nickName").ifEmpty { it.optString("nickname") },
-                    year = it.optString("year"),
+                    nickname = nickname,
+                    year = year,
                     color = it.optString("outColor").ifEmpty { it.optString("color") },
                     powerType = inferredPowerType
                 )
@@ -470,12 +622,8 @@ class LeapmotorApi(private val session: Session) {
             vehicles.firstOrNull { it.vin == session.selectedVin }?.let { selected ->
                 session.selectedCarType = selected.carType.ifBlank { session.selectedCarType }
                 session.hvacCapability = selected.hvacCapability
-                if (selected.nickname.isNotBlank()) {
-                    session.selectedNickname = selected.nickname
-                }
-                if (selected.year.isNotBlank()) {
-                    session.selectedYear = selected.year
-                }
+                session.selectedNickname = selected.nickname
+                session.selectedYear = selected.year
             }
         }
         return vehicles
@@ -496,6 +644,7 @@ class LeapmotorApi(private val session: Session) {
         )
 
         val candidatePaths = listOf(
+            "/carownerservice/v3/api/carpicture/3d/key",
             "/carownerservice/v3/api/carpicture/key",
             "/carownerservice/v3/api/3d/key",
             "/carownerservice/vehicle/v1/carpicture/key",
@@ -512,10 +661,11 @@ class LeapmotorApi(private val session: Session) {
                     params = mapOf("vin" to vin, "carvin" to vin, "deviceID" to session.deviceId),
                     includeTimespan = true
                 )
+                val headers = combinedAppAndGatewayHeaders(signed, needLogin = true)
                 val resp = http(
                     url = url,
                     method = "GET",
-                    headers = oldAppHeaders(true),
+                    headers = headers,
                     query = signed
                 )
                 val extracted = parsePictureMetaFromResponse(resp, url)
@@ -535,10 +685,11 @@ class LeapmotorApi(private val session: Session) {
                     params = mapOf("vin" to vin, "carvin" to vin, "deviceID" to session.deviceId),
                     includeTimespan = true
                 )
+                val headers = combinedAppAndGatewayHeaders(signed, needLogin = true)
                 val resp = http(
                     url = url,
                     method = "POST",
-                    headers = oldAppHeaders(true),
+                    headers = headers,
                     query = signed,
                     formBody = formParams
                 )
@@ -698,17 +849,39 @@ class LeapmotorApi(private val session: Session) {
 
         fun attempt(): JSONObject {
             var last: ApiException? = null
-            val range = DrivingRecordTimeRange.purchaseToToday(purchaseAtMs, nowMs)
-            val signed = oldSignedParams(
-                params = mileageEnergyDetailBusinessParameters(session.selectedVin, range),
-                includeTimespan = false
+            // 1. 优先对齐官方 App v1.22 抓包格式（api.log 第 2216 行）：带 vin 与 timespan，挂载新网关鉴权
+            val singleVinSigned = oldSignedParams(
+                params = mapOf("vin" to session.selectedVin),
+                includeTimespan = true
             )
+            val singleVinHeaders = combinedAppAndGatewayHeaders(singleVinSigned, needLogin = true)
+            for (host in candidates()) {
+                try {
+                    val resp = http(
+                        "$host$MILEAGE_ENERGY_DETAIL_PATH",
+                        headers = singleVinHeaders,
+                        query = singleVinSigned
+                    )
+                    val data = resp.optJSONObject("data")
+                    if (data != null && data.length() > 0) return resp
+                } catch (e: ApiException) {
+                    last = e
+                }
+            }
+
+            // 2. 兼容回退：带 begintime/endtime 时间范围参数
+            val range = DrivingRecordTimeRange.purchaseToToday(purchaseAtMs, nowMs)
+            val rangeSigned = oldSignedParams(
+                params = mileageEnergyDetailBusinessParameters(session.selectedVin, range),
+                includeTimespan = true
+            )
+            val rangeHeaders = combinedAppAndGatewayHeaders(rangeSigned, needLogin = true)
             for (host in candidates()) {
                 try {
                     return http(
                         "$host$MILEAGE_ENERGY_DETAIL_PATH",
-                        headers = oldAppHeaders(true),
-                        query = signed
+                        headers = rangeHeaders,
+                        query = rangeSigned
                     )
                 } catch (e: ApiException) {
                     last = e
@@ -770,13 +943,34 @@ class LeapmotorApi(private val session: Session) {
         runCatching { ensureFreshOldToken() }
 
         fun attempt(): JSONObject {
+            // 优先直接查询单 VIN（对齐官方抓包日志，新网关返回完整 7 日及累计能耗明细）
+            val singleVinSigned = oldSignedParams(
+                params = mapOf("vin" to session.selectedVin),
+                includeTimespan = true
+            )
+            val singleVinHeaders = combinedAppAndGatewayHeaders(singleVinSigned, needLogin = true)
+            for (host in mileageEnergyHosts()) {
+                try {
+                    val resp = http(
+                        "$host$MILEAGE_ENERGY_DETAIL_PATH",
+                        headers = singleVinHeaders,
+                        query = singleVinSigned
+                    )
+                    val data = resp.optJSONObject("data")
+                    if (data?.optJSONArray("detail") != null) return resp
+                } catch (_: Exception) {}
+            }
+
+            // 备用：带 recent 7-day 时间范围参数
             val range = DrivingRecordTimeRange.recentMileageRange(nowMs)
             val signed = oldSignedParams(
-                params = recentMileageEnergyDetailBusinessParameters(session.selectedVin, range)
+                params = recentMileageEnergyDetailBusinessParameters(session.selectedVin, range),
+                includeTimespan = true
             )
+            val headers = combinedAppAndGatewayHeaders(signed, needLogin = true)
             return http(
                 "${DRIVING_RECORD_HOST}${MILEAGE_ENERGY_DETAIL_PATH}",
-                headers = oldAppHeaders(true),
+                headers = headers,
                 query = signed
             )
         }
@@ -895,6 +1089,7 @@ class LeapmotorApi(private val session: Session) {
                     )
                 )
             }
+            val headers = combinedAppAndGatewayHeaders(signed, needLogin = true)
             for (host in candidates()) {
                 val response = httpRaw(
                     "$host$DRIVING_RECORD_DEBUG_PREFIX$suffix",
@@ -902,7 +1097,7 @@ class LeapmotorApi(private val session: Session) {
                     // signed query parameters. Custom debug paths may still
                     // opt into POST by supplying a JSON request body.
                     method = if (bodyJson != null && !fixedGetEndpoint) "POST" else "GET",
-                    headers = oldAppHeaders(true),
+                    headers = headers,
                     query = signed,
                     jsonBody = bodyJson?.takeUnless { fixedGetEndpoint }
                 )
@@ -936,15 +1131,16 @@ class LeapmotorApi(private val session: Session) {
         // the token itself remains in the legacy request header.
         val query = oldSignedParams(
             mapOf(
-            "begintime" to begin,
-            "endtime" to end,
-            "carvin" to carvin
+                "begintime" to begin,
+                "endtime" to end,
+                "carvin" to carvin
             )
         )
+        val headers = combinedAppAndGatewayHeaders(query, needLogin = true)
         var response = httpRaw(
             "$DRIVING_RECORD_HOST$LAST_WEEK_EC_PATH",
             method = "GET",
-            headers = oldAppHeaders(true),
+            headers = headers,
             query = query
         )
         if (!retriedAfterRefresh &&
@@ -990,6 +1186,76 @@ class LeapmotorApi(private val session: Session) {
         val response = JSONObject(raw.rawBody)
         checkResult(response, "上周能耗构成查询")
         return response
+    }
+
+    /** Sync key material only after an explicit Bluetooth setup action. */
+    fun fetchBluetoothKeyCertificate(): BleKeyCertificate {
+        requireBluetoothCertificateSession()
+        ensureFreshOldToken()
+        if (session.route?.appCenter.isNullOrBlank()) getCarRoute()
+        return fetchBluetoothKeyCertificate { request ->
+            bluetoothCertificateHttpClient.newCall(request).execute().use { response ->
+                VehicleListRawResponse(response.code, response.body?.string().orEmpty())
+            }
+        }
+    }
+
+    internal fun fetchBluetoothKeyCertificate(
+        execute: (Request) -> VehicleListRawResponse
+    ): BleKeyCertificate {
+        val request = buildBluetoothCertificateRequest()
+        val response = try {
+            execute(request)
+        } catch (_: Exception) {
+            throw ApiException("蓝牙钥匙证书同步连接失败，请稍后重试", stage = "ble_certificate")
+        }
+        if (!response.isHttpSuccessful) {
+            throw ApiException(
+                "蓝牙钥匙证书同步失败（HTTP ${response.statusCode}）",
+                httpStatus = response.statusCode,
+                stage = "ble_certificate"
+            )
+        }
+        val json = try {
+            JSONObject(response.rawBody)
+        } catch (_: Exception) {
+            throw ApiException("蓝牙钥匙证书响应格式无效", stage = "ble_certificate")
+        }
+        return try {
+            BleKeyCertificate.fromResponse(json, session.selectedVin)
+        } catch (error: IllegalArgumentException) {
+            throw ApiException(error.message ?: "蓝牙钥匙证书无效", stage = "ble_certificate")
+        }
+    }
+
+    internal fun buildBluetoothCertificateRequest(): Request {
+        requireBluetoothCertificateSession()
+        val center = session.route?.appCenter?.toHttpUrlOrNull()
+            ?: throw ApiException("缺少车辆蓝牙钥匙服务路由", stage = "ble_certificate")
+        if (!center.isHttps || center.username.isNotEmpty() || center.password.isNotEmpty() ||
+            center.query != null || center.fragment != null || center.encodedPath != "/" ||
+            !(center.host.endsWith(".leapmotor.cn") || center.host.endsWith(".leapmotor.com"))
+        ) {
+            throw ApiException("车辆蓝牙钥匙服务路由无效", stage = "ble_certificate")
+        }
+        val body = FormBody.Builder().apply {
+            oldSignedParams(mapOf("vin" to session.selectedVin)).forEach { (key, value) -> add(key, value) }
+        }.build()
+        return Request.Builder()
+            .url(center.newBuilder().encodedPath(BLUETOOTH_CERTIFICATE_PATH).build())
+            .post(body)
+            .apply { oldAppHeaders().forEach { (key, value) -> header(key, value) } }
+            .header("APPVersion", session.appVersion)
+            .build()
+    }
+
+    private fun requireBluetoothCertificateSession() {
+        if (session.oldAuth?.token.isNullOrBlank() || session.oldAuth?.accountId.isNullOrBlank()) {
+            throw ApiException("请先登录后同步蓝牙钥匙", stage = "ble_certificate")
+        }
+        if (session.deviceId.isBlank() || session.selectedVin.isBlank()) {
+            throw ApiException("请先选择车辆并确认设备信息", stage = "ble_certificate")
+        }
     }
 
     fun getCarRoute(): RouteData {
@@ -1068,50 +1334,156 @@ class LeapmotorApi(private val session: Session) {
         return decoded
     }
 
+    /** 获取驻车实景环视照片信息（调用 GET /carownerservice/v3/api/chassis/query）。 */
+    fun getChassisParkingPhoto(): ChassisParkingPhoto? {
+        requireVin()
+        val signed = oldSignedParams(
+            params = mapOf("vin" to session.selectedVin),
+            includeTimespan = true
+        )
+        val headers = combinedAppAndGatewayHeaders(signed, needLogin = true)
+        val candidates = listOf(
+            "https://iov-api.leapmotor.com/carownerservice/v3/api/chassis/query",
+            "https://appgateway.leapmotor.com/carownerservice/v3/api/chassis/query",
+            "${ensureRoute().appRegion}/carownerservice/v3/api/chassis/query"
+        ).distinct()
+
+        for (url in candidates) {
+            try {
+                val resp = http(url, method = "GET", headers = headers, query = signed)
+                val data = resp.optJSONObject("data") ?: continue
+                val rawUrl = data.optString("fileUrl", "").takeIf { it.isNotBlank() } ?: continue
+                val uploadTime = data.optLong("uploadTime", 0L)
+                return ChassisParkingPhoto(fileUrl = rawUrl, uploadTimeMs = uploadTime)
+            } catch (_: Exception) {}
+        }
+        return null
+    }
+
+    /** 下载驻车照片并解码为 Bitmap。 */
+    fun downloadParkingPhotoBitmap(secureUrl: String): android.graphics.Bitmap? {
+        if (secureUrl.isBlank()) return null
+        return try {
+            val req = Request.Builder().url(secureUrl).get().build()
+            NetworkDebugController.httpClient().newCall(req).execute().use { response ->
+                if (response.isSuccessful) {
+                    val stream = response.body?.byteStream()
+                    if (stream != null) android.graphics.BitmapFactory.decodeStream(stream) else null
+                } else null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     // ---------------------------------------------------------------- 控车
 
-    /** 下发控车命令，返回 msgID 与原始响应（全部命令都需要操作密码）。 */
+    /** 获取用于加密操作密码的 Token：优先网关 JWT accessToken，回退旧 token。 */
+    fun getOperationPasswordToken(): String {
+        val jwtToken = session.newAuth?.accessToken?.takeIf { it.isNotBlank() }
+        if (!jwtToken.isNullOrBlank()) return jwtToken
+        val oldToken = session.oldAuth?.token?.takeIf { it.isNotBlank() }
+        if (!oldToken.isNullOrBlank()) return oldToken
+        throw ApiException("未登录（缺少用于加密操作密码的 Token）")
+    }
+
+    /** 校验操作密码（对齐官方 verifyoperatepwdnew 接口）。校验成功返回 true，密码错误抛出 ApiException。 */
+    fun verifyOperatePassword(opPassword: String): Boolean {
+        require(opPassword.isNotBlank()) { "操作密码不能为空" }
+        requireVin()
+        val encToken = getOperationPasswordToken()
+        val params = LinkedHashMap<String, String>()
+        params["oprpwd"] = Crypto.encryptOperationPassword(opPassword, encToken)
+        params["vin"] = session.selectedVin
+        val signedBody = oldSignedParams(params)
+        val combinedHeaders = oldAppHeaders(true).toMutableMap().apply {
+            if (session.newAuth != null) {
+                putAll(newGatewayHeaders(signedBody, needLogin = true))
+            }
+        }
+        val route = ensureRoute()
+        val candidates = listOf(
+            "https://appgateway.leapmotor.com/carownerservice/v3/api/appoperate/verifyoperatepwdnew",
+            "${route.appRegion}/carownerservice/v3/api/appoperate/verifyoperatepwdnew"
+        ).distinct()
+        for (url in candidates) {
+            try {
+                val resp = http(url, method = "POST", headers = combinedHeaders, formBody = signedBody)
+                val code = resp.optString("code", resp.optString("result", ""))
+                if (code == "0" || code == "200") {
+                    return true
+                }
+                val msg = resp.optString("msg").ifEmpty { resp.optString("message", "操作密码错误") }
+                throw ApiException("操作密码校验失败($code): $msg")
+            } catch (e: Exception) {
+                if (e is ApiException && OperationPasswordErrorPolicy.isPasswordError(e)) {
+                    throw e
+                }
+            }
+        }
+        return false
+    }
+
+    /** 下发控车命令，返回 msgID 与原始响应（全部命令都需要操作密码）。对齐官方 api.log 链路 */
     fun sendControl(command: ControlCommand, opPassword: String): ControlResult {
         require(opPassword.isNotBlank()) { "操作密码不能为空" }
         requireVin()
-        try {
-            ensureFreshOldToken()
-        } catch (_: Exception) {
-            // 可能仍可用，继续尝试
-        }
         val route = ensureRoute()
-        val url = "${route.appRegion}/app/app-control-service/v3/api/appremotectl"
-        val attempt = {
-            val old = session.oldAuth ?: throw ApiException("未登录")
-            val params = LinkedHashMap<String, String>()
-            params["cmdid"] = command.cmdid
-            params["state"] = command.stateJson
-            params["carvin"] = session.selectedVin
-            params["oppwd"] = Crypto.encryptOperationPassword(opPassword, old.token)
-            http(url, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
+        val encToken = getOperationPasswordToken()
+        val params = LinkedHashMap<String, String>()
+        params["cmdid"] = command.cmdid
+        params["state"] = command.stateJson
+        params["carvin"] = session.selectedVin
+        params["oppwd"] = Crypto.encryptOperationPassword(opPassword, encToken)
+        val signedBody = oldSignedParams(params)
+        val combinedHeaders = oldAppHeaders(true).toMutableMap().apply {
+            if (session.newAuth != null) {
+                putAll(newGatewayHeaders(signedBody, needLogin = true))
+            }
         }
-        var resp = attempt()
-        if (isOldAuthFailure(resp)) {
-            refreshOldToken()
-            resp = attempt()
+        val candidates = listOf(
+            "https://appgateway.leapmotor.com/app/app-control-service/v3/api/appremotectl",
+            "${route.appRegion}/app/app-control-service/v3/api/appremotectl"
+        ).distinct()
+
+        var lastException: Exception? = null
+        for (url in candidates) {
+            try {
+                val resp = http(url, method = "POST", headers = combinedHeaders, formBody = signedBody)
+                checkControlResult(resp)
+                return ControlResult(msgID = extractMsgID(resp), raw = resp)
+            } catch (e: Exception) {
+                lastException = e
+            }
         }
-        checkControlResult(resp)
-        return ControlResult(msgID = extractMsgID(resp), raw = resp)
+        throw (lastException ?: ApiException("控车请求发送失败"))
     }
 
     fun queryControlResult(msgID: String): JSONObject {
         requireVin()
         val route = ensureRoute()
-        val url = "${route.appRegion}/app/app-control-service/v3/api/appremotectl/query"
-        val attempt = {
-            http(url, headers = oldAppHeaders(true), query = oldSignedParams(mapOf("msgID" to msgID)))
+        val params = mapOf("msgID" to msgID)
+        val signedQuery = oldSignedParams(params)
+        val combinedHeaders = oldAppHeaders(true).toMutableMap().apply {
+            if (session.newAuth != null) {
+                putAll(newGatewayHeaders(signedQuery, needLogin = true))
+            }
         }
-        var resp = attempt()
-        if (isOldAuthFailure(resp)) {
-            refreshOldToken()
-            resp = attempt()
+        val candidates = listOf(
+            "https://appgateway.leapmotor.com/app/app-control-service/v3/api/appremotectl/query",
+            "${route.appRegion}/app/app-control-service/v3/api/appremotectl/query"
+        ).distinct()
+
+        var lastException: Exception? = null
+        for (url in candidates) {
+            try {
+                val resp = http(url, headers = combinedHeaders, query = signedQuery)
+                return resp
+            } catch (e: Exception) {
+                lastException = e
+            }
         }
-        return resp
+        throw (lastException ?: ApiException("控车结果查询失败"))
     }
 
     /** 电池健康充电控制（慢充目标电量限额与养护开关）。 */
@@ -1197,13 +1569,15 @@ class LeapmotorApi(private val session: Session) {
         params["state"] = stateJson.toString()
         params["carvin"] = session.selectedVin
         if (opPassword.isNotBlank()) {
-            params["oppwd"] = Crypto.encryptOperationPassword(opPassword, old.token)
+            params["oppwd"] = Crypto.encryptOperationPassword(opPassword, getOperationPasswordToken())
         }
 
         // 1. 优先通道：走车控核心通道 (/app/app-control-service/v3/api/appremotectl) 带旧会话Token与加密码
+        val signedBody = oldSignedParams(params)
+        val headers = combinedAppAndGatewayHeaders(signedBody, needLogin = true)
         val controlUrl = "${route.appRegion}/app/app-control-service/v3/api/appremotectl"
         val respControl = try {
-            http(controlUrl, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
+            http(controlUrl, method = "POST", headers = headers, formBody = signedBody)
         } catch (e: Exception) {
             null
         }
@@ -1216,7 +1590,7 @@ class LeapmotorApi(private val session: Session) {
         val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
         val apptUrl = "$host/carownerservice/v3/api/appremotectl/appointment"
         val respAppt = try {
-            http(apptUrl, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
+            http(apptUrl, method = "POST", headers = headers, formBody = signedBody)
         } catch (e: Exception) {
             null
         }
@@ -1290,12 +1664,14 @@ class LeapmotorApi(private val session: Session) {
         params["state"] = stateJson.toString()
         params["carvin"] = session.selectedVin
         if (opPassword.isNotBlank()) {
-            params["oppwd"] = Crypto.encryptOperationPassword(opPassword, old.token)
+            params["oppwd"] = Crypto.encryptOperationPassword(opPassword, getOperationPasswordToken())
         }
 
         // 直接走车控核心通道 (/app/app-control-service/v3/api/appremotectl)
         val controlUrl = "${route.appRegion}/app/app-control-service/v3/api/appremotectl"
-        return http(controlUrl, method = "POST", headers = oldAppHeaders(true), formBody = oldSignedParams(params))
+        val signedBody = oldSignedParams(params)
+        val headers = combinedAppAndGatewayHeaders(signedBody, needLogin = true)
+        return http(controlUrl, method = "POST", headers = headers, formBody = signedBody)
     }
 
     // ---------------------------------------------------------------- 内部

@@ -33,11 +33,7 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                 ControlWidget.updateSyncCadence(context, null)
             } else {
                 val config = store.loadVehicleConfig(current.selectedVin)
-                val status = VehicleStatusMapper.withFuelMock(
-                    status = LeapmotorApi(current).getVehicleState(),
-                    vin = current.selectedVin,
-                    powerType = config.powerType
-                )
+                val status = LeapmotorApi(current).getVehicleState()
                 ChargeNotificationManager.process(context, store, current.selectedVin, status)
                 val hasFuel = VehicleStatusMapper.fuelRemainingRange(status) != null ||
                     VehicleStatusMapper.fuelSocPercent(status) != null ||

@@ -252,11 +252,7 @@ class ControlWidget : AppWidgetProvider() {
             applyStaticAppearance(themeContext, views, opacity)
             val session = store.load()
             val config = store.loadVehicleConfig(session.selectedVin, carType)
-            val displayStatus = VehicleStatusMapper.withFuelMock(
-                status = status,
-                vin = session.selectedVin,
-                powerType = config.powerType
-            )
+            val displayStatus = status
             val appearance = resolveWidgetAppearance(config, carType)
             setVehicleImage(views, appearance, session.selectedVin, context)
             views.setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
@@ -449,12 +445,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(ventId, View.GONE)
                         val presentation = WidgetSentryMapper.presentation(sentryEnabled)
                         views.setImageViewResource(imgId, R.drawable.ic_sentry)
-                        val sentryColor = if (presentation.showEnabledIcon) {
-                            ContextCompat.getColor(themeContext, R.color.energy_green)
-                        } else {
-                            iconColor
-                        }
-                        setImageTint(views, imgId, sentryColor)
+                        setImageTint(views, imgId, iconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, presentation.contentDescription)
                         views.setOnClickPendingIntent(slotId, click(context, presentation.command))
@@ -815,11 +806,10 @@ class ControlWidget : AppWidgetProvider() {
             if (remoteBitmap != null) {
                 val scaledBitmap = scaleBitmapForWidget(remoteBitmap, 400)
                 views.setImageViewBitmap(R.id.imgWCar, scaledBitmap)
+                views.setViewVisibility(R.id.imgWCar, View.VISIBLE)
             } else {
-                views.setImageViewResource(
-                    R.id.imgWCar,
-                    appearance.imageResource
-                )
+                views.setImageViewBitmap(R.id.imgWCar, null)
+                views.setViewVisibility(R.id.imgWCar, View.INVISIBLE)
             }
         }
 
@@ -894,10 +884,9 @@ class ControlWidget : AppWidgetProvider() {
 
         /** Uses the standard RemoteViews tint operation where supported, with a legacy fallback. */
         internal fun setImageTint(views: RemoteViews, viewId: Int, color: Int) {
+            views.setInt(viewId, "setColorFilter", color)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 views.setColorStateList(viewId, "setImageTintList", ColorStateList.valueOf(color))
-            } else {
-                views.setInt(viewId, "setColorFilter", color)
             }
         }
 

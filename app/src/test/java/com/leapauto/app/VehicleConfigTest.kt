@@ -90,4 +90,36 @@ class VehicleConfigTest {
         assertEquals("小灰C10", selected?.nickname)
         assertEquals("C10 纯电", selected?.carType)
     }
+
+    @Test
+    fun vehicleNicknameLengthLimitAndTrim() {
+        val longNickname = "我的超级无敌大零跑座驾汽车"
+        val trimmed = longNickname.trim().take(10)
+        assertEquals(10, trimmed.length)
+        assertEquals("我的超级无敌大零跑座", trimmed)
+
+        val whitespaceNickname = "  小零C16  "
+        assertEquals("小零C16", whitespaceNickname.trim().take(10))
+    }
+
+    @Test
+    fun vehicleDefaultsToBlankWhenApiFieldsAreEmpty() {
+        val emptyVehicle = Vehicle(
+            vin = "LF3A11C16TEST0003",
+            carType = "",
+            nickname = "",
+            year = "",
+            color = ""
+        )
+        assertEquals("", emptyVehicle.carType)
+        assertEquals("", emptyVehicle.nickname)
+        assertEquals("", emptyVehicle.year)
+        assertEquals("", emptyVehicle.color)
+
+        val restored = Vehicle.fromJson(emptyVehicle.toJson())
+        assertEquals("", restored.carType)
+        assertEquals("", restored.nickname)
+        assertEquals("", restored.year)
+        assertEquals("", restored.color)
+    }
 }

@@ -7,7 +7,7 @@ plugins {
 }
 
 val apkDisplayName = "零跑智控"
-val apkVersionName = "3.1.21"
+val apkVersionName = "3.3.38"
 
 val localProperties = Properties().apply {
     val localPropertiesFile = rootProject.file("local.properties")
@@ -39,7 +39,7 @@ android {
         applicationId = "com.leapauto.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3001021
+        versionCode = 3003038
         versionName = apkVersionName
         buildConfigField("String", "AMAP_WEB_KEY", "\"${localProperty("AMAP_WEB_KEY") ?: "468e462adad376c2aa08d252ae20fcba"}\"")
         resourceConfigurations += setOf("zh", "zh-rCN")
@@ -79,6 +79,12 @@ android {
         buildConfig = true
     }
 
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -91,6 +97,7 @@ android {
 
 dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.86")
     debugImplementation("com.github.chuckerteam.chucker:library:4.1.0")
     releaseImplementation("com.github.chuckerteam.chucker:library-no-op:4.1.0")
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))

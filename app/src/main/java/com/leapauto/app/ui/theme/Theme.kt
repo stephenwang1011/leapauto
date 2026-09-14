@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// 亮色：零跑品牌色板（leap-design.md §1，Leap Blue 而非通用 Primary）
+// 亮色：零跑品牌色板（Leap Blue 而非通用 Primary）
 private val LightColors = lightColorScheme(
     primary = LeapBlue,
     onPrimary = OnPrimaryLight,

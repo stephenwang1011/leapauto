@@ -49,14 +49,39 @@ object Crypto {
         return Base64.encodeToString(enc, Base64.URL_SAFE or Base64.NO_WRAP).trimEnd('=')
     }
 
-    /** 控车操作密码：AES-128-CBC，key/iv 来自旧 token 的两段 md5Short。 */
-    fun encryptOperationPassword(password: String, oldToken: String): String {
-        require(oldToken.length >= 64) { "旧 token 长度不足，无法加密操作密码" }
-        val key = md5Short(oldToken.substring(0, 32)).toByteArray(Charsets.UTF_8)
-        val iv = md5Short(oldToken.substring(32, 64)).toByteArray(Charsets.UTF_8)
+    /** 控车操作密码：AES-128-CBC，key/iv 来自 token（优先网关 JWT accessToken，回退旧 token）的前两段 md5Short。 */
+    fun encryptOperationPassword(password: String, token: String): String {
+        val cleanToken = token.trim()
+        val effectiveToken = if (cleanToken.length in 32..63) cleanToken + cleanToken else cleanToken
+        require(effectiveToken.length >= 64) { "Token 长度不足，无法加密操作密码" }
+        val cleanPin = password.trim()
+        val key = md5Short(effectiveToken.substring(0, 32)).toByteArray(Charsets.UTF_8)
+        val iv = md5Short(effectiveToken.substring(32, 64)).toByteArray(Charsets.UTF_8)
         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
         cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(iv))
-        return Base64.encodeToString(cipher.doFinal(password.toByteArray(Charsets.UTF_8)), Base64.DEFAULT)
+        val encryptedBytes = cipher.doFinal(cleanPin.toByteArray(Charsets.UTF_8))
+        return try {
+            java.util.Base64.getEncoder().encodeToString(encryptedBytes)
+        } catch (_: Throwable) {
+            Base64.encodeToString(encryptedBytes, Base64.NO_WRAP)
+        }.trim()
+    }
+
+    /** 解密操作密码（用于单元测试与密文验证）。 */
+    fun decryptOperationPassword(encryptedBase64: String, token: String): String {
+        val cleanToken = token.trim()
+        val effectiveToken = if (cleanToken.length in 32..63) cleanToken + cleanToken else cleanToken
+        require(effectiveToken.length >= 64) { "Token 长度不足，无法解密操作密码" }
+        val key = md5Short(effectiveToken.substring(0, 32)).toByteArray(Charsets.UTF_8)
+        val iv = md5Short(effectiveToken.substring(32, 64)).toByteArray(Charsets.UTF_8)
+        val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+        cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(iv))
+        val rawBytes = try {
+            java.util.Base64.getDecoder().decode(encryptedBase64.trim())
+        } catch (_: Throwable) {
+            Base64.decode(encryptedBase64.trim(), Base64.DEFAULT)
+        }
+        return String(cipher.doFinal(rawBytes), Charsets.UTF_8)
     }
 
     /** 新网关 signKey = token 第三段(64url) XOR r2 XOR r3，取最短长度。 */
@@ -85,10 +110,27 @@ object Crypto {
         }
     }
 
+    /** 从网关 JWT 中提取绑定的 deviceId。 */
+    fun jwtDeviceId(token: String): String? {
+        val parts = token.split(".")
+        if (parts.size != 3) return null
+        return try {
+            val payload = String(base64UrlDecode(parts[1]), Charsets.UTF_8)
+            val userName = JSONObject(payload).optString("user_name")
+            Regex("""deviceId:([a-zA-Z0-9_-]+)""").find(userName)?.groupValues?.getOrNull(1)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     fun base64UrlDecode(input: String): ByteArray {
         var normalized = input.replace('-', '+').replace('_', '/')
         while (normalized.length % 4 != 0) normalized += "="
-        return Base64.decode(normalized, Base64.DEFAULT)
+        return try {
+            java.util.Base64.getDecoder().decode(normalized)
+        } catch (_: Throwable) {
+            Base64.decode(normalized, Base64.DEFAULT)
+        }
     }
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }

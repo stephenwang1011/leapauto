@@ -135,10 +135,31 @@ class RecentMileageEnergyTest {
     }
 
     @Test
-    fun `monthDay formats iso date to month and day without leading zero`() {
-        assertEquals("9/3", EnergyWeekPeriodFormatter.monthDay("2026-09-03"))
-        assertEquals("8/28", EnergyWeekPeriodFormatter.monthDay("2026-08-28"))
-        assertEquals("12/1", EnergyWeekPeriodFormatter.monthDay("2026-12-01"))
-        assertEquals("9/3", EnergyWeekPeriodFormatter.monthDay("9/3"))
+    fun `parses combined mileage and energy detail structure from official api log`() {
+        val json = """
+        {
+          "code": 0,
+          "msg": "操作成功",
+          "data": {
+            "deliveryDays": 420,
+            "totalEnergy": "1250.8",
+            "detail": [
+              {"day": "2026-09-05", "accumulatedMileage": 15.2},
+              {"day": "2026-09-06", "accumulatedMileage": 32.8},
+              {"day": "2026-09-07", "accumulatedMileage": 8.0},
+              {"day": "2026-09-08", "accumulatedMileage": 0.0},
+              {"day": "2026-09-09", "accumulatedMileage": 45.6},
+              {"day": "2026-09-10", "accumulatedMileage": 22.1},
+              {"day": "2026-09-11", "accumulatedMileage": 18.5}
+            ]
+          }
+        }
+        """.trimIndent()
+        val parsed = RecentMileageEnergyParser.parse(JSONObject(json))
+        assertEquals(420, parsed.deliveryDays)
+        assertEquals(1250.8, parsed.totalEnergyKwh ?: 0.0, 0.01)
+        assertEquals(7, parsed.mileage.size)
+        assertEquals("2026-09-11", parsed.mileage.last().day)
+        assertEquals(18.5, parsed.mileage.last().mileageKm, 0.01)
     }
 }

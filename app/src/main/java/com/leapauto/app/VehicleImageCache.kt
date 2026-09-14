@@ -66,11 +66,12 @@ object VehicleImageCache {
 
     fun loadCachedBitmap(context: Context, vin: String): Bitmap? {
         if (vin.isBlank()) return null
+        val customFile = getCustomFile(context, vin)
+        val hasCustom = customFile.exists() && customFile.length() > 0
         synchronized(memoryCache) {
             memoryCache.get(vin)?.let { return it }
         }
-        val customFile = getCustomFile(context, vin)
-        val targetFile = if (customFile.exists() && customFile.length() > 0) {
+        val targetFile = if (hasCustom) {
             customFile
         } else {
             getCacheFile(context, vin)

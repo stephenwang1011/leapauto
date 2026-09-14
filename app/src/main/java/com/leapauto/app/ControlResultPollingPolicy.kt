@@ -1,7 +1,7 @@
 package com.leapauto.app
 
 object ControlResultPollingPolicy {
-    const val INITIAL_DELAY_MS = 1_000L
+    const val INITIAL_DELAY_MS = 500L
     const val INTERVAL_MS = 500L
     const val APP_MAX_WAIT_MS = 24_000L
     const val WIDGET_MAX_WAIT_MS = 12_000L

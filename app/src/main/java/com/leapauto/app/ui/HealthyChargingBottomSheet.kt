@@ -279,10 +279,16 @@ fun HealthyChargingBottomSheet(
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = cardBgColor,
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.Transparent,
                     border = glassCardBorder(),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .frostedGlassCard(
+                            shape = RoundedCornerShape(16.dp),
+                            auraColor = MaterialTheme.statusGood.copy(alpha = 0.10f),
+                            auraCenter = Offset(0.5f, 0.5f)
+                        )
                 ) {
                     Row(
                         modifier = Modifier
@@ -445,9 +451,15 @@ fun HealthyChargingBottomSheet(
             // 卡片 1: 健康充电（参考图 1）
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = cardBgColor,
+                color = Color.Transparent,
                 border = glassCardBorder(),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(
+                        shape = RoundedCornerShape(16.dp),
+                        auraColor = MaterialTheme.statusGood.copy(alpha = 0.10f),
+                        auraCenter = Offset(0.9f, 0.1f)
+                    )
             ) {
                 Column(
                     modifier = Modifier
@@ -475,7 +487,7 @@ fun HealthyChargingBottomSheet(
                                 healthySwitchEnabled = isChecked
                                 if (isChecked && selectedSoc >= 100f) {
                                     selectedSoc = 90f
-                                    Toast.makeText(context, "开启健康充电，充电上限已自动调整至最佳限值 90%", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "已调整至健康限值 90%", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             colors = SwitchDefaults.colors(
@@ -517,7 +529,7 @@ fun HealthyChargingBottomSheet(
                                         val now = System.currentTimeMillis()
                                         if (now - lastToastTime > 1800L) {
                                             lastToastTime = now
-                                            Toast.makeText(context, "健康充电开启时不可设置为 100%，以保护动力电池寿命", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "健康充电最高限值为 90%", Toast.LENGTH_SHORT).show()
                                         }
                                     } else {
                                         selectedSoc = snapped
@@ -636,9 +648,11 @@ fun HealthyChargingBottomSheet(
             // 卡片 2: 预约充电（参考图 1）
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = cardBgColor,
+                color = Color.Transparent,
                 border = glassCardBorder(),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(shape = RoundedCornerShape(16.dp))
             ) {
                 Column(
                     modifier = Modifier
@@ -728,9 +742,11 @@ fun HealthyChargingBottomSheet(
             // 卡片 3: 预约电池预热（参考图 1 底部）
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = cardBgColor,
+                color = Color.Transparent,
                 border = glassCardBorder(),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(shape = RoundedCornerShape(16.dp))
             ) {
                 Column(
                     modifier = Modifier

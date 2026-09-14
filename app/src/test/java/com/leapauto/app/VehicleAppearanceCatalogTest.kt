@@ -6,12 +6,10 @@ import org.junit.Test
 class VehicleAppearanceCatalogTest {
 
     @Test
-    fun `every supported model resolves to the one bundled image`() {
+    fun `every supported model resolves appearance model and default color`() {
         SUPPORTED_VEHICLE_MODELS.forEach { model ->
-            assertEquals(
-                R.drawable.vehicle_lafa5_liquid_silver,
-                VehicleAppearanceCatalog.resolveAppearance(model, null).imageResource
-            )
+            val appearance = VehicleAppearanceCatalog.resolveAppearance(model, null)
+            assertEquals("liquid_silver", appearance.color.id)
         }
     }
 

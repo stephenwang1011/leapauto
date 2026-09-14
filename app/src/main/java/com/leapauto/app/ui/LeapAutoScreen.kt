@@ -102,15 +102,22 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import android.graphics.Bitmap
+import com.leapauto.app.ChassisParkingPhoto
+import com.leapauto.app.ParkingPhotoLoadState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import java.text.SimpleDateFormat
+import java.util.Date
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -118,6 +125,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -174,11 +182,11 @@ import com.leapauto.app.EnergyAnalyticsState
 import com.leapauto.app.EnergyCompositionPresentation
 import com.leapauto.app.EnergyHomeCardPolicy
 import com.leapauto.app.EnergyWeekPeriodFormatter
-import com.leapauto.app.ErrorLogEntry
-import com.leapauto.app.ErrorLogs
 import com.leapauto.app.ExternalLinks
 import com.leapauto.app.ExternalMapApp
 import com.leapauto.app.ExternalMapLauncher
+import com.leapauto.app.GeetestCaptchaResult
+import com.leapauto.app.GeetestChallenge
 import com.leapauto.app.GeocodedAddress
 import com.leapauto.app.HomeClimateTogglePresentation
 import com.leapauto.app.HomeClimateTogglePresentationMapper
@@ -186,6 +194,7 @@ import com.leapauto.app.HvacCapability
 import com.leapauto.app.HvacOperation
 import com.leapauto.app.MainNavigationTabs
 import com.leapauto.app.PgyerRelease
+import com.leapauto.app.QuickCommandExecutionPolicy
 import com.leapauto.app.QuickCommandOrderPolicy
 import com.leapauto.app.R
 import com.leapauto.app.SUPPORTED_VEHICLE_MODELS
@@ -268,6 +277,7 @@ fun LeapAutoScreen(
     vehicleVin: String = "",
     statusError: String,
     controlFeedback: ControlFeedback?,
+    activeControlCommand: String? = null,
     climateTemperatureRequestState: ClimateControlRequestState = ClimateControlRequestState(),
     vehicleModel: String,
     vehicleDisplayModel: String = vehicleModel,
@@ -317,6 +327,10 @@ fun LeapAutoScreen(
     onPinChange: (String) -> Unit,
     onSendSms: () -> Unit,
     smsCountdownSeconds: Int = 0,
+    geetestChallenge: GeetestChallenge? = null,
+    onGeetestSuccess: (GeetestCaptchaResult) -> Unit = {},
+    onDismissGeetest: () -> Unit = {},
+    onLoginWithRawAuth: (String, String) -> Unit = { _, _ -> },
     onLogin: () -> Unit,
     onSavePin: () -> Unit,
     onCancelPinSetup: () -> Unit,
@@ -342,7 +356,11 @@ fun LeapAutoScreen(
     onDismissControlFeedback: () -> Unit,
     onQuickAc: (Int, Long) -> Unit = { _, _ -> },
     onSelectCustomVehicleImage: (Uri) -> Unit = {},
-    onResetCustomVehicleImage: () -> Unit = {}
+    onResetCustomVehicleImage: () -> Unit = {},
+    onUpdateNickname: (String) -> Unit = {},
+    bluetoothSettingsRequestId: Long = 0,
+    onOpenBluetoothKey: () -> Unit = {},
+    onFetchParkingPhoto: ((ChassisParkingPhoto?, Bitmap?) -> Unit) -> Unit = {}
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
     var showVehicleLocation by rememberSaveable { mutableStateOf(false) }
@@ -414,9 +432,22 @@ fun LeapAutoScreen(
         onAutoRefreshActiveChange(loggedIn && selectedTab == MainNavigationTabs.VEHICLE)
     }
 
+    LaunchedEffect(loggedIn, bluetoothSettingsRequestId) {
+        if (loggedIn && bluetoothSettingsRequestId > 0) {
+            selectedTab = MainNavigationTabs.ACCOUNT
+            showVehicleLocation = false
+            showClimateControl = false
+            onOpenBluetoothKey()
+        }
+    }
+
     if (loggedIn && pinSetupInProgress && !showSessionExpiredDialog) {
         AlertDialog(
             onDismissRequest = onCancelPinSetup,
+            modifier = solidDialogModifier(),
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            shape = RoundedCornerShape(24.dp),
             title = {
                 Text(
                     text = if (pinSetupErrorMessage.isNotBlank()) "更新操控密码" else "设置操控密码",
@@ -483,23 +514,6 @@ fun LeapAutoScreen(
         )
     }
 
-    if (
-        loggedIn &&
-        showVehicleConfigConfirmationPrompt &&
-        !pinSetupInProgress &&
-        !showSessionExpiredDialog
-    ) {
-        VehicleConfigDialog(
-            vehicleModel = vehicleModel,
-            config = vehicleConfig,
-            title = "确认车型配置",
-            supportingText = "请确认车型、年份和动力类型，续航信息将按本次配置展示。",
-            dismissible = false,
-            onDismiss = {},
-            onSave = onSaveVehicleConfig
-        )
-    }
-
     if (loggedIn && showSessionExpiredDialog) {
         AlertDialog(
             // This dialog is intentionally blocking: back/outside dismissal must not clear the session.
@@ -508,6 +522,10 @@ fun LeapAutoScreen(
                     onSessionExpiredConfirmed()
                 }
             },
+            modifier = solidDialogModifier(),
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            shape = RoundedCornerShape(24.dp),
             title = { Text("登录状态已失效") },
             text = { Text("你的账号已在其他地方登录，请在零跑智控APP中重新登录后再使用。") },
             confirmButton = {
@@ -595,9 +613,21 @@ fun LeapAutoScreen(
         )
     }
 
+    geetestChallenge?.let { challenge ->
+        GeetestCaptchaDialog(
+            challenge = challenge,
+            onSuccess = onGeetestSuccess,
+            onDismiss = onDismissGeetest
+        )
+    }
+
     if (showLogoutConfirmationDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutConfirmationDialog = false },
+            modifier = solidDialogModifier(),
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            shape = RoundedCornerShape(24.dp),
             title = {
                 Text(
                     text = "退出登录",
@@ -763,14 +793,15 @@ fun LeapAutoScreen(
         ) { target ->
             when (target) {
                 ScreenDestination.LOGIN -> LoginContent(
-                    phone,
-                    onPhoneChange,
-                    code,
-                    onCodeChange,
-                    onSendSms,
-                    onLogin,
+                    phone = phone,
+                    onPhoneChange = onPhoneChange,
+                    code = code,
+                    onCodeChange = onCodeChange,
+                    onSendSms = onSendSms,
+                    onLogin = onLogin,
                     busy = busy,
-                    smsCountdownSeconds = smsCountdownSeconds
+                    smsCountdownSeconds = smsCountdownSeconds,
+                    onLoginWithRawAuth = onLoginWithRawAuth
                 )
                 ScreenDestination.HOME -> HomeContent(
                     busy,
@@ -807,7 +838,10 @@ fun LeapAutoScreen(
                     onSwitchVehicle = onSwitchVehicle,
                     onOpenHealthCheck = {
                         showVehicleHealthCheckSheet = true
-                    }
+                    },
+                    onUpdateNickname = onUpdateNickname,
+                    onFetchParkingPhoto = onFetchParkingPhoto,
+                    activeControlCommand = activeControlCommand
                 )
                 ScreenDestination.LOCATION_DETAIL -> VehicleLocationDetailContent(
                     summary = status?.locationSummary,
@@ -856,6 +890,7 @@ fun LeapAutoScreen(
                     vehicleImageVersion = vehicleImageVersion,
                     onSelectCustomVehicleImage = onSelectCustomVehicleImage,
                     onResetCustomVehicleImage = onResetCustomVehicleImage,
+                    onOpenBluetoothKey = onOpenBluetoothKey,
                     onLogout = onLogout
                 )
             }
@@ -873,11 +908,13 @@ private fun LoginContent(
     onSendSms: () -> Unit,
     onLogin: () -> Unit,
     busy: Boolean = false,
-    smsCountdownSeconds: Int = 0
+    smsCountdownSeconds: Int = 0,
+    onLoginWithRawAuth: (String, String) -> Unit = { _, _ -> }
 ) {
     val haptic = LocalHapticFeedback.current
     val canLogin = phone.length == 11 && code.length >= 4 && !busy
     val canSendSms = smsCountdownSeconds == 0 && phone.length == 11 && !busy
+    var showTokenImportDialog by remember { mutableStateOf(false) }
 
     Column(
         Modifier
@@ -886,36 +923,37 @@ private fun LoginContent(
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(36.dp))
+        Spacer(Modifier.height(52.dp))
 
-        // 品牌徽标与名称
-        Surface(
-            modifier = Modifier.size(64.dp),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-            shadowElevation = 0.dp
-        ) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_phosphor_car),
-                    contentDescription = "零跑智控",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
+        var titleTapCount by remember { mutableIntStateOf(0) }
+        var lastTapEpochMs by remember { mutableLongStateOf(0L) }
 
         Text(
             text = "零跑智控",
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastTapEpochMs > 1500L) {
+                        titleTapCount = 1
+                    } else {
+                        titleTapCount += 1
+                        if (titleTapCount >= 5) {
+                            titleTapCount = 0
+                            showTokenImportDialog = true
+                        }
+                    }
+                    lastTapEpochMs = now
+                }
         )
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(6.dp))
 
         Text(
             text = "连接你的每一次出发",
@@ -923,13 +961,20 @@ private fun LoginContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(32.dp))
 
         // 登录卡片
+        val loginAura = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .frostedGlassCard(
+                    shape = RoundedCornerShape(22.dp),
+                    auraColor = loginAura,
+                    auraCenter = Offset(0.5f, 0.2f)
+                ),
             shape = RoundedCornerShape(22.dp),
-            color = MaterialTheme.glassSurface,
+            color = Color.Transparent,
             border = glassCardBorder(),
             shadowElevation = 0.dp
         ) {
@@ -1036,12 +1081,84 @@ private fun LoginContent(
             }
         }
 
+        if (showTokenImportDialog) {
+            var tokenInput by remember { mutableStateOf("") }
+            var phoneInput by remember { mutableStateOf(phone) }
+            AlertDialog(
+                onDismissRequest = { showTokenImportDialog = false },
+                modifier = solidDialogModifier(shape = RoundedCornerShape(24.dp)),
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp,
+                shape = RoundedCornerShape(24.dp),
+                title = {
+                    Text(
+                        "Token 凭据导入",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "请确认关联手机号（用于旧链路远控续期与签名），并粘贴完整登录响应 JSON：",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = phoneInput,
+                            onValueChange = { phoneInput = it.filter(Char::isDigit).take(11) },
+                            label = { Text("关联手机号 (必填，用于远控续期)") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = tokenInput,
+                            onValueChange = { tokenInput = it },
+                            label = { Text("凭据 JSON 内容") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp),
+                            placeholder = { Text("粘贴包含 accountId、token、refreshToken 的完整 JSON…") },
+                            textStyle = MaterialTheme.typography.bodySmall,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (tokenInput.isNotBlank()) {
+                                showTokenImportDialog = false
+                                onLoginWithRawAuth(tokenInput, phoneInput)
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = tokenInput.isNotBlank() && phoneInput.length == 11 && !busy
+                    ) {
+                        Text("导入并登录")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showTokenImportDialog = false },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("取消")
+                    }
+                }
+            )
+        }
+
         Spacer(Modifier.height(28.dp))
 
         // 底部安全凭证提示胶囊
         Surface(
+            modifier = Modifier.frostedGlassCard(shape = RoundedCornerShape(20.dp)),
             shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.glassSurface,
+            color = Color.Transparent,
             border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
             shadowElevation = 0.dp
         ) {
@@ -1086,9 +1203,13 @@ private fun HomeContent(
     vehicleImageVersion: Int = 0,
     availableVehicles: List<Vehicle> = emptyList(),
     onSwitchVehicle: (String) -> Unit = {},
-    onOpenHealthCheck: () -> Unit = {}
+    onOpenHealthCheck: () -> Unit = {},
+    onUpdateNickname: (String) -> Unit = {},
+    onFetchParkingPhoto: ((ChassisParkingPhoto?, Bitmap?) -> Unit) -> Unit = {},
+    activeControlCommand: String? = null
 ) {
     var showAddressNavigationDialog by rememberSaveable { mutableStateOf(false) }
+    var showParkingDetailDialog by rememberSaveable { mutableStateOf(false) }
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -1149,7 +1270,9 @@ private fun HomeContent(
                         onOpenHealthyCharging = onOpenHealthyCharging,
                         availableVehicles = availableVehicles,
                         onSwitchVehicle = onSwitchVehicle,
-                        onOpenHealthCheck = onOpenHealthCheck
+                        onOpenHealthCheck = onOpenHealthCheck,
+                        onUpdateNickname = onUpdateNickname,
+                        onParkingClick = { showParkingDetailDialog = true }
                     )
                     Row(
                         Modifier.fillMaxWidth(),
@@ -1171,7 +1294,8 @@ private fun HomeContent(
                         vehicleModel = vehicleModel,
                         status = status,
                         locationSnapshot = locationSnapshot,
-                        onControl = onControl
+                        onControl = onControl,
+                        activeControlCommand = activeControlCommand
                     )
                     ClimateOverviewCard(
                         status = status,
@@ -1199,6 +1323,16 @@ private fun HomeContent(
             fullAddress = vehicleAddress.fullAddress,
             locationSnapshot = locationSnapshot,
             onDismiss = { showAddressNavigationDialog = false }
+        )
+    }
+
+    if (showParkingDetailDialog) {
+        ParkingDetailDialog(
+            fullAddress = vehicleAddress?.fullAddress ?: vehicleAddress?.shortAddress.orEmpty(),
+            statusUpdatedAtEpochMs = statusUpdatedAtEpochMs,
+            locationSnapshot = locationSnapshot,
+            onFetchParkingPhoto = onFetchParkingPhoto,
+            onDismiss = { showParkingDetailDialog = false }
         )
     }
 }
@@ -1303,9 +1437,9 @@ private fun MyContent(
     vehicleImageVersion: Int = 0,
     onSelectCustomVehicleImage: (Uri) -> Unit = {},
     onResetCustomVehicleImage: () -> Unit = {},
+    onOpenBluetoothKey: () -> Unit = {},
     onLogout: () -> Unit = {}
 ) {
-    var showDiagnosticLogDialog by rememberSaveable { mutableStateOf(false) }
     var showVehicleSelectorInAccount by remember { mutableStateOf(false) }
 
     Column(
@@ -1319,10 +1453,10 @@ private fun MyContent(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
+                    .frostedGlassCard(shape = RoundedCornerShape(16.dp))
                     .clickable { showVehicleSelectorInAccount = true },
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.glassSurface,
+                color = Color.Transparent,
                 border = glassCardBorder()
             ) {
                 Row(
@@ -1367,7 +1501,7 @@ private fun MyContent(
             }
         }
 
-        VehicleConfigCard(vehicleModel, vehicleConfig, onSaveVehicleConfig)
+        BluetoothKeyEntry(onClick = onOpenBluetoothKey)
 
         VehicleCustomImageCard(
             vehicleVin = vehicleVin,
@@ -1387,7 +1521,7 @@ private fun MyContent(
             onActionsChange = onWidget4x2ActionsChange
         )
 
-        SettingsSectionTitle("系统与诊断")
+        SettingsSectionTitle("系统与更新")
         VersionUpdateCard(
             currentVersion = currentVersion,
             currentReleaseNotes = currentReleaseNotes,
@@ -1395,13 +1529,7 @@ private fun MyContent(
             onCheckForUpdate = onCheckForUpdate,
             onOpenUpdate = onOpenUpdate
         )
-
-        DiagnosticLogCard(onClick = { showDiagnosticLogDialog = true })
         Spacer(Modifier.height(8.dp))
-    }
-
-    if (showDiagnosticLogDialog) {
-        DiagnosticLogDialog(onDismiss = { showDiagnosticLogDialog = false })
     }
 
     if (showVehicleSelectorInAccount && availableVehicles.size > 1) {
@@ -1414,265 +1542,99 @@ private fun MyContent(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun VehicleConfigCard(
-    vehicleModel: String,
-    config: SessionStore.VehicleConfig,
-    onSave: (String, String, SessionStore.VehiclePowerType?, String, String) -> Unit
-) {
-    var editing by remember { mutableStateOf(false) }
-    val displayModel = config.model.ifBlank { vehicleModel }.ifBlank { "未设置" }
-    val typeLabel = when (config.powerType) {
-        SessionStore.VehiclePowerType.PURE_ELECTRIC -> "纯电"
-        SessionStore.VehiclePowerType.RANGE_EXTENDER -> "增程"
-        null -> "未设置"
-    }
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { editing = true },
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = glassCardBorder(),
-        shadowElevation = 0.dp
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("座驾配置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("· ${config.nickname.ifBlank { displayModel }}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                TextButton(onClick = { editing = true }) {
-                    Text("修改")
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                ) {
-                    Text(
-                        displayModel,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                val isReev = config.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = (if (isReev) MaterialTheme.statusWarn else MaterialTheme.statusGood).copy(alpha = 0.12f),
-                    border = BorderStroke(0.5.dp, (if (isReev) MaterialTheme.statusWarn else MaterialTheme.statusGood).copy(alpha = 0.35f))
-                ) {
-                    Text(
-                        typeLabel,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isReev) MaterialTheme.statusWarn else MaterialTheme.statusGood
-                    )
-                }
-
-                if (config.modelYear.isNotBlank()) {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                    ) {
-                        Text(
-                            "${config.modelYear}款",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            Text(
-                "续航里程与电量算法按此配置展示",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-    if (editing) {
-        VehicleConfigDialog(
-            vehicleModel = vehicleModel,
-            config = config,
-            title = "车型配置",
-            dismissible = true,
-            onDismiss = { editing = false },
-            onSave = { model, year, type, color, nickname ->
-                onSave(model, year, type, color, nickname)
-                editing = false
-            }
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun VehicleConfigDialog(
-    vehicleModel: String,
-    config: SessionStore.VehicleConfig,
-    title: String,
-    supportingText: String? = null,
-    dismissible: Boolean,
+private fun ModifyNicknameDialog(
+    currentNickname: String,
     onDismiss: () -> Unit,
-    onSave: (String, String, SessionStore.VehiclePowerType?, String, String) -> Unit
+    onConfirm: (String) -> Unit
 ) {
-    var model by remember(config, vehicleModel, title) {
-        mutableStateOf(resolveVehicleConfigModel(config.model, vehicleModel))
-    }
-    var year by remember(config, title) {
-        mutableStateOf(config.modelYear.ifBlank { "2026" })
-    }
-    var nickname by remember(config, title) {
-        mutableStateOf(config.nickname.ifBlank { resolveVehicleConfigModel(config.model, vehicleModel) })
-    }
-    var type by remember(config, title) {
-        mutableStateOf(config.powerType ?: SessionStore.VehiclePowerType.PURE_ELECTRIC)
-    }
-    var color by remember(config, vehicleModel, title) {
-        mutableStateOf(
-            VehicleAppearanceCatalog.reconciledColor(
-                resolveVehicleConfigModel(config.model, vehicleModel),
-                config.color
-            )
-        )
-    }
-    var modelExpanded by remember { mutableStateOf(false) }
-    val valid = VehicleConfigConfirmationPolicy.isValid(model, year, type, color)
+    var text by remember { mutableStateOf(currentNickname.take(10)) }
 
     AlertDialog(
-        onDismissRequest = { if (dismissible) onDismiss() },
-        title = { Text(title) },
+        onDismissRequest = onDismiss,
+        modifier = solidDialogModifier(shape = RoundedCornerShape(24.dp)),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Text(
+                text = "修改车辆昵称",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                supportingText?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                OutlinedTextField(
-                    value = nickname,
-                    onValueChange = { nickname = it.take(16) },
-                    label = { Text("车辆昵称") },
-                    placeholder = { Text("例如：我的小零") },
-                    supportingText = { Text("选填，仅保存在本机当前车辆配置中") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "设置便于识别的座驾名称（保存在本机配置中）",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Box(Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = model,
-                        onValueChange = {},
-                        readOnly = true,
-                        singleLine = true,
-                        label = { Text("车型") },
-                        placeholder = { Text("请选择车型") },
-                        trailingIcon = {
-                            IconButton(onClick = { modelExpanded = !modelExpanded }) {
-                                Text(
-                                    if (modelExpanded) "▲" else "▼",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = {
+                        if (it.length <= 10) {
+                            text = it
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    placeholder = {
+                        Text(
+                            "请输入车辆昵称（最多10字）",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    },
+                    trailingIcon = {
+                        if (text.isNotEmpty()) {
+                            IconButton(onClick = { text = "" }, modifier = Modifier.size(20.dp)) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_phosphor_x),
+                                    contentDescription = "清空",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { modelExpanded = true }
-                    )
-                    DropdownMenu(
-                        expanded = modelExpanded,
-                        onDismissRequest = { modelExpanded = false }
-                    ) {
-                        SUPPORTED_VEHICLE_MODELS.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option) },
-                                onClick = {
-                                    model = option
-                                    modelExpanded = false
-                                }
-                            )
                         }
-                    }
-                }
-                OutlinedTextField(
-                    value = year,
-                    onValueChange = { year = it.filter(Char::isDigit).take(4) },
-                    label = { Text("车型年份") },
-                    placeholder = { Text("例如 2026") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true
-                )
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    val options = listOf(
-                        SessionStore.VehiclePowerType.PURE_ELECTRIC to "纯电",
-                        SessionStore.VehiclePowerType.RANGE_EXTENDER to "增程"
-                    )
-                    options.forEachIndexed { index, (value, label) ->
-                        SegmentedButton(
-                            shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                            onClick = { type = value },
-                            selected = type == value,
-                            colors = SegmentedButtonDefaults.colors(
-                                activeContainerColor = MaterialTheme.colorScheme.primary,
-                                activeContentColor = MaterialTheme.colorScheme.onPrimary,
-                                activeBorderColor = MaterialTheme.colorScheme.primary,
-                                inactiveContainerColor = MaterialTheme.colorScheme.surface,
-                                inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant
-                            ),
-                            label = { Text(label) }
+                    },
+                    supportingText = {
+                        Text(
+                            text = "${text.length}/10",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.End,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (text.length == 10) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                }
-                if (!valid) {
-                    Text(
-                        "请选择车型，填写 4 位车型年份并选择动力类型",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                )
             }
         },
         confirmButton = {
-            TextButton(
-                enabled = valid,
-                onClick = { onSave(model, year, type, color, nickname.trim()) }
-            ) { Text("保存") }
+            Button(
+                onClick = {
+                    onConfirm(text.trim())
+                    onDismiss()
+                },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("确定")
+            }
         },
         dismissButton = {
-            if (dismissible) {
-                TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("取消")
             }
         }
     )
-}
-
-private fun resolveVehicleConfigModel(configuredModel: String, reportedModel: String): String {
-    return VehicleConfigConfirmationPolicy.normalizeModel(configuredModel)
-        ?: VehicleConfigConfirmationPolicy.normalizeModel(reportedModel)
-        ?: ""
 }
 
 private enum class SupportChannel(val label: String, val qrRes: Int) {
@@ -1706,8 +1668,9 @@ private fun AuthorSupportDialog(onDismiss: () -> Unit, onDisable: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.widthIn(max = 380.dp),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.glassSurface
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
         ) {
             Column(
                 modifier = Modifier
@@ -1772,6 +1735,10 @@ private fun VersionUpdatePromptDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = solidDialogModifier(),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(24.dp),
         title = { Text("发现新版本") },
         text = {
             Column(
@@ -1834,9 +1801,11 @@ private fun VersionUpdateCard(
     val latestRelease = (state as? VersionUpdateState.UpdateAvailable)?.latestRelease
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
+        color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = glassCardBorder(),
         shadowElevation = 0.dp
@@ -1945,114 +1914,6 @@ private fun VersionUpdateCard(
 }
 
 @Composable
-private fun DiagnosticLogCard(onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
-        border = glassCardBorder(),
-        shadowElevation = 0.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                modifier = Modifier.size(36.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_phosphor_code),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(8.dp)
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "诊断异常日志",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    "查看登录与车图接口的最近异常记录",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Icon(
-                painter = painterResource(R.drawable.ic_phosphor_arrow_clockwise),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun DiagnosticLogDialog(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    var logs by remember { mutableStateOf(ErrorLogs.repository.list()) }
-    val fullText = remember(logs) {
-        if (logs.isEmpty()) "暂无诊断异常日志" else ErrorLogs.repository.copyText()
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("诊断日志 (${logs.size})")
-                if (logs.isNotEmpty()) {
-                    TextButton(
-                        onClick = {
-                            ErrorLogs.repository.clear()
-                            logs = emptyList()
-                        }
-                    ) { Text("清空") }
-                }
-            }
-        },
-        text = {
-            SelectionContainer {
-                Text(
-                    text = fullText,
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 360.dp)
-                        .verticalScroll(rememberScrollState())
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("error_log", fullText))
-                    Toast.makeText(context, "已复制日志", Toast.LENGTH_SHORT).show()
-                }
-            ) { Text("复制全部") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
-        }
-    )
-}
-
-@Composable
 private fun VehicleCustomImageCard(
     vehicleVin: String,
     vehicleImageVersion: Int,
@@ -2077,9 +1938,9 @@ private fun VehicleCustomImageCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp)),
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
+        color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = glassCardBorder(),
         shadowElevation = 0.dp
@@ -2194,6 +2055,10 @@ private fun VehicleCustomImageCard(
     if (showResetConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showResetConfirmDialog = false },
+            modifier = solidDialogModifier(),
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            shape = RoundedCornerShape(24.dp),
             title = { Text("恢复官方车模") },
             text = { Text("确定要清除当前自定义主图，恢复为官方提供的标准车模渲染图吗？") },
             confirmButton = {
@@ -2251,6 +2116,10 @@ private fun VehicleCustomImageGuideDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = solidDialogModifier(),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(24.dp),
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -2353,9 +2222,11 @@ private fun AppearanceModeCard(
         AppearanceMode.DARK -> "始终使用深色外观"
     }
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
+        color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = glassCardBorder(),
         shadowElevation = 0.dp
@@ -2402,9 +2273,11 @@ private fun WidgetOpacityCard(opacity: Int, onOpacityChange: (Int) -> Unit) {
         25 to "全透"
     )
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
+        color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = glassCardBorder(),
         shadowElevation = 0.dp
@@ -2449,9 +2322,11 @@ private fun WidgetSensitiveActionVerificationCard(
     onEnabledChange: (Boolean) -> Unit
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
+        color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = glassCardBorder(),
         shadowElevation = 0.dp
@@ -2489,9 +2364,11 @@ private fun Widget4x2ActionsCard(
     var showDialog by rememberSaveable { mutableStateOf(false) }
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
+        color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = glassCardBorder(),
         shadowElevation = 0.dp
@@ -2584,6 +2461,10 @@ private fun Widget4x2ActionsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = solidDialogModifier(),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(24.dp),
         title = {
             Text(
                 "配置 4×2 插件按键",
@@ -2838,12 +2719,13 @@ private fun DrivingBreathingDot(modifier: Modifier = Modifier) {
 @Composable
 internal fun glassCardBorder(): BorderStroke {
     val isDark = LocalAppDarkTheme.current
-    val topLeftColor = if (isDark) Color.White.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.78f)
-    val bottomRightColor = if (isDark) Color.White.copy(alpha = 0.04f) else Color.White.copy(alpha = 0.18f)
+    val topLeftColor = if (isDark) Color.White.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.88f)
+    val middleColor = if (isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.45f)
+    val bottomRightColor = if (isDark) Color.White.copy(alpha = 0.05f) else Color.White.copy(alpha = 0.20f)
     return BorderStroke(
         1.0.dp,
         Brush.linearGradient(
-            colors = listOf(topLeftColor, bottomRightColor),
+            colors = listOf(topLeftColor, middleColor, bottomRightColor),
             start = Offset.Zero,
             end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
         )
@@ -2854,17 +2736,114 @@ internal fun glassCardBorder(): BorderStroke {
 internal fun glassInsetBorder(warning: Boolean = false): BorderStroke {
     if (warning) return BorderStroke(1.2.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
     val isDark = LocalAppDarkTheme.current
-    val topLeftColor = if (isDark) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.70f)
+    val topLeftColor = if (isDark) Color.White.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.78f)
+    val middleColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.35f)
     val bottomRightColor = if (isDark) Color.White.copy(alpha = 0.03f) else Color.White.copy(alpha = 0.14f)
     return BorderStroke(
-        0.6.dp,
+        0.8.dp,
         Brush.linearGradient(
-            colors = listOf(topLeftColor, bottomRightColor),
+            colors = listOf(topLeftColor, middleColor, bottomRightColor),
             start = Offset.Zero,
             end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
         )
     )
 }
+
+@Composable
+internal fun Modifier.frostedGlassCard(
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(16.dp),
+    auraColor: Color? = null,
+    auraCenter: Offset = Offset(0.2f, 0.2f),
+    auraRadiusRatio: Float = 0.45f,
+    topSpecularLine: Boolean = true
+): Modifier {
+    val isDark = LocalAppDarkTheme.current
+    return this
+        .clip(shape)
+        .drawBehind {
+            val w = size.width
+            val h = size.height
+
+            // 1. 基底磨砂微晶双对角渐变
+            val baseGradient = if (isDark) {
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFF222938).copy(alpha = 0.82f),
+                        Color(0xFF181E2A).copy(alpha = 0.70f),
+                        Color(0xFF131722).copy(alpha = 0.80f)
+                    ),
+                    start = Offset(0f, 0f),
+                    end = Offset(w, h)
+                )
+            } else {
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFFFFFFFF).copy(alpha = 0.88f),
+                        Color(0xFFF6F8FC).copy(alpha = 0.72f),
+                        Color(0xFFFFFFFF).copy(alpha = 0.82f)
+                    ),
+                    start = Offset(0f, 0f),
+                    end = Offset(w, h)
+                )
+            }
+            drawRect(brush = baseGradient)
+
+            // 2. 底层环境极光折射晕（若提供）
+            if (auraColor != null && auraColor != Color.Transparent) {
+                val cx = w * auraCenter.x
+                val cy = h * auraCenter.y
+                val radius = maxOf(w, h) * auraRadiusRatio
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            auraColor,
+                            auraColor.copy(alpha = auraColor.alpha * 0.4f),
+                            Color.Transparent
+                        ),
+                        center = Offset(cx, cy),
+                        radius = radius
+                    ),
+                    center = Offset(cx, cy),
+                    radius = radius
+                )
+            }
+
+            // 3. 顶端高光微晶折射横光（0.5dp）
+            if (topSpecularLine) {
+                drawLine(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            if (isDark) Color.White.copy(alpha = 0.30f) else Color.White.copy(alpha = 0.80f),
+                            Color.Transparent
+                        ),
+                        startX = w * 0.12f,
+                        endX = w * 0.88f
+                    ),
+                    start = Offset(w * 0.12f, 0.5f),
+                    end = Offset(w * 0.88f, 0.5f),
+                    strokeWidth = 1f
+                )
+            }
+        }
+}
+
+@Composable
+internal fun solidDialogModifier(
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(24.dp)
+): Modifier = Modifier
+    .clip(shape)
+    .border(
+        width = 0.8.dp,
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+        shape = shape
+    )
+
+@Composable
+internal fun frostedGlassDialogModifier(
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(24.dp),
+    auraColor: Color? = null
+): Modifier = solidDialogModifier(shape)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -2883,7 +2862,9 @@ fun VehicleHero(
     onOpenHealthyCharging: () -> Unit = {},
     availableVehicles: List<Vehicle> = emptyList(),
     onSwitchVehicle: (String) -> Unit = {},
-    onOpenHealthCheck: () -> Unit = {}
+    onOpenHealthCheck: () -> Unit = {},
+    onUpdateNickname: (String) -> Unit = {},
+    onParkingClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val remoteBitmap = remember(vehicleVin, vehicleImageVersion) {
@@ -2907,19 +2888,119 @@ fun VehicleHero(
     val mileageLabel = status?.mileage ?: "--"
     val mileageHasUnit = mileageLabel.endsWith("km", ignoreCase = true)
     var showVehicleSelectorDialog by remember { mutableStateOf(false) }
+    var showModifyNicknameDialog by remember { mutableStateOf(false) }
+
+    val isDark = LocalAppDarkTheme.current
+    val auraColor = when (VehicleHomeStatus.socBand(normalizedSoc)) {
+        VehicleHomeStatus.SocBand.NORMAL -> if (isDark) MaterialTheme.colorScheme.primary.copy(alpha = 0.22f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        VehicleHomeStatus.SocBand.WARNING -> if (isDark) MaterialTheme.statusWarn.copy(alpha = 0.20f) else MaterialTheme.statusWarn.copy(alpha = 0.12f)
+        VehicleHomeStatus.SocBand.CRITICAL -> if (isDark) MaterialTheme.colorScheme.error.copy(alpha = 0.20f) else MaterialTheme.colorScheme.error.copy(alpha = 0.10f)
+    }
+    val glassBorder = remember(isDark) {
+        val topLeftColor = if (isDark) Color.White.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.88f)
+        val middleColor = if (isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.45f)
+        val bottomRightColor = if (isDark) Color.White.copy(alpha = 0.05f) else Color.White.copy(alpha = 0.20f)
+        BorderStroke(
+            1.0.dp,
+            Brush.linearGradient(
+                colors = listOf(topLeftColor, middleColor, bottomRightColor),
+                start = Offset.Zero,
+                end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+            )
+        )
+    }
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = heroColor,
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
-        Column(
-            modifier = Modifier.padding(top = 10.dp, bottom = 0.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp)
-        ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            // 真实毛玻璃折射层（微晶渐变基底 + 能量环境极光 + 展台漫反射）
+            androidx.compose.foundation.Canvas(modifier = Modifier.matchParentSize()) {
+                val w = size.width
+                val h = size.height
+
+                // 1. 基底磨砂微晶渐变（深浅色自适应半透）
+                val baseGradient = if (isDark) {
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF222938).copy(alpha = 0.82f),
+                            Color(0xFF181E2A).copy(alpha = 0.70f),
+                            Color(0xFF131722).copy(alpha = 0.80f)
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(w, h)
+                    )
+                } else {
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFFFFFFFF).copy(alpha = 0.88f),
+                            Color(0xFFF6F8FC).copy(alpha = 0.72f),
+                            Color(0xFFFFFFFF).copy(alpha = 0.82f)
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(w, h)
+                    )
+                }
+                drawRect(brush = baseGradient)
+
+                // 2. 左上方能量环境极光晕（经毛玻璃折射后泛起的深层光晕）
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            auraColor,
+                            auraColor.copy(alpha = auraColor.alpha * 0.4f),
+                            Color.Transparent
+                        ),
+                        center = Offset(w * 0.18f, h * 0.22f),
+                        radius = w * 0.45f
+                    ),
+                    center = Offset(w * 0.18f, h * 0.22f),
+                    radius = w * 0.45f
+                )
+
+                // 3. 车模下方柔光漫反射（提升立体浮空展台感）
+                val stageLightColor = if (isDark) Color(0xFF384358).copy(alpha = 0.18f) else Color(0xFFFFFFFF).copy(alpha = 0.45f)
+                drawOval(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            stageLightColor,
+                            Color.Transparent
+                        ),
+                        center = Offset(w * 0.50f, h * 0.78f),
+                        radius = w * 0.50f
+                    ),
+                    topLeft = Offset(0f, h * 0.55f),
+                    size = androidx.compose.ui.geometry.Size(w, h * 0.45f)
+                )
+
+                // 4. 顶端高光玻璃折射微横光（极轻 0.5dp 顶层晶边）
+                drawLine(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            if (isDark) Color.White.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.90f),
+                            Color.Transparent
+                        ),
+                        startX = w * 0.10f,
+                        endX = w * 0.90f
+                    ),
+                    start = Offset(w * 0.10f, 0.5f),
+                    end = Offset(w * 0.90f, 0.5f),
+                    strokeWidth = 1f
+                )
+            }
+
+            Column(
+                modifier = Modifier.padding(top = 10.dp, bottom = 0.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp)
+            ) {
 
             // ====== 1. 顶部区域：左侧昵称+更新时间+续航电量(整体紧密靠拢)，右侧设置按钮+位置信息 ======
             Row(
@@ -2941,11 +3022,7 @@ fun VehicleHero(
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .then(
-                                    if (availableVehicles.size > 1) {
-                                        Modifier.clickable { showVehicleSelectorDialog = true }
-                                    } else Modifier
-                                ),
+                                .clickable { showModifyNicknameDialog = true },
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
@@ -2957,7 +3034,15 @@ fun VehicleHero(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            if (availableVehicles.size > 1) {
+                        }
+                        if (availableVehicles.size > 1) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { showVehicleSelectorDialog = true }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_phosphor_caret_right),
                                     contentDescription = "切换车辆",
@@ -3060,40 +3145,68 @@ fun VehicleHero(
                             )
 
                             Column(
-                                modifier = Modifier
-                                    .padding(top = 1.dp),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                                modifier = Modifier.padding(top = 1.dp),
+                                verticalArrangement = Arrangement.spacedBy(1.dp)
                             ) {
-                                // 1. 一体化双段双拼能量微高光槽 (左纯电·右燃油，中间留微缝)
+                                // 1. 能量槽 + 百分比行 (左纯电·右燃油，紧凑间距 5dp)
                                 Row(
-                                    modifier = Modifier.width(180.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    EnergyCapsuleProgressBar(
-                                        progress = chargeProgress(normalizedSoc),
-                                        color = electricColor,
-                                        isCharging = status?.chargeState == 1,
-                                        modifier = Modifier.weight(1f).height(4.5.dp)
-                                    )
-                                    EnergyCapsuleProgressBar(
-                                        progress = chargeProgress(status?.fuelSoc),
-                                        color = fuelColor,
-                                        isCharging = false,
-                                        modifier = Modifier.weight(1f).height(4.5.dp)
-                                    )
+                                    // 纯电能量槽（44dp）+ 电量百分比
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        EnergyCapsuleProgressBar(
+                                            progress = chargeProgress(normalizedSoc),
+                                            color = electricColor,
+                                            isCharging = status?.chargeState == 1,
+                                            modifier = Modifier.width(44.dp).height(4.5.dp)
+                                        )
+                                        Spacer(Modifier.width(3.dp))
+                                        Text(
+                                            text = elecSoc,
+                                            fontSize = 10.sp,
+                                            lineHeight = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = electricColor.copy(alpha = 0.90f),
+                                            maxLines = 1,
+                                            softWrap = false
+                                        )
+                                    }
+                                    // 燃油能量槽（44dp）+ 油量百分比
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        EnergyCapsuleProgressBar(
+                                            progress = chargeProgress(status?.fuelSoc),
+                                            color = fuelColor,
+                                            isCharging = false,
+                                            modifier = Modifier.width(44.dp).height(4.5.dp)
+                                        )
+                                        Spacer(Modifier.width(3.dp))
+                                        Text(
+                                            text = fSoc,
+                                            fontSize = 10.sp,
+                                            lineHeight = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = fuelColor.copy(alpha = 0.90f),
+                                            maxLines = 1,
+                                            softWrap = false
+                                        )
+                                    }
                                 }
 
-                                // 2. 纯净字符排版行 (彻底移除外框与底色药丸补丁，极度通透高级)
+                                // 2. 纯电与燃油里程数据行 (严格对应上方左右栏，紧凑间距 5dp 对齐)
                                 Row(
-                                    modifier = Modifier.width(180.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // 纯电数据 (绿/橙/红变色)
+                                    // 纯电数据 (左侧对应纯电条，宽度与上方纯电组一致)
                                     Row(
+                                        modifier = Modifier.widthIn(min = 76.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                        horizontalArrangement = Arrangement.Start
                                     ) {
                                         Icon(
                                             painter = painterResource(R.drawable.ic_hybrid_electric),
@@ -3101,24 +3214,22 @@ fun VehicleHero(
                                             modifier = Modifier.size(11.dp),
                                             tint = electricColor
                                         )
+                                        Spacer(Modifier.width(3.dp))
                                         Text(
                                             text = "$elecMiles",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = electricColor
-                                        )
-                                        Text(
-                                            text = "· $elecSoc",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = electricColor.copy(alpha = 0.85f),
-                                            fontSize = 10.sp
+                                            fontSize = 11.sp,
+                                            lineHeight = 13.sp,
+                                            fontWeight = FontWeight.Normal,
+                                            color = electricColor,
+                                            maxLines = 1,
+                                            softWrap = false
                                         )
                                     }
 
-                                    // 燃油数据 (橙黄/红变色)
+                                    // 燃油数据 (右侧对应燃油条)
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                        horizontalArrangement = Arrangement.Start
                                     ) {
                                         Icon(
                                             painter = painterResource(R.drawable.ic_hybrid_fuel),
@@ -3126,17 +3237,15 @@ fun VehicleHero(
                                             modifier = Modifier.size(11.dp),
                                             tint = fuelColor
                                         )
+                                        Spacer(Modifier.width(3.dp))
                                         Text(
                                             text = "$fuelMiles",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = fuelColor
-                                        )
-                                        Text(
-                                            text = "· $fSoc",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = fuelColor.copy(alpha = 0.85f),
-                                            fontSize = 10.sp
+                                            fontSize = 11.sp,
+                                            lineHeight = 13.sp,
+                                            fontWeight = FontWeight.Normal,
+                                            color = fuelColor,
+                                            maxLines = 1,
+                                            softWrap = false
                                         )
                                     }
                                 }
@@ -3156,7 +3265,7 @@ fun VehicleHero(
                                     progress = chargeProgress(normalizedSoc),
                                     color = rangeColor,
                                     isCharging = status?.chargeState == 1,
-                                    modifier = Modifier.width(110.dp).height(4.5.dp)
+                                    modifier = Modifier.width(110.dp).height(5.dp)
                                 )
                                 ChargingCenterPill(
                                     isCharging = status?.chargeState == 1,
@@ -3231,6 +3340,7 @@ fun VehicleHero(
                         isShutDown = status?.isShutDown == true
                     )
                     detailedDrivingState?.let { drivingState ->
+                        val isParked = drivingState.label == "已驻车"
                         Spacer(Modifier.height(if (address != null) 4.dp else 2.dp))
                         Surface(
                             shape = RoundedCornerShape(6.dp),
@@ -3247,7 +3357,12 @@ fun VehicleHero(
                             border = BorderStroke(
                                 0.5.dp,
                                 MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
-                            )
+                            ),
+                            modifier = if (isParked) {
+                                Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable(onClick = onParkingClick)
+                            } else Modifier
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -3263,6 +3378,14 @@ fun VehicleHero(
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1
                                 )
+                                if (isParked) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_phosphor_caret_right),
+                                        contentDescription = "查看驻车实景与位置",
+                                        modifier = Modifier.size(11.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
@@ -3289,18 +3412,9 @@ fun VehicleHero(
                             .height(130.dp)
                             .padding(horizontal = 16.dp)
                     )
-                } else {
-                    Image(
-                        painter = painterResource(vehicleAppearance.imageResource),
-                        contentDescription = "车身展示主图",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(130.dp)
-                            .padding(horizontal = 16.dp)
-                    )
                 }
             }
+        }
         }
 
         if (showVehicleSelectorDialog && availableVehicles.size > 1) {
@@ -3309,6 +3423,16 @@ fun VehicleHero(
                 vehicles = availableVehicles,
                 onSelectVehicle = onSwitchVehicle,
                 onDismiss = { showVehicleSelectorDialog = false }
+            )
+        }
+
+        if (showModifyNicknameDialog) {
+            ModifyNicknameDialog(
+                currentNickname = vehicleNickname,
+                onDismiss = { showModifyNicknameDialog = false },
+                onConfirm = { newName ->
+                    onUpdateNickname(newName)
+                }
             )
         }
     }
@@ -3323,6 +3447,10 @@ private fun VehicleSelectorDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = solidDialogModifier(),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(24.dp),
         title = {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -3594,7 +3722,13 @@ private fun EnergyCapsuleProgressBar(
     modifier: Modifier = Modifier
 ) {
     val clampedProgress = progress.coerceIn(0f, 1f)
-    val trackColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f)
+    val isDark = LocalAppDarkTheme.current
+
+    // 底槽与已消耗背景：深色凹槽基底 + 微量语义底透 + 晶体高光微轮廓，清晰界定整个胶囊形态与已消耗区间
+    val slotBaseColor = if (isDark) Color(0xFF10141C).copy(alpha = 0.95f) else Color(0xFFE4E8F0).copy(alpha = 0.95f)
+    val consumedTrackColor = color.copy(alpha = if (isDark) 0.16f else 0.12f)
+    val trackBorderColor = if (isDark) Color.White.copy(alpha = 0.18f) else Color.Black.copy(alpha = 0.10f)
+
     val pulseAlpha = if (isCharging) {
         val transition = rememberInfiniteTransition(label = "chargingPulse")
         val alpha by transition.animateFloat(
@@ -3612,16 +3746,18 @@ private fun EnergyCapsuleProgressBar(
     }
     val progressBrush = Brush.horizontalGradient(
         listOf(
-            color.copy(alpha = 0.72f * pulseAlpha),
+            color.copy(alpha = 0.80f * pulseAlpha),
             color.copy(alpha = pulseAlpha)
         )
     )
 
     Box(
         modifier = modifier
-            .height(4.5.dp)
+            .height(5.dp)
             .clip(CircleShape)
-            .background(trackColor)
+            .background(slotBaseColor)
+            .background(consumedTrackColor)
+            .border(0.5.dp, trackBorderColor, CircleShape)
     ) {
         if (clampedProgress > 0f) {
             Box(
@@ -3769,7 +3905,8 @@ private fun QuickVehicleActions(
     vehicleModel: String,
     status: VehicleStatus?,
     locationSnapshot: VehicleLocationSnapshot?,
-    onControl: (String) -> Unit
+    onControl: (String) -> Unit,
+    activeControlCommand: String? = null
 ) {
     val context = LocalContext.current
     val sessionStore = remember(context) { SessionStore(context) }
@@ -3891,15 +4028,22 @@ private fun QuickVehicleActions(
         }
     }
 
+    val primaryColor = MaterialTheme.colorScheme.primary
     Box(modifier = Modifier.fillMaxWidth()) {
         Surface(
-            modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = glassCardBorder(),
-        shadowElevation = 0.dp
-    ) {
+            modifier = Modifier
+                .fillMaxWidth()
+                .frostedGlassCard(
+                    shape = RoundedCornerShape(16.dp),
+                    auraColor = primaryColor.copy(alpha = 0.08f),
+                    auraCenter = Offset(0.5f, 0.5f)
+                ),
+            shape = RoundedCornerShape(16.dp),
+            color = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            border = glassCardBorder(),
+            shadowElevation = 0.dp
+        ) {
             Column(
                 Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = if (pageCount > 1) 8.dp else 12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -3912,6 +4056,7 @@ private fun QuickVehicleActions(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         val pageCommands = orderedCommands.drop(page * commandsPerPage).take(commandsPerPage)
                         pageCommands.forEach { command ->
+                            val cmdInProgress = QuickCommandExecutionPolicy.isCommandInProgress(command.name, activeControlCommand)
                             val label = if (command.name == "trunk") {
                                 when (trunkState) {
                                     TrunkState.CLOSED -> "开后备箱"
@@ -3925,6 +4070,7 @@ private fun QuickVehicleActions(
                                         label = label,
                                         iconRes = command.iconRes,
                                         warning = windowOpen,
+                                        inProgress = cmdInProgress,
                                         onClick = {
                                             if (!editing) {
                                                 sunshadeMenuExpanded = false
@@ -3950,6 +4096,7 @@ private fun QuickVehicleActions(
                                 QuickVehicleButton(
                                     label = label,
                                     iconRes = command.iconRes,
+                                    inProgress = cmdInProgress,
                                     onClick = {
                                         if (!editing) {
                                             windowMenuExpanded = false
@@ -3971,6 +4118,7 @@ private fun QuickVehicleActions(
                                         label = label,
                                         iconRes = command.iconRes,
                                         warning = trunkOpen,
+                                        inProgress = cmdInProgress,
                                         onClick = {
                                             if (!editing) {
                                                 when (trunkState) {
@@ -3978,7 +4126,7 @@ private fun QuickVehicleActions(
                                                     TrunkState.OPEN -> onControl("trunkClose")
                                                     TrunkState.UNKNOWN -> Toast.makeText(
                                                         context,
-                                                        "后备箱状态未知，请先刷新车况",
+                                                        "请先刷新后备箱状态",
                                                         Toast.LENGTH_SHORT
                                                     ).show()
                                                 }
@@ -4003,6 +4151,7 @@ private fun QuickVehicleActions(
                                     label = label,
                                     iconRes = command.iconRes,
                                     warning = isWarningCmd,
+                                    inProgress = cmdInProgress,
                                     onClick = {
                                         if (!editing) {
                                             when (command.name) {
@@ -4012,7 +4161,7 @@ private fun QuickVehicleActions(
                                                         TrunkState.OPEN -> onControl("trunkClose")
                                                         TrunkState.UNKNOWN -> Toast.makeText(
                                                             context,
-                                                            "后备箱状态未知，请先刷新车况",
+                                                            "请先刷新后备箱状态",
                                                             Toast.LENGTH_SHORT
                                                         ).show()
                                                     }
@@ -4217,6 +4366,10 @@ private fun QuickVehicleActions(
             onDismissRequest = {
                 editing = false
             },
+            modifier = solidDialogModifier(),
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            shape = RoundedCornerShape(24.dp),
             title = { Text("调整快捷操作") },
             text = {
                 Column(
@@ -4262,6 +4415,7 @@ private fun QuickVehicleButton(
     label: String,
     iconRes: Int,
     warning: Boolean = false,
+    inProgress: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier,
     onLongClick: (() -> Unit)? = null,
@@ -4271,7 +4425,7 @@ private fun QuickVehicleButton(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1f,
+        targetValue = if (isPressed && !inProgress) 0.92f else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium
@@ -4280,13 +4434,26 @@ private fun QuickVehicleButton(
     )
     val haptic = LocalHapticFeedback.current
 
+    val infiniteTransition = rememberInfiniteTransition(label = "inProgressPulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.40f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(650, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
     val isWarning = warning || iconTint == MaterialTheme.colorScheme.error
     val circleBg = when {
+        inProgress -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f * pulseAlpha)
         isWarning -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.30f)
         isPressed -> MaterialTheme.colorScheme.surfaceContainerHighest
         else -> MaterialTheme.colorScheme.surfaceContainerHigh
     }
     val circleBorder = when {
+        inProgress -> BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = pulseAlpha))
         isWarning -> BorderStroke(0.8.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
         else -> BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isPressed) 0.6f else 0.35f))
     }
@@ -4306,8 +4473,9 @@ private fun QuickVehicleButton(
                 .combinedClickable(
                     interactionSource = interactionSource,
                     indication = null,
+                    enabled = !inProgress,
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onClick()
                     },
                     onLongClick = onLongClick?.let { longClick ->
@@ -4322,19 +4490,27 @@ private fun QuickVehicleButton(
             border = circleBorder
         ) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Icon(
-                    painterResource(iconRes),
-                    contentDescription = label,
-                    tint = iconTint,
-                    modifier = Modifier.size(22.dp)
-                )
+                if (inProgress) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        painterResource(iconRes),
+                        contentDescription = label,
+                        tint = iconTint,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
         }
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
-            color = labelTint,
-            fontWeight = if (isWarning) FontWeight.Bold else FontWeight.Medium,
+            color = if (inProgress) MaterialTheme.colorScheme.primary else labelTint,
+            fontWeight = if (isWarning || inProgress) FontWeight.Bold else FontWeight.Medium,
             maxLines = 1
         )
     }
@@ -4346,10 +4522,17 @@ private fun HomeTirePressureCard(status: VehicleStatus?, modifier: Modifier = Mo
     val hasTireData = tireByPosition.isNotEmpty()
     val hasWarning = tireByPosition.values.any { it.warning }
     val cardBorder = glassCardBorder()
+    val warningColor = MaterialTheme.statusWarn
     Surface(
-        modifier = modifier.heightIn(min = 120.dp),
+        modifier = modifier
+            .heightIn(min = 120.dp)
+            .frostedGlassCard(
+                shape = RoundedCornerShape(16.dp),
+                auraColor = if (hasWarning) warningColor.copy(alpha = 0.15f) else null,
+                auraCenter = Offset(0.85f, 0.15f)
+            ),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
+        color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = cardBorder,
         shadowElevation = 0.dp
@@ -4733,9 +4916,11 @@ fun VehicleStatusCard(
     val lockAlert = status?.locked == false
     val cardBorder = glassCardBorder()
     Surface(
-        modifier = modifier.heightIn(min = 120.dp),
+        modifier = modifier
+            .heightIn(min = 120.dp)
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
+        color = Color.Transparent,
         border = cardBorder,
         shadowElevation = 0.dp
     ) {
@@ -5005,9 +5190,16 @@ fun VehicleLocationDetailContent(
                     .clip(RoundedCornerShape(16.dp))
             ) {
                 Surface(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .frostedGlassCard(
+                            shape = RoundedCornerShape(16.dp),
+                            auraColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            auraCenter = Offset(0.5f, 0.4f)
+                        ),
                     shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.glassSurface
+                    color = Color.Transparent,
+                    border = glassCardBorder()
                 ) {
                     Column(
                         modifier = Modifier.padding(24.dp),
@@ -5148,6 +5340,10 @@ private fun VehicleAddressNavigationDialog(
     val apps = remember(context) { ExternalMapLauncher.availableApps(context, forNavigation = true) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = solidDialogModifier(),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(24.dp),
         confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
@@ -5211,6 +5407,184 @@ private fun VehicleAddressNavigationDialog(
                             ) {
                                 Text(app.displayName)
                             }
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun ParkingDetailDialog(
+    fullAddress: String,
+    statusUpdatedAtEpochMs: Long,
+    locationSnapshot: VehicleLocationSnapshot? = null,
+    onFetchParkingPhoto: ((ChassisParkingPhoto?, android.graphics.Bitmap?) -> Unit) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var photoState by remember { mutableStateOf<ParkingPhotoLoadState>(ParkingPhotoLoadState.Loading) }
+    var uploadTimeMs by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(Unit) {
+        onFetchParkingPhoto { photoInfo, bitmap ->
+            if (photoInfo != null && bitmap != null) {
+                uploadTimeMs = photoInfo.uploadTimeMs
+                photoState = ParkingPhotoLoadState.Success(bitmap)
+            } else if (photoInfo != null) {
+                uploadTimeMs = photoInfo.uploadTimeMs
+                photoState = ParkingPhotoLoadState.Empty
+            } else {
+                photoState = ParkingPhotoLoadState.Empty
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = solidDialogModifier(),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(24.dp),
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // 1. 实景照片卡片
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.Transparent,
+                    border = glassCardBorder()
+                ) {
+                    when (val state = photoState) {
+                        is ParkingPhotoLoadState.Loading -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(360.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(32.dp),
+                                    strokeWidth = 2.5.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.height(10.dp))
+                                Text(
+                                    "正在获取驻车实景照片...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        is ParkingPhotoLoadState.Success -> {
+                            Column(Modifier.fillMaxWidth()) {
+                                Image(
+                                    bitmap = state.bitmap.asImageBitmap(),
+                                    contentDescription = "驻车实景照片",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 340.dp, max = 500.dp),
+                                    contentScale = ContentScale.Crop
+                                )
+                                if (uploadTimeMs > 0L) {
+                                    val formattedPhotoTime = remember(uploadTimeMs) {
+                                        SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).format(Date(uploadTimeMs))
+                                    }
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            "拍摄时间：$formattedPhotoTime",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        else -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 24.dp, horizontal = 16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    "暂无驻车实景照片",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "熄火停稳后车身环视相机自动拍摄",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 2. 位置信息
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .frostedGlassCard(shape = RoundedCornerShape(12.dp)),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.Transparent,
+                    border = glassCardBorder()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_location_pin),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            SelectionContainer(Modifier.weight(1f)) {
+                                Text(
+                                    fullAddress.ifBlank { "正在获取车辆位置..." },
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                        if (statusUpdatedAtEpochMs > 0L) {
+                            val statusTimeText = remember(statusUpdatedAtEpochMs) {
+                                SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).format(Date(statusUpdatedAtEpochMs))
+                            }
+                            Text(
+                                "位置更新：$statusTimeText",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -5294,10 +5668,17 @@ fun EnergyHomePagerCard(
     modifier: Modifier = Modifier
 ) {
     val pagerState = rememberPagerState(initialPage = EnergyHomePage.RECENT_MILEAGE.ordinal) { EnergyHomePage.entries.size }
+    val goodColor = MaterialTheme.statusGood
     Surface(
-        modifier = modifier.heightIn(min = EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP.dp),
+        modifier = modifier
+            .heightIn(min = EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP.dp)
+            .frostedGlassCard(
+                shape = RoundedCornerShape(16.dp),
+                auraColor = goodColor.copy(alpha = 0.10f),
+                auraCenter = Offset(0.85f, 0.15f)
+            ),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
+        color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = glassCardBorder(),
         shadowElevation = 0.dp
@@ -5450,10 +5831,16 @@ private fun EnergyMetricCard(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.fillMaxHeight(),
+        modifier = modifier
+            .fillMaxHeight()
+            .frostedGlassCard(
+                shape = RoundedCornerShape(12.dp),
+                auraColor = accentColor.copy(alpha = 0.08f),
+                auraCenter = Offset(0.5f, 0.2f)
+            ),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.glassInsetSurface,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+        color = Color.Transparent,
+        border = glassCardBorder()
     ) {
         Column(
             modifier = Modifier
@@ -6104,7 +6491,7 @@ fun ClimateOverviewCard(
 
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
+        color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = if (status?.acSwitch == true && climateTone != ClimateTemperatureTone.DEFAULT) {
             BorderStroke(1.dp, temperatureColor.copy(alpha = 0.45f))
@@ -6112,7 +6499,14 @@ fun ClimateOverviewCard(
             glassCardBorder()
         },
         shadowElevation = 0.dp,
-        modifier = modifier.height(56.dp)
+        modifier = modifier
+            .height(56.dp)
+            .frostedGlassCard(
+                shape = RoundedCornerShape(16.dp),
+                auraColor = if (status?.acSwitch == true) temperatureColor.copy(alpha = 0.16f) else null,
+                auraCenter = Offset(0.06f, 0.5f),
+                auraRadiusRatio = 0.5f
+            )
     ) {
         Box(
             modifier = Modifier
@@ -6251,16 +6645,16 @@ fun ClimateControlContent(
     var editedCircle by rememberSaveable {
         mutableStateOf(AirCircle.fromTelemetryValue(status?.recirculationMode) ?: AirCircle.INNER)
     }
-    var settingsDirty by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(
         status?.acSetting,
         status?.acAirVolume,
         status?.windshieldDefrost,
         status?.recirculationMode,
-        hvacCapability
+        hvacCapability,
+        busy
     ) {
-        if (!settingsDirty) {
+        if (!busy) {
             editedTemperature = climateWholeNumber(status?.acSetting)
                 ?.coerceIn(hvacCapability.temperatureMinC, hvacCapability.temperatureMaxC)
                 ?: 22.coerceIn(hvacCapability.temperatureMinC, hvacCapability.temperatureMaxC)
@@ -6289,7 +6683,6 @@ fun ClimateControlContent(
     fun submitSettings(operation: HvacOperation) {
         if (!actionsEnabled) return
         val command = currentCommand(operation)
-        settingsDirty = false
         onApplyClimateSettings(command)
     }
 
@@ -6307,65 +6700,82 @@ fun ClimateControlContent(
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            val climateAura = if (status?.acSwitch == true) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else null
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(
+                        shape = RoundedCornerShape(20.dp),
+                        auraColor = climateAura,
+                        auraCenter = Offset(0.2f, 0.2f)
+                    ),
                 shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.glassSurface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                border = glassCardBorder(),
-                shadowElevation = 0.dp
-            ) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        val tempLabel = if (status?.acSettingRight != null) {
-                            "主 ${status.acSetting ?: "--"} · 副 ${status.acSettingRight}"
-                        } else {
-                            climateWholeNumber(status?.acSetting)?.let(::displayClimateTemperature) ?: "--"
-                        }
-                        ClimateStatusItem(
-                            "设定温度",
-                            tempLabel,
-                            Modifier.weight(1f)
-                        )
-                        ClimateStatusItem("车内温度", status?.indoorTemp ?: "--", Modifier.weight(1f))
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        ClimateStatusItem("当前风量", displayClimateFanLevel(status?.acAirVolume), Modifier.weight(1f))
-                        ClimateStatusItem("当前循环", AirCircle.fromTelemetryValue(status?.recirculationMode)?.displayLabel ?: "--", Modifier.weight(1f))
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        ClimateStatusItem("空调总开关", climateBooleanLabel(status?.acSwitch), Modifier.weight(1f))
-                        ClimateStatusItem("后窗加热", when (status?.rearWindowHeating) {
-                            true -> "已开启"
-                            false -> "未开启"
-                            null -> "--"
-                        }, Modifier.weight(1f))
-                    }
-                }
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.glassSurface,
+                color = Color.Transparent,
                 contentColor = MaterialTheme.colorScheme.onSurface,
                 border = glassCardBorder(),
                 shadowElevation = 0.dp
             ) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                    // 1. 温度滑块
-                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("温度设定", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("$editedTemperature °C", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    // 1. 温度调节 (支持 - / + 步进快捷点按与滑动松手即刻下发)
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("温度设定", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .clickable(enabled = actionsEnabled && editedTemperature > hvacCapability.temperatureMinC) {
+                                            editedTemperature = (editedTemperature - 1).coerceAtLeast(hvacCapability.temperatureMinC)
+                                            submitSettings(HvacOperation.ON)
+                                        }
+                                ) {
+                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        Text("-", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                Text(
+                                    "$editedTemperature °C",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .clickable(enabled = actionsEnabled && editedTemperature < hvacCapability.temperatureMaxC) {
+                                            editedTemperature = (editedTemperature + 1).coerceAtMost(hvacCapability.temperatureMaxC)
+                                            submitSettings(HvacOperation.ON)
+                                        }
+                                ) {
+                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        Text("+", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
                         }
                         ThinClimateSlider(
                             value = editedTemperature.toFloat(),
                             onValueChange = {
                                 editedTemperature = it.roundToInt().coerceIn(hvacCapability.temperatureMinC, hvacCapability.temperatureMaxC)
-                                settingsDirty = true
                             },
-                            onValueChangeFinished = {},
+                            onValueChangeFinished = {
+                                submitSettings(HvacOperation.ON)
+                            },
                             enabled = actionsEnabled,
                             valueRange = hvacCapability.temperatureMinC.toFloat()..hvacCapability.temperatureMaxC.toFloat(),
                             steps = (hvacCapability.temperatureMaxC - hvacCapability.temperatureMinC - 1).coerceAtLeast(0),
@@ -6373,7 +6783,7 @@ fun ClimateControlContent(
                         )
                     }
 
-                    // 2. 风量滑块
+                    // 2. 风量滑块 (松手即刻下发)
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("风量", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -6384,9 +6794,10 @@ fun ClimateControlContent(
                                 value = editedWindLevel.toFloat(),
                                 onValueChange = {
                                     editedWindLevel = it.roundToInt().coerceIn(fanRange)
-                                    settingsDirty = true
                                 },
-                                onValueChangeFinished = {},
+                                onValueChangeFinished = {
+                                    submitSettings(HvacOperation.ON)
+                                },
                                 enabled = actionsEnabled,
                                 valueRange = fanRange.first.toFloat()..fanRange.last.toFloat(),
                                 steps = (fanRange.last - fanRange.first - 1).coerceAtLeast(0),
@@ -6397,7 +6808,7 @@ fun ClimateControlContent(
                         }
                     }
 
-                    // 3. 内外循环分段切换
+                    // 3. 内外循环分段切换 (即点即生效)
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("循环模式", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -6413,7 +6824,7 @@ fun ClimateControlContent(
                                 selected = editedCircle == AirCircle.INNER,
                                 onClick = {
                                     editedCircle = AirCircle.INNER
-                                    settingsDirty = true
+                                    submitSettings(HvacOperation.ON)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                                 label = { Text("内循环 (速冷/隔绝尾气)", style = MaterialTheme.typography.labelSmall) }
@@ -6422,7 +6833,7 @@ fun ClimateControlContent(
                                 selected = editedCircle == AirCircle.OUTER,
                                 onClick = {
                                     editedCircle = AirCircle.OUTER
-                                    settingsDirty = true
+                                    submitSettings(HvacOperation.ON)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                                 label = { Text("外循环 (引入新风)", style = MaterialTheme.typography.labelSmall) }
@@ -6430,7 +6841,7 @@ fun ClimateControlContent(
                         }
                     }
 
-                    // 4. 出风方向分段切换
+                    // 4. 出风方向分段切换 (即点即生效)
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("出风方向", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -6447,7 +6858,7 @@ fun ClimateControlContent(
                                 onClick = {
                                     editedOutletName = AirOutlet.ALL.name
                                     editedDefogging = false
-                                    settingsDirty = true
+                                    submitSettings(HvacOperation.ON)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                                 label = { Text("全车环绕出风", style = MaterialTheme.typography.labelSmall) }
@@ -6457,21 +6868,11 @@ fun ClimateControlContent(
                                 onClick = {
                                     editedOutletName = AirOutlet.WINDSHIELD.name
                                     editedDefogging = true
-                                    settingsDirty = true
+                                    submitSettings(HvacOperation.ON)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                                 label = { Text("前风挡除雾", style = MaterialTheme.typography.labelSmall) }
                             )
-                        }
-                    }
-
-                    if (settingsDirty) {
-                        Button(
-                            onClick = { submitSettings(HvacOperation.ON) },
-                            enabled = actionsEnabled,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("应用空调设置")
                         }
                     }
 
@@ -6497,6 +6898,151 @@ fun ClimateControlContent(
                         }
                     )
                 }
+            }
+
+            SeatComfortControlCard(
+                status = status,
+                enabled = actionsEnabled,
+                onControl = onControl
+            )
+        }
+    }
+}
+
+@Composable
+fun SeatComfortControlCard(
+    status: VehicleStatus?,
+    enabled: Boolean,
+    onControl: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = glassCardBorder(),
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_phosphor_sun),
+                    contentDescription = "座舱舒适",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "座椅与座舱舒适",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // 主驾驶
+            ComfortLevelSegmentedRow(
+                title = "主驾座椅加热",
+                levels = listOf("关", "1档", "2档", "3档"),
+                selectedLevel = status?.driverSeatHeating ?: 0,
+                enabled = enabled,
+                onLevelSelected = { onControl("driverSeatHeating_$it") },
+                activeColor = MaterialTheme.statusWarn
+            )
+            ComfortLevelSegmentedRow(
+                title = "主驾座椅通风",
+                levels = listOf("关", "1档", "2档", "3档"),
+                selectedLevel = status?.driverSeatVentilation ?: 0,
+                enabled = enabled,
+                onLevelSelected = { onControl("driverSeatVentilation_$it") },
+                activeColor = MaterialTheme.colorScheme.primary
+            )
+
+            // 副驾驶
+            ComfortLevelSegmentedRow(
+                title = "副驾座椅加热",
+                levels = listOf("关", "1档", "2档", "3档"),
+                selectedLevel = status?.passengerSeatHeating ?: 0,
+                enabled = enabled,
+                onLevelSelected = { onControl("passengerSeatHeating_$it") },
+                activeColor = MaterialTheme.statusWarn
+            )
+            ComfortLevelSegmentedRow(
+                title = "副驾座椅通风",
+                levels = listOf("关", "1档", "2档", "3档"),
+                selectedLevel = status?.passengerSeatVentilation ?: 0,
+                enabled = enabled,
+                onLevelSelected = { onControl("passengerSeatVentilation_$it") },
+                activeColor = MaterialTheme.colorScheme.primary
+            )
+
+            // 方向盘与后视镜加热
+            ComfortLevelSegmentedRow(
+                title = "方向盘加热",
+                levels = listOf("关", "弱档", "强档"),
+                selectedLevel = status?.steeringWheelHeatingLevel ?: if (status?.steeringWheelHeating == true) 2 else 0,
+                enabled = enabled,
+                onLevelSelected = { onControl("steeringWheelHeating_$it") },
+                activeColor = MaterialTheme.statusWarn
+            )
+            ComfortLevelSegmentedRow(
+                title = "后视镜加热",
+                levels = listOf("关", "开"),
+                selectedLevel = if (status?.rearviewMirrorHeating == true) 1 else 0,
+                enabled = enabled,
+                onLevelSelected = { onControl(if (it == 1) "rearviewMirrorHeating_on" else "rearviewMirrorHeating_off") },
+                activeColor = MaterialTheme.statusWarn
+            )
+        }
+    }
+}
+
+@Composable
+private fun ComfortLevelSegmentedRow(
+    title: String,
+    levels: List<String>,
+    selectedLevel: Int,
+    enabled: Boolean,
+    onLevelSelected: (Int) -> Unit,
+    activeColor: Color = MaterialTheme.colorScheme.primary,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            val currentText = levels.getOrElse(selectedLevel) { "关" }
+            Text(
+                currentText,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (selectedLevel > 0) activeColor else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            levels.forEachIndexed { index, label ->
+                SegmentedButton(
+                    selected = selectedLevel == index,
+                    onClick = { onLevelSelected(index) },
+                    enabled = enabled,
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = levels.size),
+                    label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                )
             }
         }
     }

@@ -35,11 +35,10 @@ object VersionUpdatePromptPolicy {
     fun shouldShow(
         state: VersionUpdateState,
         handledVersion: String?,
-        loggedIn: Boolean,
-        onVehicleTab: Boolean
+        loggedIn: Boolean = true,
+        onVehicleTab: Boolean = true
     ): Boolean {
         val update = state as? VersionUpdateState.UpdateAvailable ?: return false
-        if (!loggedIn || !onVehicleTab) return false
         return update.latestRelease.versionName != handledVersion
     }
 }

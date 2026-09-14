@@ -68,9 +68,11 @@ fun SimpleTimePickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
+        modifier = solidDialogModifier(shape = RoundedCornerShape(24.dp)),
         containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
         titleContentColor = MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(24.dp),
         title = {
             Text(
                 text = title,

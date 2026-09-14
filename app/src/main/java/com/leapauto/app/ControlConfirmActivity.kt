@@ -39,9 +39,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import com.leapauto.app.ui.frostedGlassCard
+import com.leapauto.app.ui.glassCardBorder
 import com.leapauto.app.ui.theme.LeapAutoTheme
 import com.leapauto.app.ui.theme.LeapBlue
 import com.leapauto.app.ui.theme.statusGood
@@ -214,42 +220,66 @@ private fun ControlConfirmationScreen(
     onCancel: () -> Unit
 ) {
     val iconRes = if (command == "unlock") R.drawable.ic_phosphor_lock_open else R.drawable.ic_phosphor_trunk_open
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceContainerLow) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.Center
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Surface(
-                    modifier = Modifier.size(52.dp),
-                    shape = CircleShape,
-                    color = if (verified) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Icon(
-                        painter = painterResource(if (verified) R.drawable.ic_phosphor_check else iconRes),
-                        contentDescription = null,
-                        tint = if (verified) MaterialTheme.statusGood else LeapBlue,
-                        modifier = Modifier.padding(14.dp)
-                    )
-                }
-                Column(modifier = Modifier.padding(start = 14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(if (verified) "验证通过" else "安全验证", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        if (verified) "正在向车辆发送指令" else "确认后将立即执行控车操作",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            androidx.compose.foundation.Canvas(modifier = Modifier.matchParentSize()) {
+                val w = size.width
+                val h = size.height
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFF0066FF).copy(alpha = 0.08f),
+                            Color.Transparent
+                        ),
+                        center = Offset(w * 0.5f, h * 0.35f),
+                        radius = w * 0.75f
+                    ),
+                    center = Offset(w * 0.5f, h * 0.35f),
+                    radius = w * 0.75f
+                )
             }
-            Spacer(Modifier.height(24.dp))
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            Column(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                verticalArrangement = Arrangement.Center
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Surface(
+                        modifier = Modifier.size(52.dp),
+                        shape = CircleShape,
+                        color = if (verified) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Icon(
+                            painter = painterResource(if (verified) R.drawable.ic_phosphor_check else iconRes),
+                            contentDescription = null,
+                            tint = if (verified) MaterialTheme.statusGood else LeapBlue,
+                            modifier = Modifier.padding(14.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.padding(start = 14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(if (verified) "验证通过" else "安全验证", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (verified) "正在向车辆发送指令" else "确认后将立即执行控车操作",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .frostedGlassCard(
+                            shape = RoundedCornerShape(20.dp),
+                            auraColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                            auraCenter = Offset(0.2f, 0.3f)
+                        ),
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.Transparent,
+                    border = glassCardBorder(),
+                    shadowElevation = 0.dp
+                ) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text("本次控车操作", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(commandLabel(command), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
@@ -339,6 +369,7 @@ private fun ControlConfirmationScreen(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
         }
     }
 }

@@ -4,9 +4,10 @@ package com.leapauto.app
 object SessionExpiry {
     fun isRefreshTokenInvalid(message: String?): Boolean {
         val value = message.orEmpty().lowercase()
+        if (value.contains("需要手机号")) return false
         val refreshTokenFailure = value.contains("refresh token") ||
-            value.contains("refresh_token") || value.contains("refreshtoken") || value.contains("续期")
-        val invalid = listOf("失效", "无效", "过期", "expired", "invalid", "failed", "failure", "失败")
+            value.contains("refresh_token") || value.contains("refreshtoken")
+        val invalid = listOf("失效", "无效", "过期", "expired", "invalid")
             .any(value::contains)
         return refreshTokenFailure && invalid
     }

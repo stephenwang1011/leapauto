@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import android.view.MotionEvent
 import android.widget.Toast
@@ -20,13 +21,39 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.leapauto.app.ui.LeapAutoScreen
+import com.leapauto.app.ui.BluetoothKeyDialog
+import com.leapauto.app.ui.BluetoothActionConfirmation
+import com.leapauto.app.ui.BluetoothConfigurationConfirmation
 import com.leapauto.app.ui.theme.LeapAutoTheme
+import com.leapauto.app.bluetooth.BleAccessPolicy
+import com.leapauto.app.bluetooth.BleConnectionPhase
+import com.leapauto.app.bluetooth.BleConnectionState
+import com.leapauto.app.bluetooth.BleControlConfirmation
+import com.leapauto.app.bluetooth.BleDiagnosticEvent
+import com.leapauto.app.bluetooth.BleDiagnostics
+import com.leapauto.app.bluetooth.BleKeyCertificate
+import com.leapauto.app.bluetooth.BleLockAction
+import com.leapauto.app.bluetooth.BleNearbyDevice
+import com.leapauto.app.bluetooth.BlePermissionPolicy
+import com.leapauto.app.bluetooth.BleSessionIdentity
+import com.leapauto.app.bluetooth.BleCertificateSync
+import com.leapauto.app.bluetooth.BluetoothKeyController
+import com.leapauto.app.bluetooth.BleKeyRuntime
+import com.leapauto.app.bluetooth.BleKeyService
+import com.leapauto.app.bluetooth.BleManagedKey
+import com.leapauto.app.bluetooth.BlePassiveConfiguration
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 
@@ -84,6 +111,8 @@ data class VehicleStatus(
     val passengerSeatHeating: Int? = null,
     val passengerSeatVentilation: Int? = null,
     val steeringWheelHeating: Boolean? = null,
+    val steeringWheelHeatingLevel: Int? = null,
+    val rearviewMirrorHeating: Boolean? = null,
     val acSettingRight: String? = null,
     val chargeScheduleEnabled: Boolean? = null,
     val chargeScheduleStart: String? = null,
@@ -146,6 +175,7 @@ class MainActivity : ComponentActivity() {
     @Volatile private var lastGeocodedLocation: Pair<Double, Double>? = null
     private var statusError by mutableStateOf("")
     private var controlFeedback by mutableStateOf<ControlFeedback?>(null)
+    private var activeControlCommandName by mutableStateOf<String?>(null)
     private var climateTemperatureRequestState by mutableStateOf(ClimateControlRequestState())
     @Volatile private var climateStatusRevision = 0L
     @Volatile private var climateOptimisticGuard: ClimateOptimisticGuard? = null
@@ -188,6 +218,28 @@ class MainActivity : ComponentActivity() {
     private var showSessionExpiredDialog by mutableStateOf(false)
     private var availableVehicles by mutableStateOf<List<Vehicle>>(emptyList())
     private var vehicleImageVersion by mutableIntStateOf(0)
+    private var activeGeetestChallenge by mutableStateOf<GeetestChallenge?>(null)
+    private lateinit var bluetoothKeyController: BluetoothKeyController
+    private lateinit var bluetoothRuntime: BleKeyRuntime
+    private var bluetoothManagedKey by mutableStateOf<BleManagedKey?>(null)
+    private var bluetoothBackgroundRunning by mutableStateOf(false)
+    private var bluetoothConfigurationConfirmation by mutableStateOf<BlePassiveConfiguration?>(null)
+    private var bluetoothConfigurationIdentity: BleSessionIdentity? = null
+    private var bluetoothSettingsRequestId by mutableStateOf(0L)
+    private var showBluetoothKey by mutableStateOf(false)
+    private var bluetoothPermissionsGranted by mutableStateOf(false)
+    private var bluetoothState by mutableStateOf(BleConnectionState())
+    private var bluetoothSessionIdentity: BleSessionIdentity? = null
+    private var bluetoothControlConfirmation by mutableStateOf<BleControlConfirmation?>(null)
+    private var bluetoothPinRequestPending = false
+    private var bluetoothReconnectDevice by mutableStateOf<BleNearbyDevice?>(null)
+    private var bluetoothCertificate by mutableStateOf<BleKeyCertificate?>(null)
+    private var bluetoothCertificateLoading by mutableStateOf(false)
+    private var bluetoothCertificateMessage by mutableStateOf("")
+    private var bluetoothGeneration = 0L
+    private var bluetoothCertificateJob: Job? = null
+    private var bluetoothPermissionGeneration: Long? = null
+    private var bluetoothScanAfterPermissionGeneration: Long? = null
 
     private val authorSupportPromptRunnable = Runnable {
         if (canShowAuthorSupportPrompt()) {
@@ -207,6 +259,17 @@ class MainActivity : ComponentActivity() {
         sessionStore = SessionStore(this)
         energyCacheStore = EnergyCacheStore(this)
         session = sessionStore.load()
+        bluetoothRuntime = BleKeyRuntime.get(applicationContext)
+        bluetoothRuntime.attachSession(session)
+        bluetoothKeyController = bluetoothRuntime.controller
+        lifecycleScope.launch {
+            bluetoothRuntime.connection.collect {
+                bluetoothState = it
+                if (!it.canControl) bluetoothControlConfirmation = null
+            }
+        }
+        lifecycleScope.launch { bluetoothRuntime.managedKey.collect { bluetoothManagedKey = it } }
+        lifecycleScope.launch { bluetoothRuntime.backgroundRunning.collect { bluetoothBackgroundRunning = it } }
         hvacCapability = session.hvacCapability
         availableVehicles = sessionStore.loadVehicles()
         val defaultPower = when {
@@ -218,7 +281,7 @@ class MainActivity : ComponentActivity() {
             vin = session.selectedVin,
             defaultModel = session.selectedCarType,
             defaultNickname = session.selectedNickname,
-            defaultYear = session.selectedYear.ifBlank { "2026" },
+            defaultYear = session.selectedYear,
             defaultPowerType = defaultPower
         )
         pin = sessionStore.loadOpPassword() ?: ""
@@ -260,6 +323,7 @@ class MainActivity : ComponentActivity() {
                     vehicleVin = session.selectedVin,
                     statusError = statusError,
                     controlFeedback = controlFeedback,
+                    activeControlCommand = activeControlCommandName,
                     climateTemperatureRequestState = climateTemperatureRequestState,
                     vehicleModel = session.selectedCarType,
                     vehicleDisplayModel = VehicleStatusMapper.resolveDisplayModel(vehicleConfig.model, session.selectedCarType),
@@ -290,6 +354,7 @@ class MainActivity : ComponentActivity() {
                     scheduledPreheatDays = scheduledPreheatDays,
                     onApplyChargingSettings = ::applyHealthyAndScheduledCharging,
                     onApplyScheduledPreheat = ::applyScheduledBatteryPreheat,
+                    onFetchParkingPhoto = ::fetchParkingPhoto,
                     networkDebugEnabled = networkDebugEnabled,
                     vehicleImageVersion = vehicleImageVersion,
                     onSelectCustomVehicleImage = ::handleCustomVehicleImage,
@@ -308,7 +373,11 @@ class MainActivity : ComponentActivity() {
                     onPinChange = { pin = it.take(4) },
                     onSendSms = ::sendSms,
                     smsCountdownSeconds = smsCountdownSeconds,
-                    onLogin = ::login,
+                    geetestChallenge = activeGeetestChallenge,
+                    onGeetestSuccess = ::submitGeetestSolution,
+                    onDismissGeetest = { activeGeetestChallenge = null },
+                    onLoginWithRawAuth = ::loginWithRawAuth,
+                    onLogin = { login() },
                     onSavePin = ::savePin,
                     onCancelPinSetup = ::cancelPinSetup,
                     onWidgetOpacityChange = ::saveWidgetOpacity,
@@ -318,11 +387,12 @@ class MainActivity : ComponentActivity() {
                     onWidget4x2ActionsChange = ::saveWidget4x2Actions,
                     onAppearanceModeChange = ::saveAppearanceMode,
                     onSaveVehicleConfig = ::saveVehicleConfig,
+                    onUpdateNickname = ::updateVehicleNickname,
                     onNetworkDebugEnabledChange = { enabled ->
                         networkDebugEnabled = enabled
                         NetworkDebugController.setEnabled(enabled)
                     },
-                    onCheckForUpdate = ::checkForUpdate,
+                    onCheckForUpdate = { checkForUpdate(force = true) },
                     onOpenUpdate = ::openUpdatePage,
                     onDismissVersionUpdatePrompt = ::markVersionUpdateHandled,
                     onOpenVersionUpdatePrompt = ::openVersionUpdatePage,
@@ -340,15 +410,60 @@ class MainActivity : ComponentActivity() {
                     onControl = { control(it) },
                     onApplyClimateSettings = ::applyClimateSettings,
                     onDismissControlFeedback = { controlFeedback = null },
-                    onQuickAc = ::quickAc
+                    onQuickAc = ::quickAc,
+                    onOpenBluetoothKey = ::openBluetoothKey,
+                    bluetoothSettingsRequestId = bluetoothSettingsRequestId
                 )
+                if (showBluetoothKey && !pinSetupInProgress) {
+                    BluetoothKeyDialog(
+                        state = bluetoothState,
+                        permissionsGranted = bluetoothPermissionsGranted,
+                        certificateReady = BleAccessPolicy.isCertificateReady(bluetoothCertificate, session.selectedVin),
+                        certificateLoading = bluetoothCertificateLoading,
+                        certificateMessage = bluetoothCertificateMessage,
+                        reconnectDevice = bluetoothReconnectDevice,
+                        configuration = bluetoothManagedKey?.desired ?: BlePassiveConfiguration(),
+                        appliedConfiguration = bluetoothManagedKey?.applied,
+                        configurationRequested = bluetoothManagedKey?.requested == true,
+                        configurationPending = bluetoothManagedKey?.pending == true,
+                        backgroundRunning = bluetoothBackgroundRunning,
+                        bound = bluetoothManagedKey != null,
+                        protocolMinor = bluetoothManagedKey?.device?.protocolMinor,
+                        onApplyConfiguration = ::requestBluetoothConfiguration,
+                        onResumeBackground = ::resumeBluetoothBackground,
+                        onSyncCertificate = ::syncBluetoothCertificate,
+                        onScan = ::startBluetoothScan,
+                        onConnect = ::connectBluetoothDevice,
+                        onDisconnect = { bluetoothRuntime.stopBackground() },
+                        onControl = ::requestBluetoothLockControl,
+                        onOpenSettings = ::openBluetoothSettings,
+                        onCopyDiagnostics = ::copyBluetoothDiagnostics,
+                        onShareDiagnostics = ::shareBluetoothDiagnostics,
+                        onClearDiagnostics = { bluetoothKeyController.clearDiagnostics() },
+                        onDismiss = ::hideBluetoothKey
+                    )
+                }
+                bluetoothConfigurationConfirmation?.takeIf { showBluetoothKey && !pinSetupInProgress }?.let { configuration ->
+                    BluetoothConfigurationConfirmation(configuration,
+                        onDismiss = { bluetoothConfigurationConfirmation = null },
+                        onConfirm = { confirmBluetoothConfiguration(configuration) })
+                }
+                bluetoothControlConfirmation?.takeIf { showBluetoothKey && !pinSetupInProgress }?.let { confirmation ->
+                    BluetoothActionConfirmation(
+                        action = confirmation.action,
+                        enabled = isCurrentBluetoothConfirmation(confirmation),
+                        onDismiss = { bluetoothControlConfirmation = null },
+                        onConfirm = { confirmBluetoothLockControl(confirmation) }
+                    )
+                }
             }
         }
+
+        checkForUpdate()
 
         if (session.oldAuth != null) {
             loggedIn = true
             beginPostLoginPrompts()
-            checkForUpdate()
             refreshStatus()
             refreshEnergy(force = true)
             refreshHvacCapability()
@@ -363,6 +478,268 @@ class MainActivity : ComponentActivity() {
         ControlWidget.refreshAppearance(this)
     }
 
+    private fun openBluetoothKey() {
+        if (!isBluetoothForegroundContext(requireManagement = false)) return
+        bluetoothRuntime.attachSession(session)
+        bluetoothPermissionsGranted = bluetoothKeyController.hasPermissions()
+        val identity = currentBluetoothIdentity() ?: return
+        if (bluetoothSessionIdentity != null && bluetoothSessionIdentity != identity) {
+            clearBluetoothState(closePage = true)
+        }
+        bluetoothSessionIdentity = identity
+        if (bluetoothCertificate == null && !bluetoothCertificateLoading) {
+            bluetoothCertificate = sessionStore.loadBluetoothKeyCertificate(identity.accountId, identity.vin)
+            updateBluetoothCertificateMessage()
+        }
+        showBluetoothKey = true
+    }
+
+    private fun hideBluetoothKey() {
+        showBluetoothKey = false
+        bluetoothControlConfirmation = null
+        bluetoothConfigurationConfirmation = null
+        bluetoothConfigurationIdentity = null
+        bluetoothPermissionGeneration = null
+        bluetoothScanAfterPermissionGeneration = null
+        if (bluetoothState.phase == BleConnectionPhase.SCANNING) {
+            bluetoothKeyController.disconnect()
+        }
+    }
+
+    private fun updateBluetoothCertificateMessage() {
+        bluetoothCertificateMessage = BleAccessPolicy.certificateMessage(bluetoothCertificate, session.selectedVin)
+    }
+
+    private fun syncBluetoothCertificate() {
+        if (bluetoothBackgroundRunning) {
+            toast("请先关闭后台钥匙并等待车辆确认")
+            return
+        }
+        if (!isBluetoothForegroundContext() ||
+            !BleAccessPolicy.canSyncCertificate(bluetoothState.phase, bluetoothCertificateLoading)) return
+        bluetoothPermissionGeneration = null
+        bluetoothScanAfterPermissionGeneration = null
+        bluetoothKeyController.disconnect()
+        bluetoothKeyController.recordDiagnostic(BleDiagnosticEvent.CERTIFICATE_SYNC_STARTED)
+        val scope = bluetoothGeneration
+        val requestSession = sessionStore.load()
+        val sync = BleCertificateSync(requestSession)
+        val identity = sync.identity
+        bluetoothCertificateLoading = true
+        bluetoothCertificateMessage = "正在同步钥匙"
+        bluetoothCertificateJob = lifecycleScope.launch {
+            try {
+                val certificate = withContext(Dispatchers.IO) { LeapmotorApi(requestSession).fetchBluetoothKeyCertificate() }
+                if (!isCurrentBluetoothContext(identity, scope)) return@launch
+                if (!sync.canCommit(session, requestSession, certificate) ||
+                    !sessionStore.completeBluetoothCertificateSync(sync, requestSession, certificate)) {
+                    bluetoothKeyController.recordDiagnostic(BleDiagnosticEvent.CERTIFICATE_SYNC_FAILED)
+                    bluetoothCertificateMessage = "会话已变化，请重新同步钥匙"
+                    return@launch
+                }
+                if (session.deviceId != requestSession.deviceId) {
+                    bluetoothKeyController.recordDiagnostic(BleDiagnosticEvent.CERTIFICATE_IDENTITY_UPDATED)
+                }
+                session.deviceId = requestSession.deviceId
+                session.oldAuth = requestSession.oldAuth
+                session.newAuth = requestSession.newAuth
+                session.route = requestSession.route
+                bluetoothRuntime.attachSession(session)
+                bluetoothSessionIdentity = currentBluetoothIdentity()
+                bluetoothCertificate = certificate
+                bluetoothKeyController.recordDiagnostic(BleDiagnosticEvent.CERTIFICATE_SYNCED, code = certificate.keyType)
+                updateBluetoothCertificateMessage()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                if (isCurrentBluetoothContext(identity, scope)) {
+                    bluetoothKeyController.recordDiagnostic(BleDiagnosticEvent.CERTIFICATE_SYNC_FAILED)
+                    bluetoothCertificateMessage = "钥匙同步失败，请检查登录状态和网络后重试"
+                }
+            } finally {
+                if (scope == bluetoothGeneration) bluetoothCertificateLoading = false
+            }
+        }
+    }
+
+    private fun isCurrentBluetoothContext(identity: BleSessionIdentity, generation: Long): Boolean =
+        loggedIn && !activityDestroyed && !showSessionExpiredDialog && generation == bluetoothGeneration &&
+            identity.matches(session.oldAuth?.accountId, session.selectedVin, session.generation, session.deviceId)
+
+    private fun isBluetoothForegroundContext(requireManagement: Boolean = true): Boolean =
+        (!requireManagement || showBluetoothKey) && loggedIn && activityResumed && !activityDestroyed && !showSessionExpiredDialog &&
+            !session.oldAuth?.accountId.isNullOrBlank() && session.selectedVin.isNotBlank()
+
+    private fun currentBluetoothIdentity(): BleSessionIdentity? {
+        val accountId = session.oldAuth?.accountId?.takeIf { it.isNotBlank() } ?: return null
+        if (session.selectedVin.isBlank()) return null
+        return BleSessionIdentity(accountId, session.selectedVin, session.generation, session.deviceId)
+    }
+
+    private fun startBluetoothScan() {
+        if (bluetoothBackgroundRunning || bluetoothManagedKey?.desired?.enabled == true) {
+            toast("当前已绑定车辆，请恢复连接或先关闭后台钥匙")
+            return
+        }
+        if (!isBluetoothForegroundContext() ||
+            !BleAccessPolicy.canScan(bluetoothState.phase, bluetoothCertificateLoading)) return
+        if (!bluetoothKeyController.hasPermissions()) {
+            if (bluetoothPermissionGeneration != null) return
+            bluetoothPermissionGeneration = bluetoothGeneration
+            bluetoothKeyController.recordDiagnostic(BleDiagnosticEvent.PERMISSION_REQUESTED)
+            requestPermissions(BlePermissionPolicy.requiredPermissions(Build.VERSION.SDK_INT).toTypedArray(), BLUETOOTH_PERMISSION_REQUEST)
+            return
+        }
+        bluetoothPermissionGeneration = null
+        bluetoothScanAfterPermissionGeneration = null
+        bluetoothKeyController.scan()
+    }
+
+    private fun connectBluetoothDevice(device: BleNearbyDevice) {
+        val certificate = sessionStore.loadBluetoothKeyCertificate(session.oldAuth?.accountId.orEmpty(), session.selectedVin)
+        if (certificate == null || certificate != bluetoothCertificate) {
+            bluetoothCertificate = certificate
+            updateBluetoothCertificateMessage()
+            toast("钥匙或设备信息已变化，请重新同步钥匙")
+            return
+        }
+        val accountId = session.oldAuth?.accountId ?: return
+        val ready = BleAccessPolicy.isCertificateReady(certificate, session.selectedVin)
+        if (!isBluetoothForegroundContext() ||
+            !BleAccessPolicy.canConnect(bluetoothState.phase, bluetoothCertificateLoading, ready)) return
+        bluetoothPermissionGeneration = null
+        bluetoothScanAfterPermissionGeneration = null
+        bluetoothReconnectDevice = device
+        runCatching { bluetoothRuntime.connectManually(device, certificate, session) }
+            .onFailure { toast("无法连接，请先处理后台钥匙设置或重新扫描") }
+    }
+
+    private fun requestBluetoothConfiguration(configuration: BlePassiveConfiguration) {
+        if (!isBluetoothForegroundContext() || bluetoothState.isBusy || bluetoothCertificateLoading || busy) return
+        val identity = currentBluetoothIdentity() ?: return
+        if (bluetoothManagedKey == null) return
+        val confirm = {
+            if (isBluetoothForegroundContext() && currentBluetoothIdentity() == identity) {
+                bluetoothConfigurationIdentity = identity
+                bluetoothConfigurationConfirmation = configuration
+            }
+        }
+        if (sessionStore.loadOpPassword().isNullOrBlank()) {
+            bluetoothPinRequestPending = true
+            requestOperationPassword(action = {
+                bluetoothPinRequestPending = false
+                confirm()
+            }, onCancel = { bluetoothPinRequestPending = false })
+        } else confirm()
+    }
+
+    private fun confirmBluetoothConfiguration(configuration: BlePassiveConfiguration) {
+        if (bluetoothConfigurationConfirmation != configuration) return
+        bluetoothConfigurationConfirmation = null
+        if (!isBluetoothForegroundContext() || bluetoothConfigurationIdentity != currentBluetoothIdentity() ||
+            bluetoothState.isBusy || bluetoothCertificateLoading || busy) return
+        bluetoothConfigurationIdentity = null
+        runCatching { bluetoothRuntime.applyConfiguration(configuration) }
+            .onFailure { toast("设置未完成，请检查钥匙绑定、权限和后台连接状态") }
+    }
+
+    private fun resumeBluetoothBackground() {
+        if (!isBluetoothForegroundContext()) return
+        runCatching { bluetoothRuntime.startBackground() }
+            .onFailure { toast("无法恢复后台连接，请检查蓝牙权限和操控密码") }
+    }
+
+    private fun requestBluetoothLockControl(action: BleLockAction) {
+        if (!isBluetoothForegroundContext() || !bluetoothState.canControl) return
+        if (busy) {
+            toast("另一项车辆操作正在进行")
+            return
+        }
+        val identity = currentBluetoothIdentity() ?: return
+        if (bluetoothSessionIdentity != identity) return
+        val confirmation = BleControlConfirmation(action, identity, bluetoothGeneration)
+        if (sessionStore.loadOpPassword().isNullOrBlank()) {
+            bluetoothPinRequestPending = true
+            requestOperationPassword(action = {
+                bluetoothPinRequestPending = false
+                if (isCurrentBluetoothConfirmation(confirmation)) bluetoothControlConfirmation = confirmation
+            }, onCancel = { bluetoothPinRequestPending = false })
+            return
+        }
+        bluetoothControlConfirmation = confirmation
+    }
+
+    private fun isCurrentBluetoothConfirmation(confirmation: BleControlConfirmation): Boolean =
+        confirmation.isCurrent(currentBluetoothIdentity(), bluetoothGeneration,
+            isBluetoothForegroundContext(requireManagement = false), bluetoothState.canControl,
+            managementVisible = showBluetoothKey) &&
+            bluetoothSessionIdentity == confirmation.identity && !busy
+
+    private fun confirmBluetoothLockControl(confirmation: BleControlConfirmation) {
+        if (bluetoothControlConfirmation != confirmation) return
+        bluetoothControlConfirmation = null
+        if (!isCurrentBluetoothConfirmation(confirmation)) return
+        if (sessionStore.loadOpPassword().isNullOrBlank()) return
+        bluetoothKeyController.control(confirmation.action)
+    }
+
+    private fun openBluetoothSettings() {
+        bluetoothPermissionsGranted = bluetoothKeyController.hasPermissions()
+        val intent = if (bluetoothPermissionsGranted) Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+        else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+        runCatching { startActivity(intent) }.onFailure { toast("无法打开系统设置") }
+    }
+
+    private fun copyBluetoothDiagnostics() {
+        if (!isBluetoothForegroundContext() || bluetoothState.diagnostics.isEmpty()) return
+        val report = BleDiagnostics.formatReport(bluetoothState.diagnostics, BuildConfig.VERSION_NAME, bluetoothState.phase)
+        val clipboard = getSystemService(ClipboardManager::class.java) ?: return
+        clipboard.setPrimaryClip(ClipData.newPlainText("蓝牙连接诊断", report))
+        toast("已复制蓝牙诊断")
+    }
+
+    private fun shareBluetoothDiagnostics() {
+        if (!isBluetoothForegroundContext() || bluetoothState.diagnostics.isEmpty() || bluetoothState.isBusy) return
+        val report = BleDiagnostics.formatReport(bluetoothState.diagnostics, BuildConfig.VERSION_NAME, bluetoothState.phase)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "蓝牙连接诊断")
+            putExtra(Intent.EXTRA_TEXT, report)
+        }
+        runCatching { startActivity(Intent.createChooser(intent, "分享蓝牙诊断")) }
+            .onFailure { toast("无法打开系统分享") }
+    }
+
+    private fun clearBluetoothState(closePage: Boolean, endSession: Boolean = closePage) {
+        bluetoothGeneration++
+        bluetoothControlConfirmation = null
+        bluetoothConfigurationConfirmation = null
+        bluetoothConfigurationIdentity = null
+        if (bluetoothPinRequestPending) {
+            clearPendingPinProtectedAction(cancel = true)
+            pinSetupInProgress = false
+        }
+        bluetoothCertificateJob?.cancel()
+        bluetoothCertificateJob = null
+        bluetoothCertificateLoading = false
+        if (!closePage) updateBluetoothCertificateMessage()
+        bluetoothPermissionGeneration = null
+        bluetoothScanAfterPermissionGeneration = null
+        if (::bluetoothRuntime.isInitialized) {
+            if (endSession) bluetoothRuntime.endSession() else bluetoothRuntime.pauseManualConnection()
+        }
+        if (closePage) {
+            bluetoothSettingsRequestId = 0L
+            if (::bluetoothKeyController.isInitialized) bluetoothKeyController.clearDiagnostics()
+            bluetoothReconnectDevice = null
+            bluetoothSessionIdentity = null
+            showBluetoothKey = false
+            bluetoothCertificate = null
+            bluetoothCertificateMessage = ""
+            bluetoothState = BleConnectionState()
+        }
+    }
+
     private fun handleSessionFailure(error: Throwable) {
         if (loggedIn && SessionExpiry.isRefreshTokenInvalid(error.message)) {
             enterSessionExpiredState()
@@ -370,6 +747,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun enterSessionExpiredState() {
+        clearBluetoothState(closePage = true)
         mainHandler.removeCallbacks(authorSupportPromptRunnable)
         clearPendingPinProtectedAction(cancel = true)
         pinSetupInProgress = false
@@ -379,6 +757,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        clearBluetoothState(closePage = true, endSession = false)
         activityDestroyed = true
         NetworkDebugController.disableAndClear()
         operationGeneration += 1L
@@ -390,6 +769,16 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        bluetoothRuntime.attachSession(session)
+        bluetoothRuntime.setForeground(true)
+        if (loggedIn && !showSessionExpiredDialog) runCatching { bluetoothRuntime.restoreBackground() }
+        if (intent.getBooleanExtra(BleKeyService.EXTRA_OPEN_KEY, false)) {
+            intent.removeExtra(BleKeyService.EXTRA_OPEN_KEY)
+            bluetoothSettingsRequestId++
+        }
+        bluetoothPermissionsGranted = bluetoothKeyController.hasPermissions()
+        resumeBluetoothScanAfterPermission()
+        checkForUpdate()
         if (loggedIn && carScreenVisible) {
             // Refresh immediately when returning to the foreground while the vehicle tab is visible.
             refreshStatus(silent = true)
@@ -404,6 +793,42 @@ class MainActivity : ComponentActivity() {
         mainHandler.removeCallbacks(authorSupportPromptRunnable)
         updateAutoRefreshLoop()
         super.onPause()
+    }
+
+    override fun onStop() {
+        bluetoothRuntime.setForeground(false)
+        clearBluetoothState(closePage = false)
+        super.onStop()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != BLUETOOTH_PERMISSION_REQUEST) return
+        bluetoothPermissionsGranted = bluetoothKeyController.hasPermissions()
+        val requestedGeneration = bluetoothPermissionGeneration
+        bluetoothPermissionGeneration = null
+        if (requestedGeneration == bluetoothGeneration && showBluetoothKey && loggedIn) {
+            if (bluetoothKeyController.hasPermissions()) {
+                bluetoothKeyController.recordDiagnostic(BleDiagnosticEvent.PERMISSION_GRANTED)
+                bluetoothScanAfterPermissionGeneration = requestedGeneration
+                resumeBluetoothScanAfterPermission()
+            } else {
+                bluetoothKeyController.recordDiagnostic(BleDiagnosticEvent.PERMISSION_DENIED)
+                bluetoothState = bluetoothState.copy(message = "未授予蓝牙扫描权限，可在系统设置中授权")
+            }
+        }
+    }
+
+    private fun resumeBluetoothScanAfterPermission() {
+        if (!activityResumed) return
+        val requestedGeneration = bluetoothScanAfterPermissionGeneration ?: return
+        bluetoothScanAfterPermissionGeneration = null
+        if (requestedGeneration == bluetoothGeneration) startBluetoothScan()
     }
 
     override fun onUserInteraction() {
@@ -511,7 +936,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun login() {
+    private fun submitGeetestSolution(result: GeetestCaptchaResult) {
+        activeGeetestChallenge = null
+        login(captchaResult = result)
+    }
+
+    private fun login(captchaResult: GeetestCaptchaResult? = null) {
         if (phone.length != 11 || code.isEmpty()) {
             toast("请输入手机号和验证码")
             return
@@ -519,31 +949,38 @@ class MainActivity : ComponentActivity() {
         busy { generation ->
             val started = System.currentTimeMillis()
             try {
-            val api = LeapmotorApi(session)
-            api.loginWithSms(phone, code)
-            val vehicles = api.listVehicles()
-            if (vehicles.isEmpty()) throw ApiException("账号下没有找到车辆")
-            sessionStore.saveVehicles(vehicles)
-            val selected = vehicles.firstOrNull { it.vin == session.selectedVin } ?: vehicles.first()
-            vehicleConfig = sessionStore.loadVehicleConfig(
-                vin = session.selectedVin,
-                defaultModel = selected.carType,
-                defaultNickname = selected.nickname,
-                defaultYear = selected.year.ifBlank { "2026" },
-                defaultPowerType = selected.powerType
-            )
-            sessionStore.save(session)
-            runOnMain(generation) {
-                availableVehicles = vehicles
-                hvacCapability = session.hvacCapability
-                toast("登录成功")
-                loggedIn = true
-                beginPostLoginPrompts()
-                checkForUpdate()
-                refreshStatus()
-                refreshEnergy(force = true)
-                syncVehicleImage(session.selectedVin)
-            }
+                val api = LeapmotorApi(session)
+                ShumeiSecurityManager.initialize(applicationContext)
+                api.loginWithSms(phone, code, captchaResult)
+                val vehicles = api.listVehicles()
+                if (vehicles.isEmpty()) throw ApiException("账号下没有找到车辆")
+                sessionStore.saveVehicles(vehicles)
+                val selected = vehicles.firstOrNull { it.vin == session.selectedVin } ?: vehicles.first()
+                vehicleConfig = sessionStore.loadVehicleConfig(
+                    vin = session.selectedVin,
+                    defaultModel = selected.carType,
+                    defaultNickname = selected.nickname,
+                    defaultYear = selected.year,
+                    defaultPowerType = selected.powerType
+                )
+                sessionStore.save(session)
+                runOnMain(generation) {
+                    availableVehicles = vehicles
+                    hvacCapability = session.hvacCapability
+                    toast("登录成功")
+                    activeGeetestChallenge = null
+                    loggedIn = true
+                    beginPostLoginPrompts()
+                    checkForUpdate()
+                    refreshStatus()
+                    refreshEnergy(force = true)
+                    syncVehicleImage(session.selectedVin)
+                }
+            } catch (e: GeetestChallengeRequiredException) {
+                runOnMain(generation) {
+                    activeGeetestChallenge = e.challenge
+                    toast("触发安全风控，请完成拼图验证", generation)
+                }
             } catch (e: Exception) {
                 val apiError = e as? ApiException
                 ErrorLogs.repository.record(ErrorLogEntry(System.currentTimeMillis(), ErrorLogCategory.LOGIN_FAILURE, apiError?.stage ?: "login", apiError?.httpStatus, apiError?.durationMs ?: (System.currentTimeMillis() - started), apiError?.retryCount ?: 0, BuildConfig.VERSION_NAME, e.message ?: e.toString()))
@@ -552,7 +989,48 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun loginWithRawAuth(rawJson: String, phoneInput: String = "") {
+        if (phoneInput.isNotBlank()) {
+            phone = phoneInput.trim()
+        }
+        busy { generation ->
+            val started = System.currentTimeMillis()
+            try {
+                val api = LeapmotorApi(session)
+                api.loginWithRawAuth(rawJson, phoneInput)
+                val vehicles = api.listVehicles()
+                if (vehicles.isEmpty()) throw ApiException("账号下没有找到车辆")
+                sessionStore.saveVehicles(vehicles)
+                val selected = vehicles.firstOrNull { it.vin == session.selectedVin } ?: vehicles.first()
+                vehicleConfig = sessionStore.loadVehicleConfig(
+                    vin = session.selectedVin,
+                    defaultModel = selected.carType,
+                    defaultNickname = selected.nickname,
+                    defaultYear = selected.year,
+                    defaultPowerType = selected.powerType
+                )
+                sessionStore.save(session)
+                runOnMain(generation) {
+                    availableVehicles = vehicles
+                    hvacCapability = session.hvacCapability
+                    toast("凭据导入成功，已绑定远控权限")
+                    loggedIn = true
+                    beginPostLoginPrompts()
+                    checkForUpdate()
+                    refreshStatus()
+                    refreshEnergy(force = true)
+                    syncVehicleImage(session.selectedVin)
+                }
+            } catch (e: Exception) {
+                val apiError = e as? ApiException
+                ErrorLogs.repository.record(ErrorLogEntry(System.currentTimeMillis(), ErrorLogCategory.LOGIN_FAILURE, apiError?.stage ?: "token_import", apiError?.httpStatus, apiError?.durationMs ?: (System.currentTimeMillis() - started), apiError?.retryCount ?: 0, BuildConfig.VERSION_NAME, e.message ?: e.toString()))
+                throw e
+            }
+        }
+    }
+
     private fun logout() {
+        clearBluetoothState(closePage = true)
         mainHandler.removeCallbacks(authorSupportPromptRunnable)
         clearPendingPinProtectedAction(cancel = true)
         ErrorLogs.repository.clear()
@@ -632,6 +1110,7 @@ class MainActivity : ComponentActivity() {
         errorMessage: String = OperationPasswordErrorPolicy.ERROR_PROMPT_MESSAGE,
         retryAction: (() -> Unit)? = null
     ) {
+        bluetoothRuntime.stopBackground()
         sessionStore.saveOpPassword("")
         pinSaved = false
         pin = ""
@@ -699,8 +1178,10 @@ class MainActivity : ComponentActivity() {
         worker.execute {
             try {
                 val api = LeapmotorApi(session)
+                var rawMileageEnergyResp: JSONObject? = null
                 val parsed = try {
                     val response = api.getMileageEnergy(purchaseAtMs, now)
+                    rawMileageEnergyResp = response
                     EnergyAnalyticsParser.parse(response)
                 } catch (e: Exception) {
                     if (SessionExpiry.isRefreshTokenInvalid(e.message)) throw e
@@ -727,7 +1208,10 @@ class MainActivity : ComponentActivity() {
                     )
                 } catch (e: Exception) {
                     if (SessionExpiry.isRefreshTokenInvalid(e.message)) throw e
-                    Result.failure(e)
+                    // 容错回退：尝试直接从 getMileageEnergy 返回的明细结构中解析近 7 日里程
+                    rawMileageEnergyResp?.let { resp ->
+                        runCatching { RecentMileageEnergyParser.parse(resp) }
+                    } ?: Result.failure(e)
                 }
                 val recentMileage = recentMileageResult.getOrNull()
                 val merged = parsed.copy(
@@ -832,11 +1316,10 @@ class MainActivity : ComponentActivity() {
                     )
                 )
                 runOnMain(generation) {
-                    handleSessionFailure(e)
                     if (energyState !is EnergyAnalyticsState.Success) {
                         energyState = EnergyAnalyticsState.Failed(
                             if (SessionExpiry.isRefreshTokenInvalid(e.message)) {
-                                "登录状态已失效，请重新登录"
+                                "能耗服务暂不可用（需重新同步会话）"
                             } else {
                                 "能耗接口读取失败，请检查网络后重试"
                             }
@@ -927,12 +1410,11 @@ class MainActivity : ComponentActivity() {
                 val msgId = respSched.optString("data").takeIf { it.isNotBlank() && it != "null" }
                 mainHandler.post {
                     if (isHealthySuccess && isSchedSuccess) {
-                        val tip = if (msgId != null) "健康充电与预约充电已成功下发车机 (流水号: $msgId)" else "健康充电与谷电预约已成功下发至车辆！"
-                        Toast.makeText(this@MainActivity, tip, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "充电设置已同步至车辆", Toast.LENGTH_SHORT).show()
                     } else if (isHealthySuccess) {
-                        Toast.makeText(this@MainActivity, "健康充电已生效，预约充电已保存至本地", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "健康充电已生效", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(this@MainActivity, "设置已保存在本地 (车机: ${msgHealthy.ifBlank { "已同步" }})", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "充电设置已保存", Toast.LENGTH_SHORT).show()
                     }
                     refreshStatus()
                 }
@@ -957,7 +1439,25 @@ class MainActivity : ComponentActivity() {
                     )
                 )
                 mainHandler.post {
-                    Toast.makeText(this@MainActivity, "设置已保存在本地 (网关: ${e.message ?: "离线"})", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "已本地保存，待连车同步", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun fetchParkingPhoto(callback: (ChassisParkingPhoto?, android.graphics.Bitmap?) -> Unit) {
+        val generation = operationGeneration
+        worker.execute {
+            try {
+                val api = LeapmotorApi(session)
+                val photoInfo = api.getChassisParkingPhoto()
+                val bitmap = photoInfo?.secureUrl?.let { api.downloadParkingPhotoBitmap(it) }
+                runOnMain(generation) {
+                    callback(photoInfo, bitmap)
+                }
+            } catch (_: Exception) {
+                runOnMain(generation) {
+                    callback(null, null)
                 }
             }
         }
@@ -1012,10 +1512,9 @@ class MainActivity : ComponentActivity() {
 
                 mainHandler.post {
                     if (isPreheatSuccess) {
-                        Toast.makeText(this@MainActivity, "预约电池预热已下发车机：${startTime} 开始", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "已设置 $startTime 预约预热", Toast.LENGTH_SHORT).show()
                     } else {
-                        val tip = if (msg.contains("繁忙")) "车控网关繁忙，设置已保存在本地" else "预热设置已保存至本地 (${msg.ifBlank { "已同步网关" }})"
-                        Toast.makeText(this@MainActivity, tip, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "预热设置已保存至本地", Toast.LENGTH_SHORT).show()
                     }
                     refreshStatus()
                 }
@@ -1040,7 +1539,7 @@ class MainActivity : ComponentActivity() {
                     )
                 )
                 mainHandler.post {
-                    Toast.makeText(this@MainActivity, "预约已保存在本地 (网关: ${e.message ?: "离线"})", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "已本地保存，待连车同步", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -1074,6 +1573,16 @@ class MainActivity : ComponentActivity() {
         ControlWidget.refreshData(this)
         if (previousPowerType != powerType) refreshStatus()
         maybeShowAuthorSupportPrompt()
+    }
+
+    private fun updateVehicleNickname(newNickname: String) {
+        val trimmed = newNickname.trim().take(10)
+        vehicleConfig = vehicleConfig.copy(nickname = trimmed)
+        sessionStore.saveVehicleConfig(session.selectedVin, vehicleConfig)
+        session.selectedNickname = trimmed
+        sessionStore.save(session)
+        ControlWidget.refreshData(this)
+        toast(if (trimmed.isEmpty()) "车辆昵称已重置" else "车辆昵称已更新为：$trimmed")
     }
 
     private fun maybeShowAuthorSupportPrompt() {
@@ -1110,14 +1619,7 @@ class MainActivity : ComponentActivity() {
         showAuthorSupportDialog = false
         showVehicleConfigConfirmationPrompt = false
         pinSetupInProgress = false
-        when (
-            VehicleConfigConfirmationPolicy.initialPrompt(
-                vehicleConfigConfirmed = sessionStore.isVehicleConfigConfirmed(session.selectedVin)
-            )
-        ) {
-            PostLoginPrompt.VEHICLE_CONFIG -> showVehicleConfigConfirmationPrompt = true
-            PostLoginPrompt.NONE -> maybeShowAuthorSupportPrompt()
-        }
+        maybeShowAuthorSupportPrompt()
     }
 
     private fun openFeedback() {
@@ -1128,9 +1630,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkForUpdate() {
+    private var lastUpdateCheckEpochMs = 0L
+
+    private fun checkForUpdate(force: Boolean = false) {
         val currentVersion = AppReleaseInfo.currentVersion
+        val now = System.currentTimeMillis()
+        if (!force && now - lastUpdateCheckEpochMs < 30_000L && versionUpdateState !is VersionUpdateState.Idle) {
+            return
+        }
         if (versionUpdateState is VersionUpdateState.Checking) return
+        lastUpdateCheckEpochMs = now
         versionUpdateState = VersionUpdateState.Checking(currentVersion)
         val generation = operationGeneration
         worker.execute {
@@ -1179,11 +1688,7 @@ class MainActivity : ComponentActivity() {
         busy(showBusy = !silent) { generation ->
             try {
                 val api = LeapmotorApi(session)
-                val signalMap = VehicleStatusMapper.withFuelMock(
-                    status = api.getVehicleState(),
-                    vin = session.selectedVin,
-                    powerType = vehicleConfig.powerType
-                )
+                val signalMap = api.getVehicleState()
                 val receivedAtEpochMs = System.currentTimeMillis()
                 val legacyT03Location = session.selectedCarType.contains("T03", ignoreCase = true)
                 val locationTimestampEpochMs = VehicleLocationTimestamp.resolveEpochMs(
@@ -1427,7 +1932,7 @@ class MainActivity : ComponentActivity() {
                         } else {
                             current.nickname
                         }
-                        val updatedYear = current.modelYear.ifBlank { selected.year.ifBlank { "2026" } }
+                        val updatedYear = selected.year.ifBlank { current.modelYear }
                         val updatedPower = current.powerType ?: selected.powerType
                         vehicleConfig = current.copy(
                             nickname = updatedNickname,
@@ -1513,6 +2018,7 @@ class MainActivity : ComponentActivity() {
     private fun switchVehicle(targetVin: String) {
         if (targetVin.isBlank() || targetVin == session.selectedVin) return
         val target = availableVehicles.firstOrNull { it.vin == targetVin } ?: return
+        clearBluetoothState(closePage = true)
         session.selectedVin = target.vin
         session.selectedCarType = target.carType
         session.selectedNickname = target.nickname
@@ -1530,7 +2036,7 @@ class MainActivity : ComponentActivity() {
             vin = target.vin,
             defaultModel = target.carType,
             defaultNickname = target.nickname,
-            defaultYear = target.year.ifBlank { "2026" },
+            defaultYear = target.year,
             defaultPowerType = defaultPower
         )
 
@@ -1657,6 +2163,8 @@ class MainActivity : ComponentActivity() {
         }
         climateStatusRevision += 1L
         val climateControlRevision = climateStatusRevision
+        val effectiveCmdName = "climate"
+        activeControlCommandName = effectiveCmdName
         climatePreControlStatus = status
         climateOptimisticGuard = optimisticUpdate?.let {
             applyClimateOptimisticUpdate(it)
@@ -1714,6 +2222,12 @@ class MainActivity : ComponentActivity() {
                         error = e
                     )
                 }
+            } finally {
+                runOnMain(generation) {
+                    if (activeControlCommandName == effectiveCmdName) {
+                        activeControlCommandName = null
+                    }
+                }
             }
         }
     }
@@ -1753,7 +2267,6 @@ class MainActivity : ComponentActivity() {
         error: Exception
     ) {
         runOnMain(generation) {
-            handleSessionFailure(error)
             if (!isCurrentClimateRevision(generation, revision)) return@runOnMain
             status = climatePreControlStatus
             climatePreControlStatus = null
@@ -1869,11 +2382,7 @@ class MainActivity : ComponentActivity() {
         telemetryExpectation: ClimateTelemetryExpectation?
     ) {
         val refreshed = try {
-            val latest = VehicleStatusMapper.withFuelMock(
-                status = api.getVehicleState(),
-                vin = session.selectedVin,
-                powerType = vehicleConfig.powerType
-            )
+            val latest = api.getVehicleState()
             sessionStore.save(session)
             parseStatus(latest)
         } catch (e: Exception) {
@@ -2115,10 +2624,12 @@ class MainActivity : ComponentActivity() {
         val standardSocStr = VehicleStatusMapper.displayPreciseSoc(m.opt("soc"))
             ?: formatPercentage(m.opt("soc"))
         val effectiveSoc = preciseSocStr ?: standardSocStr
+        val fuelSocStr = VehicleStatusMapper.displayPreciseSoc(m.opt("fuelSoc"))
+            ?: formatPercentage(m.opt("fuelSoc"))
         return VehicleStatus(
             soc = effectiveSoc,
             preciseSoc = preciseSocStr ?: standardSocStr,
-            fuelSoc = formatPercentage(m.opt("fuelSoc")),
+            fuelSoc = fuelSocStr,
             mileage = displayMileage?.let { "${it}km" },
             fuelMileage = if (rangeExtender) fuelMileage else null,
             electricMileage = if (rangeExtender) electricMileage else null,
@@ -2180,6 +2691,12 @@ class MainActivity : ComponentActivity() {
             passengerSeatHeating = m.opt("passengerSeatHeating")?.toString()?.toIntOrNull(),
             passengerSeatVentilation = m.opt("passengerSeatVentilation")?.toString()?.toIntOrNull(),
             steeringWheelHeating = m.optBool("steeringWheelHeating"),
+            steeringWheelHeatingLevel = m.opt("steeringWheelHeating")?.toString()?.toIntOrNull()
+                ?: if (m.optBool("steeringWheelHeating") == true) 2 else 0,
+            rearviewMirrorHeating = m.opt("leftMirrorHeating")?.let { it.toString() != "0" }
+                ?: m.opt("rightMirrorHeating")?.let { it.toString() != "0" }
+                ?: m.opt("rearviewMirrorHeating")?.let { it.toString() != "0" }
+                ?: m.optBool("rearWindowHeating"),
             chargeScheduleEnabled = m.opt("chargeScheduleEnabled")?.let { it.toString() == "1" },
             chargeScheduleStart = m.optString("chargeScheduleStart").takeIf { it.isNotBlank() },
             chargeScheduleEnd = m.optString("chargeScheduleEnd").takeIf { it.isNotBlank() },
@@ -2203,7 +2720,8 @@ class MainActivity : ComponentActivity() {
     private fun formatPercentage(v: Any?): String? {
         if (v == null || v == JSONObject.NULL) return null
         val value = v.toString().trim().removeSuffix("%").trim()
-        return value.takeIf { it.isNotBlank() }?.let { "$it%" }
+        val num = value.toDoubleOrNull()
+        return if (num != null) "${Math.round(num).toInt()}%" else value.takeIf { it.isNotBlank() }?.let { "$it%" }
     }
 
     private fun formatRawState(v: Any?): String? =
@@ -2306,6 +2824,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun control(name: String) {
+        if ((name == "lock" || name == "unlock") &&
+            !BleAccessPolicy.canStartCloudLockControl(bluetoothState.phase, busy)) {
+            toast("当前车锁操作尚未完成，请稍后再试")
+            return
+        }
         when (name) {
             "acOn" -> {
                 submitClimateControl(
@@ -2373,19 +2896,30 @@ class MainActivity : ComponentActivity() {
         }
         val sentryTarget = commandName?.let(SentryModeControlPolicy::targetEnabled)
         val started = System.currentTimeMillis()
+        val effectiveCmdName = commandName ?: command.label
+        activeControlCommandName = effectiveCmdName
+
+        val preControlStatus = status
+        when (effectiveCmdName) {
+            "lock" -> status = status?.copy(locked = true)
+            "unlock" -> status = status?.copy(locked = false)
+            "trunkOpen" -> status = status?.copy(trunkState = TrunkState.OPEN)
+            "trunkClose" -> status = status?.copy(trunkState = TrunkState.CLOSED)
+            else -> {
+                if (sentryTarget != null) {
+                    status = status?.copy(sentryMode = sentryTarget)
+                }
+            }
+        }
+
         busy { generation ->
             runOnMain(generation) {
-                controlFeedback = ControlFeedback("${command.label}：正在发送", ControlFeedbackKind.IN_PROGRESS)
-                Toast.makeText(this@MainActivity, "${command.label}：正在下发车机...", Toast.LENGTH_SHORT).show()
+                controlFeedback = ControlFeedback("${command.label}中...", ControlFeedbackKind.IN_PROGRESS)
             }
             try {
                 val api = LeapmotorApi(session)
                 if (sentryTarget != null) {
-                    val latestBeforeSend = VehicleStatusMapper.withFuelMock(
-                        status = api.getVehicleState(),
-                        vin = session.selectedVin,
-                        powerType = vehicleConfig.powerType
-                    )
+                    val latestBeforeSend = api.getVehicleState()
                     sessionStore.save(session)
                     val latestSentryMode = latestBeforeSend.optBool("sentryMode")
                     val latestStatus = parseStatus(latestBeforeSend)
@@ -2393,10 +2927,9 @@ class MainActivity : ComponentActivity() {
                     if (SentryModeControlPolicy.isConfirmed(sentryTarget, latestSentryMode)) {
                         runOnMain(generation) {
                             controlFeedback = ControlFeedback(
-                                "${command.label}：车辆已处于目标状态",
+                                "${command.label}：已处于目标状态",
                                 ControlFeedbackKind.SUCCESS
                             )
-                            Toast.makeText(this@MainActivity, "${command.label}：车辆已处于目标状态", Toast.LENGTH_SHORT).show()
                         }
                         refreshStatusAfterControl(generation)
                         return@busy
@@ -2408,10 +2941,9 @@ class MainActivity : ComponentActivity() {
                 if (!shouldQueryControlResult) {
                     runOnMain(generation) {
                         controlFeedback = ControlFeedback(
-                            "${command.label}：已发送，请稍后刷新车况确认",
+                            "${command.label}已下发，待车端确认",
                             ControlFeedbackKind.WARNING
                         )
-                        Toast.makeText(this@MainActivity, "${command.label}：已发送车机", Toast.LENGTH_SHORT).show()
                     }
                     refreshStatusAfterControl(generation)
                     if (commandName != null && ParkingAnomalyPolicy.shouldCheck(commandName, commandAccepted = true)) {
@@ -2420,9 +2952,9 @@ class MainActivity : ComponentActivity() {
                     return@busy
                 }
                 runOnMain(generation) {
-                    controlFeedback = ControlFeedback("${command.label}：等待车辆响应", ControlFeedbackKind.IN_PROGRESS)
+                    controlFeedback = ControlFeedback("${command.label}中，等待车辆确认", ControlFeedbackKind.IN_PROGRESS)
                 }
-                var finalText = "${command.label}：已发送，暂未收到车辆响应"
+                var finalText = "${command.label}已下发，待车端确认"
                 var completed = false
                 var sentryQuerySucceeded = false
                 for (i in 0 until ControlResultPollingPolicy.appMaxAttempts) {
@@ -2432,11 +2964,7 @@ class MainActivity : ComponentActivity() {
                     if (SentryModeControlPolicy.querySucceeded(resp.opt("result"), resp.opt("code"))) {
                         if (sentryTarget != null) {
                             sentryQuerySucceeded = true
-                            val latest = VehicleStatusMapper.withFuelMock(
-                                status = api.getVehicleState(),
-                                vin = session.selectedVin,
-                                powerType = vehicleConfig.powerType
-                            )
+                            val latest = api.getVehicleState()
                             val latestSentryMode = latest.optBool("sentryMode")
                             if (!SentryModeControlPolicy.isConfirmed(sentryTarget, latestSentryMode)) {
                                 continue
@@ -2444,20 +2972,19 @@ class MainActivity : ComponentActivity() {
                             val confirmedStatus = parseStatus(latest)
                             runOnMain(generation) { status = confirmedStatus }
                         }
-                        finalText = "${command.label}：已完成"
+                        finalText = "${command.label}已完成"
                         completed = true
                         break
                     }
                 }
                 if (!completed && sentryTarget != null && sentryQuerySucceeded) {
-                    finalText = "${command.label}：命令已执行，车辆状态待确认"
+                    finalText = "${command.label}已执行，车辆状态待确认"
                 }
                 runOnMain(generation) {
                     controlFeedback = ControlFeedback(
                         finalText,
                         if (completed) ControlFeedbackKind.SUCCESS else ControlFeedbackKind.WARNING
                     )
-                    Toast.makeText(this@MainActivity, finalText, Toast.LENGTH_SHORT).show()
                 }
                 if (completed) {
                     refreshStatusAfterControl(generation)
@@ -2485,6 +3012,7 @@ class MainActivity : ComponentActivity() {
                     )
                 )
                 runOnMain(generation) {
+                    status = preControlStatus
                     if (OperationPasswordErrorPolicy.isPasswordError(e)) {
                         promptUpdateOperationPassword(
                             errorMessage = OperationPasswordErrorPolicy.ERROR_PROMPT_MESSAGE,
@@ -2492,10 +3020,15 @@ class MainActivity : ComponentActivity() {
                         )
                         return@runOnMain
                     }
-                    handleSessionFailure(e)
                     val errMsg = controlFailureMessage(command.label, e)
                     controlFeedback = ControlFeedback(errMsg, ControlFeedbackKind.ERROR)
-                    Toast.makeText(this@MainActivity, "${command.label}失败: ${e.message ?: errMsg}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, errMsg, Toast.LENGTH_SHORT).show()
+                }
+            } finally {
+                runOnMain(generation) {
+                    if (activeControlCommandName == effectiveCmdName) {
+                        activeControlCommandName = null
+                    }
                 }
             }
         }
@@ -2506,9 +3039,10 @@ class MainActivity : ComponentActivity() {
         return when {
             OperationPasswordErrorPolicy.isPasswordError(error) -> OperationPasswordErrorPolicy.ERROR_PROMPT_MESSAGE
             raw.contains("token", ignoreCase = true) || raw.contains("鉴权") -> "登录状态已过期，请重新登录"
-            raw.contains("timeout", ignoreCase = true) || raw.contains("超时") -> "${label}超时，请稍后重试"
-            raw.contains("网络") || raw.contains("连接") -> "网络异常，${label}未完成"
-            else -> "${label}失败，请稍后重试"
+            raw.contains("timeout", ignoreCase = true) || raw.contains("超时") -> "${label}响应超时，请稍后重试"
+            raw.contains("网络") || raw.contains("连接") || raw.contains("Connect", ignoreCase = true) -> "网络连接异常，请检查网络"
+            raw.contains("500") || raw.contains("502") || raw.contains("503") || raw.contains("504") -> "车联服务暂时繁忙，请稍后重试"
+            else -> "${label}未完成，请稍后重试"
         }
     }
 
@@ -2614,6 +3148,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
+        const val BLUETOOTH_PERMISSION_REQUEST = 1202
         const val AUTO_REFRESH_INTERVAL_MS = 10_000L
         const val POST_CONTROL_STATUS_REFRESH_DELAY_MS = 2_000L
     }

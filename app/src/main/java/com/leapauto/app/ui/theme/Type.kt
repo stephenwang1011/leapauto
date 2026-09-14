@@ -5,7 +5,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// 排版（leap-design.md §1）：Roboto 系统字体；"tnum" 等宽数字保证续航/电量/温度对齐
+// 排版：Roboto 系统字体；"tnum" 等宽数字保证续航/电量/温度对齐
 private const val TNUM = "tnum"
 
 val AppTypography = Typography(

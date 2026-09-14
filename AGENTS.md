@@ -56,7 +56,8 @@ it. Do not edit generated files under `app/build/`, `.gradle/`, or `.kotlin/`.
 | `ControlService.kt`, `ControlConfirmActivity.kt`, `WidgetControlSecurity.kt` | Foreground-service widget commands, notification feedback, and optional biometric/operation-password confirmation for sensitive widget actions.                                                                          |
 | `ChargeNotificationManager.kt`                                               | Local notifications for charging completion, interruption, and fault transitions.                                                                                                                                        |
 | `VersionUpdate.kt`, `AppReleaseInfo.kt`, `ExternalLinks.kt`                  | Public PGYER HTML update check, release notes shown in-app, and feedback/download links.                                                                                                                                 |
-| `app/src/main/res/`                                                          | Compose support drawables, authorized vehicle images, launcher PNGs, widget XML/layouts, themes, colors, and strings.                                                                                                    |
+| `app/src/main/res/`                                                          | Compose support drawables, authorized vehicle images, launcher PNGs, widget XML/layouts, themes, colors, and strings.                                                                     |
+| `design/零跑智控-设计规范.md`                                                | 全局设计规范：智能座舱级·真微晶毛玻璃（Liquid Crystal Glassmorphism）规范，涵盖双对角材质、极光折射、边框高光、排版字号、弹窗抽屉与桌面小组件标准。所有界面开发必须严格遵守。 |
 | `API/`                                                                       | Consolidated API documentation and third-party reference libraries: `API/API.md` (verified spec), `API/leap-api/` (Python SDK & 未实现指令清单), `API/hack_lingpao_app/` (reverse-engineering notes), `API/leap-cn-mcp/` (MCP server & JS SDK). |
 | `scripts/package-release.ps1`                                                | Signed Release packaging with a hard 10 MiB delivery-size gate.                                                                                                                                                          |
 | `scripts/publish-pgyer.ps1`                                                  | Local signed Release packaging and PGYER CLI upload.                                                                                                                                                                     |
@@ -211,12 +212,17 @@ implementation work when an owned specialist already covers it.
 - Handoff order is: product requirements/acceptance criteria -> specialist
   implementation -> testing evidence -> product acceptance -> release packaging or
   publishing when requested -> project-manager consolidated report.
-## UI and Design Rules
+## UI and Design Rules (UI与设计规范强制约束)
 
-Before editing any Compose screen, XML layout, drawable, widget, or theme, read:
+**所有界面、卡片、弹窗、抽屉与桌面小组件的新增与重构开发，必须严格参考并遵守项目设计规范：**
+👉 **`design/零跑智控-设计规范.md`**（智能座舱级·真微晶毛玻璃 Liquid Crystal Glassmorphism 规范）。
 
-- `design/leap-design.md`
-- `design/零跑智控-首页视觉设计提示词.md`
+### 核心执行细则：
+- **微晶毛玻璃材质与环境极光**：所有卡片容器必须使用 `Modifier.frostedGlassCard(...)`（内置双对角微晶磨砂渐变、0.5dp 顶层折射晶线与底层环境极光），边框统一使用三阶高光切边 `glassCardBorder()`；弹窗与半屏抽屉必须使用高对比度纯实色背景（`solidDialogModifier()` / `pageBgColor`），严禁透明化以杜绝背景杂光干扰文字阅读；
+- **排版与尺寸统一对齐**：核心续航大字 `26sp Bold`、单位 `12sp Bold`、电量百分比 `13sp Bold`（间距 `2~3dp`），纯电续航能量槽统一为 `110dp × 4.5dp`（圆角 `2dp`）；
+- **座舱三原色约束**：严格使用 `MaterialTheme.colorScheme.primary`（零跑蓝 `#0066FF`）、`MaterialTheme.statusGood`（能量绿 `#00C853`）和警告红（`#FF3B30`），严禁在界面 Compose 代码中硬编码 `"LeapBlue"` 或 `"EnergyGreen"` 字符串，确保 100% 通过 `GlassSurfaceStyleTest` 门禁；
+- **严禁脏黑阴影与厚重色块**：保持 `shadowElevation = 0.dp`，不使用纯色无渐变大灰块或未羽化的生硬遮罩；
+- **性能与轻量化底线**：严禁引入外部重度实时高斯模糊库，100% 采用纯 Compose Canvas/Brush 硬件加速高效渲染，保持 10 MiB 包体限制与老设备 60/120 FPS 流畅度。
 
 The current baseline is a warm neutral-grey background, restrained translucent information surfaces,
 Leap Blue `#0066FF` for brand and primary actions, Energy Green `#00C853` for energy,

@@ -2,7 +2,7 @@ package com.leapauto.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// 零跑品牌色板（leap-design.md §1）：
+// 零跑品牌色板：
 // Leap Blue 主色 / Tech Grey 辅助 / Energy Green 强调 / Alert Red 警示
 val LeapBlue = Color(0xFF0066FF)
 val TechGrey = Color(0xFF2D3748)

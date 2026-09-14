@@ -300,7 +300,7 @@ class CommandsTest {
         assertEquals("极速降温", ClimatePresetAction.QUICK_COOL.label)
         assertEquals("快速除味", ClimatePresetAction.DEODORIZE.label)
         assertEquals("空调开启中", ClimateControlFeedbackText.sending("开空调"))
-        assertEquals("空调开启已提交", ClimateControlFeedbackText.submitted("开空调"))
+        assertEquals("开空调已下发，待确认", ClimateControlFeedbackText.submitted("开空调"))
         assertEquals("空调已开启", ClimateControlFeedbackText.confirmed("开空调"))
         assertEquals("降温中", ClimateControlFeedbackText.sending("极速降温"))
         assertEquals("除雾已开启", ClimateControlFeedbackText.confirmed("开启除雾"))
@@ -405,7 +405,7 @@ class CommandsTest {
 
         assertEquals(ClimateControlPostOutcome.ACCEPTED, decision.outcome)
         assertTrue(decision.shouldQueryControlResult)
-        assertEquals("空调开启已提交", ClimateControlFeedbackText.waiting("开空调"))
+        assertEquals("开空调已下发，待确认", ClimateControlFeedbackText.waiting("开空调"))
     }
 
     @Test
@@ -431,7 +431,7 @@ class CommandsTest {
         assertEquals(ClimateControlPostOutcome.ACCEPTED, decision.outcome)
         assertFalse(decision.shouldQueryControlResult)
         assertEquals(
-            "空调关闭已提交",
+            "关空调已下发，待确认",
             ClimateControlFeedbackText.submitted("关空调")
         )
     }
@@ -600,5 +600,70 @@ class CommandsTest {
         assertEquals(true, merged.acSwitch)
         assertEquals("21 °C", merged.acSetting)
         assertEquals(false, merged.windshieldDefrost)
+    }
+
+    @Test
+    fun seatHeatingAndVentilationCommandsMatchApiLogSpec() {
+        val seatHeat3 = Commands.buildSeatHeating("left_front", 3)
+        assertEquals("301", seatHeat3.cmdid)
+        assertEquals("{\"position\":\"left_front\",\"level\":\"3\"}", seatHeat3.stateJson)
+        assertEquals("主驾加热3档", seatHeat3.label)
+
+        val seatHeat0 = Commands.buildSeatHeating("left_front", 0)
+        assertEquals("301", seatHeat0.cmdid)
+        assertEquals("{\"position\":\"left_front\",\"level\":\"0\"}", seatHeat0.stateJson)
+        assertEquals("主驾加热关闭", seatHeat0.label)
+
+        val seatVent3 = Commands.buildSeatVentilation("left_front", 3)
+        assertEquals("370", seatVent3.cmdid)
+        assertEquals("{\"position\":\"left_front\",\"level\":\"3\"}", seatVent3.stateJson)
+        assertEquals("主驾通风3档", seatVent3.label)
+
+        val seatVent0 = Commands.buildSeatVentilation("left_front", 0)
+        assertEquals("370", seatVent0.cmdid)
+        assertEquals("{\"position\":\"left_front\",\"level\":\"0\"}", seatVent0.stateJson)
+        assertEquals("主驾通风关闭", seatVent0.label)
+
+        val passengerHeat2 = Commands.buildSeatHeating("right_front", 2)
+        assertEquals("301", passengerHeat2.cmdid)
+        assertEquals("{\"position\":\"right_front\",\"level\":\"2\"}", passengerHeat2.stateJson)
+        assertEquals("副驾加热2档", passengerHeat2.label)
+    }
+
+    @Test
+    fun steeringWheelAndMirrorHeatingCommandsMatchApiLogSpec() {
+        val steer2 = Commands.buildSteeringWheelHeating(2)
+        assertEquals("320", steer2.cmdid)
+        assertEquals("{\"level\":\"2\"}", steer2.stateJson)
+        assertEquals("方向盘加热强档", steer2.label)
+
+        val steer1 = Commands.buildSteeringWheelHeating(1)
+        assertEquals("320", steer1.cmdid)
+        assertEquals("{\"level\":\"1\"}", steer1.stateJson)
+        assertEquals("方向盘加热弱档", steer1.label)
+
+        val steer0 = Commands.buildSteeringWheelHeating(0)
+        assertEquals("320", steer0.cmdid)
+        assertEquals("{\"level\":\"0\"}", steer0.stateJson)
+        assertEquals("方向盘加热关闭", steer0.label)
+
+        val mirrorOn = Commands.buildRearviewMirrorHeating(true)
+        assertEquals("440", mirrorOn.cmdid)
+        assertEquals("{\"value\":\"2\"}", mirrorOn.stateJson)
+        assertEquals("开启后视镜加热", mirrorOn.label)
+
+        val mirrorOff = Commands.buildRearviewMirrorHeating(false)
+        assertEquals("440", mirrorOff.cmdid)
+        assertEquals("{\"value\":\"1\"}", mirrorOff.stateJson)
+        assertEquals("关闭后视镜加热", mirrorOff.label)
+    }
+
+    @Test
+    fun commandsBuildDispatchesSeatAndComfortNames() {
+        assertEquals("301", Commands.build("driverSeatHeating_1").cmdid)
+        assertEquals("370", Commands.build("driverSeatVentilation_2").cmdid)
+        assertEquals("320", Commands.build("steeringWheelHeating_2").cmdid)
+        assertEquals("440", Commands.build("rearviewMirrorHeating_on").cmdid)
+        assertEquals("440", Commands.build("rearviewMirrorHeating_off").cmdid)
     }
 }

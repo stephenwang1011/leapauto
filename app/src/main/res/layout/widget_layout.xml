@@ -406,8 +406,7 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:scaleType="fitCenter"
-            android:src="@drawable/vehicle_lafa5_liquid_silver" />
+            android:scaleType="fitCenter" />
     </LinearLayout>
 
     <LinearLayout
@@ -443,7 +442,8 @@
                 android:layout_gravity="center"
                 android:padding="0dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_phosphor_lock_open" />
+                android:src="@drawable/ic_phosphor_lock_open"
+                android:tint="@color/widget_action_icon" />
 
             <ProgressBar
                 android:id="@+id/progressWSlot1AcCooling"
@@ -495,7 +495,8 @@
                 android:layout_gravity="center"
                 android:padding="0dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_phosphor_lock" />
+                android:src="@drawable/ic_phosphor_lock"
+                android:tint="@color/widget_action_icon" />
 
             <ProgressBar
                 android:id="@+id/progressWSlot2AcCooling"
@@ -547,7 +548,8 @@
                 android:layout_gravity="center"
                 android:padding="0dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_sentry" />
+                android:src="@drawable/ic_sentry"
+                android:tint="@color/widget_action_icon" />
 
             <ProgressBar
                 android:id="@+id/progressWSlot3AcCooling"
@@ -599,7 +601,8 @@
                 android:layout_gravity="center"
                 android:padding="0dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_phosphor_fan" />
+                android:src="@drawable/ic_phosphor_fan"
+                android:tint="@color/widget_action_icon" />
 
             <ProgressBar
                 android:id="@+id/progressWSlot4AcCooling"
@@ -651,7 +654,8 @@
                 android:layout_gravity="center"
                 android:padding="0dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_phosphor_trunk_open" />
+                android:src="@drawable/ic_phosphor_trunk_open"
+                android:tint="@color/widget_action_icon" />
 
             <ProgressBar
                 android:id="@+id/progressWSlot5AcCooling"

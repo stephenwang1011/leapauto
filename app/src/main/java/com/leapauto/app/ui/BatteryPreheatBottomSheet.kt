@@ -28,6 +28,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -131,9 +132,15 @@ fun BatteryPreheatBottomSheet(
             val isPreheating = status?.batteryPreheatEnabled == true
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
-                modifier = Modifier.fillMaxWidth()
+                color = Color.Transparent,
+                border = glassCardBorder(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(
+                        shape = RoundedCornerShape(16.dp),
+                        auraColor = if (isPreheating) MaterialTheme.statusWarn.copy(alpha = 0.12f) else null,
+                        auraCenter = Offset(0.85f, 0.5f)
+                    )
             ) {
                 Row(
                     modifier = Modifier
@@ -174,9 +181,11 @@ fun BatteryPreheatBottomSheet(
             // 3. 即时电池预热开关
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
-                modifier = Modifier.fillMaxWidth()
+                color = Color.Transparent,
+                border = glassCardBorder(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(shape = RoundedCornerShape(16.dp))
             ) {
                 Row(
                     modifier = Modifier
@@ -213,9 +222,11 @@ fun BatteryPreheatBottomSheet(
             // 4. 预约电池预热设置
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
-                modifier = Modifier.fillMaxWidth()
+                color = Color.Transparent,
+                border = glassCardBorder(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(shape = RoundedCornerShape(16.dp))
             ) {
                 Column(
                     modifier = Modifier

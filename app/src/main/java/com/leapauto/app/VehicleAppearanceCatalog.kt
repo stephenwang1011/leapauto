@@ -1,7 +1,5 @@
 package com.leapauto.app
 
-import androidx.annotation.DrawableRes
-
 data class VehicleColorOption(
     val id: String,
     val name: String,
@@ -10,12 +8,11 @@ data class VehicleColorOption(
 
 data class VehicleAppearance(
     val model: String,
-    val color: VehicleColorOption,
-    @DrawableRes val imageResource: Int
+    val color: VehicleColorOption
 )
 
 /**
- * Keeps historical color identifiers readable while every model shares one local image.
+ * Keeps historical color identifiers readable.
  * Color is legacy display data and no longer changes the rendered vehicle artwork.
  */
 object VehicleAppearanceCatalog {
@@ -92,8 +89,7 @@ object VehicleAppearanceCatalog {
 
     fun resolveAppearance(model: String?, colorId: String?): VehicleAppearance = VehicleAppearance(
         model = canonicalModel(model),
-        color = colorOption(model, colorId),
-        imageResource = R.drawable.vehicle_lafa5_liquid_silver
+        color = colorOption(model, colorId)
     )
 
     fun canonicalModel(model: String?): String {

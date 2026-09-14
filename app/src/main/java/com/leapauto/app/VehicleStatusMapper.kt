@@ -9,61 +9,9 @@ import kotlin.math.ceil
 object VehicleStatusMapper {
     enum class PowerType { PURE_ELECTRIC, RANGE_EXTENDER }
 
-    private const val MOCK_RANGE_EXTENDER_VIN = "LFZ63AZ55SH023503"
-    private const val MOCK_FUEL_SOC_PERCENT = 50
-    private const val MOCK_FUEL_RANGE_KM = 300
-
-    /**
-     * Supplies local-only fuel telemetry for the configured test vehicle.
-     * The server response is copied and never modified in place.
-     */
-    fun withFuelMock(
-        status: JSONObject,
-        vin: String,
-        powerType: SessionStore.VehiclePowerType?
-    ): JSONObject {
-        if (!vin.equals(MOCK_RANGE_EXTENDER_VIN, ignoreCase = true) ||
-            powerType != SessionStore.VehiclePowerType.RANGE_EXTENDER
-        ) {
-            return status
-        }
-
-        return JSONObject(status.toString()).apply {
-            put("fuelSoc", MOCK_FUEL_SOC_PERCENT)
-            put("3235", MOCK_FUEL_SOC_PERCENT)
-            put("fuelRangeDynamic", MOCK_FUEL_RANGE_KM)
-            put("fuelRangeStandard", MOCK_FUEL_RANGE_KM)
-            put("3259", MOCK_FUEL_RANGE_KM)
-            put("3256", MOCK_FUEL_RANGE_KM)
-            mockCombinedRange(firstRangeValue(status, "expectedMileage", "3260"))?.let { range ->
-                put("combinedRangeDynamic", range)
-                put("3261", range)
-            }
-            mockCombinedRange(firstRangeValue(status, "electricRangeStandard", "maxRange", "3257"))?.let { range ->
-                put("combinedRangeStandard", range)
-                put("3258", range)
-            }
-        }
-    }
-
-    /** Keeps the local fuel fixture consistent with the confirmed electric plus fuel range contract. */
-    private fun mockCombinedRange(electricRange: String?): String? =
-        electricRange
-            ?.toBigDecimalOrNull()
-            ?.add(BigDecimal(MOCK_FUEL_RANGE_KM))
-            ?.stripTrailingZeros()
-            ?.toPlainString()
-
     /** 手动车型配置仅影响展示标题/图片，不参与接口协议或信号解析。 */
     fun resolveDisplayModel(configuredModel: String?, reportedCarType: String?): String =
         configuredModel?.trim()?.takeIf { it.isNotBlank() } ?: reportedCarType.orEmpty().trim()
-
-    /**
-     * Legacy image lookup retained for callers outside the current Compose path.
-     * Reuse the color-aware catalog so this helper cannot keep the old PNG set alive.
-     */
-    fun vehicleImageResource(carType: String): Int =
-        VehicleAppearanceCatalog.resolveAppearance(carType, null).imageResource
 
     /**
      * Selects the confirmed remaining-range field for the reported range mode:
@@ -232,8 +180,8 @@ object VehicleStatusMapper {
         if (value == null || value == JSONObject.NULL) return null
         val raw = value.toString().trim().removeSuffix("%").trim()
         val percentage = runCatching { BigDecimal(raw) }.getOrNull() ?: return null
-        val bounded = percentage.max(BigDecimal.ZERO).min(BigDecimal(100)).setScale(1, RoundingMode.HALF_UP)
-        return "${bounded.stripTrailingZeros().toPlainString()}%"
+        val rounded = percentage.max(BigDecimal.ZERO).min(BigDecimal(100)).setScale(0, RoundingMode.HALF_UP).toInt()
+        return "$rounded%"
     }
 
     /** Normalizes the precise 100003 SOC signal for integer progress bars. */

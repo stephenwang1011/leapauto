@@ -1,6 +1,9 @@
 package com.leapauto.app
 
 import android.content.Context
+import com.leapauto.app.bluetooth.BleCredentialScope
+import com.leapauto.app.bluetooth.BleCertificateSync
+import com.leapauto.app.bluetooth.BleKeyCertificate
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
@@ -77,9 +80,12 @@ class SessionStore(context: Context) {
     private val secureValues = SecureValueStore(context, prefs)
 
     fun load(): Session = synchronized(SESSION_LOCK) {
+        val existingDeviceId = prefs.getString("deviceId", null)?.takeIf { it.isNotBlank() }
+        val deviceId = existingDeviceId ?: Crypto.randomDeviceId().also {
+            prefs.edit().putString("deviceId", it).apply()
+        }
         val s = Session(
-            deviceId = prefs.getString("deviceId", "")?.takeIf { it.isNotBlank() }
-                ?: Crypto.randomDeviceId(),
+            deviceId = deviceId,
             generation = prefs.getLong(SESSION_GENERATION, 0L)
         )
         s.phone = secureValues.getString("phone") ?: ""
@@ -93,6 +99,7 @@ class SessionStore(context: Context) {
         s.selectedCarType = prefs.getString("carType", "") ?: ""
         s.selectedNickname = prefs.getString("nickname", "") ?: ""
         s.selectedYear = prefs.getString("year", "") ?: ""
+        s.smDeviceId = prefs.getString("smDeviceId", "") ?: ""
         prefs.getString("route", null)?.takeIf { it.isNotBlank() }?.let {
             s.route = RouteData.fromJson(JSONObject(it))
         }
@@ -117,6 +124,7 @@ class SessionStore(context: Context) {
             .putString("carType", s.selectedCarType)
             .putString("nickname", s.selectedNickname)
             .putString("year", s.selectedYear)
+            .putString("smDeviceId", s.smDeviceId)
             .putString("route", s.route?.toJson()?.toString() ?: "")
             .putString("hvacCapability", s.hvacCapability.toJson().toString())
             .commit()
@@ -125,7 +133,12 @@ class SessionStore(context: Context) {
 
     fun clear() = synchronized(SESSION_LOCK) {
         val nextGeneration = prefs.getLong(SESSION_GENERATION, 0L) + 1L
-        prefs.edit().clear().putLong(SESSION_GENERATION, nextGeneration).commit()
+        val savedDeviceId = prefs.getString("deviceId", null)
+        val editor = prefs.edit().clear().putLong(SESSION_GENERATION, nextGeneration)
+        if (!savedDeviceId.isNullOrBlank()) {
+            editor.putString("deviceId", savedDeviceId)
+        }
+        editor.commit()
     }
 
     fun saveVehicles(vehicles: List<Vehicle>) = synchronized(SESSION_LOCK) {
@@ -144,6 +157,36 @@ class SessionStore(context: Context) {
         }.getOrDefault(emptyList())
     }
 
+    fun loadBluetoothKeyCertificate(accountId: String, vin: String): BleKeyCertificate? = synchronized(SESSION_LOCK) {
+        if (accountId.isBlank() || vin.isBlank()) return null
+        val key = BleCredentialScope.storageKey(accountId, vin)
+        val raw = secureValues.getString(key) ?: return null
+        runCatching {
+            val json = JSONObject(raw)
+            if (json.optString("requestDeviceId") != prefs.getString("deviceId", "")) return null
+            BleKeyCertificate.fromJson(json, vin)
+        }.getOrElse {
+            prefs.edit().remove(key).apply()
+            null
+        }
+    }
+
+    fun completeBluetoothCertificateSync(
+        sync: BleCertificateSync,
+        refreshed: Session,
+        certificate: BleKeyCertificate
+    ): Boolean = synchronized(SESSION_LOCK) {
+        if (!sync.canCommit(load(), refreshed, certificate)) return false
+        // Commit refreshed credentials and their certificate together without overwriting device preferences.
+        val editor = prefs.edit().putString("deviceId", refreshed.deviceId)
+            .putString("route", refreshed.route?.toJson()?.toString() ?: "")
+        secureValues.putString(editor, "oldAuth", refreshed.oldAuth?.toJson()?.toString().orEmpty())
+        secureValues.putString(editor, "newAuth", refreshed.newAuth?.toJson()?.toString().orEmpty())
+        secureValues.putString(editor, BleCredentialScope.storageKey(sync.identity.accountId, sync.identity.vin),
+            certificate.toJson().put("requestDeviceId", refreshed.deviceId).toString())
+        editor.commit()
+    }
+
     fun loadOpPassword(): String? = secureValues.getString("op_password")?.takeIf { it.matches(Regex("\\d{4}")) }
 
     fun saveOpPassword(password: String) {
@@ -151,7 +194,7 @@ class SessionStore(context: Context) {
         secureValues.putString(prefs.edit(), "op_password", password).commit()
     }
 
-    /** 快捷空调默认温度（本地缓存偏好，leap-design.md §2 痛点2）。 */
+    /** 快捷空调默认温度（本地缓存偏好）。 */
     fun loadAcTemp(): Int = prefs.getInt("ac_temp", 24)
 
     fun saveAcTemp(temperature: Int) {

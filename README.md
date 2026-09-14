@@ -238,11 +238,6 @@ npm install -g @pgyer/cli
 
 ## 设计与协作约定
 
-新增或优化用户界面前，先阅读：
-
-- [设计规范](design/leap-design.md)
-- [首页视觉设计提示词](design/零跑智控-首页视觉设计提示词.md)
-
 实现时保持暖浅灰背景、白色信息表面、Leap Blue `#0066FF`、Energy Green `#00C853` 和 Alert Red `#FF3B30` 的语义边界；不使用橙色主色、饱和渐变、霓虹效果、玻璃拟态或未授权车型图片。安全状态必须同时有文字或图标，不能只依赖颜色。
 
 新增信号时同步更新 `SignalTable.kt`、消费模型/格式化逻辑、对应测试和 `API/API.md`；新增控车命令时同步更新 `Models.kt`、确认/反馈流程、测试和 `API/API.md`。未经验证的 signal ID 不得直接用于用户可见状态或控车判断。

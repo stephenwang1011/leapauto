@@ -34,6 +34,43 @@ data class OldAuth(
     }
 }
 
+/** 极验 GT4 验证挑战模型 */
+data class GeetestChallenge(
+    val captchaId: String,
+    val riskType: String,
+    val requestId: String,
+    val phone: String,
+    val smsCode: String
+)
+
+/** 极验 GT4 验证成功凭证 */
+data class GeetestCaptchaResult(
+    val lotNumber: String,
+    val passToken: String,
+    val genTime: String,
+    val captchaOutput: String,
+    val requestId: String
+) {
+    companion object {
+        fun fromValidateJson(jsonStr: String, requestId: String): GeetestCaptchaResult {
+            val obj = JSONObject(jsonStr)
+            return GeetestCaptchaResult(
+                lotNumber = obj.optString("lot_number"),
+                passToken = obj.optString("pass_token"),
+                genTime = obj.optString("gen_time"),
+                captchaOutput = obj.optString("captcha_output"),
+                requestId = requestId
+            )
+        }
+    }
+}
+
+/** 触发极验安全验证异常，由 UI 层承接弹窗 */
+class GeetestChallengeRequiredException(
+    val challenge: GeetestChallenge,
+    override val message: String = "需完成安全验证"
+) : Exception(message)
+
 data class NewAuth(
     val accountId: String,
     val accessToken: String,
@@ -126,6 +163,7 @@ data class VehiclePictureMeta(
 class Session(
     var deviceId: String,
     var phone: String = "",
+    var smDeviceId: String = "",
     var oldAuth: OldAuth? = null,
     var newAuth: NewAuth? = null,
     var selectedVin: String = "",
@@ -136,8 +174,8 @@ class Session(
     var hvacCapability: HvacCapability = HvacCapability.fallback(),
     val generation: Long = 0L
 ) {
-    val appVersion = "1.22.87"
-    val subVersion = "3.19.2-2"
+    val appVersion = "1.22.96"
+    val subVersion = "3.21.3-2"
 }
 
 /** 控车命令预设（与 leap-cn-mcp commandPresets 一致）。 */
@@ -513,21 +551,21 @@ object ClimateControlFeedbackText {
     private fun copyFor(label: String): Copy = when {
         label == "关空调" || label == "关闭空调" -> Copy(
             sending = "空调关闭中",
-            submitted = "空调关闭已提交",
+            submitted = "关空调已下发，待确认",
             confirmed = "空调已关闭",
             failed = "空调关闭失败"
         )
         label.startsWith("开空调") -> Copy(
             sending = "空调开启中",
-            submitted = "空调开启已提交",
+            submitted = "开空调已下发，待确认",
             confirmed = "空调已开启",
             failed = "空调开启失败"
         )
-        label == "极速降温" -> Copy("降温中", "降温已提交", "降温已开启", "降温失败")
-        label == "极速升温" -> Copy("升温中", "升温已提交", "升温已开启", "升温失败")
-        label == "开启除雾" -> Copy("除雾中", "除雾已提交", "除雾已开启", "除雾失败")
-        label == "快速除味" -> Copy("除味中", "除味已提交", "除味已开启", "除味失败")
-        else -> Copy("空调设置中", "空调设置已提交", "空调已更新", "空调设置失败")
+        label == "极速降温" -> Copy("降温中", "降温已下发，待确认", "降温已开启", "降温失败")
+        label == "极速升温" -> Copy("升温中", "升温已下发，待确认", "升温已开启", "升温失败")
+        label == "开启除雾" -> Copy("除雾中", "除雾已下发，待确认", "除雾已开启", "除雾失败")
+        label == "快速除味" -> Copy("除味中", "除味已下发，待确认", "除味已开启", "除味失败")
+        else -> Copy("空调设置中", "设置已下发，待确认", "空调已更新", "空调设置失败")
     }
 }
 
@@ -693,7 +731,82 @@ object Commands {
         "startCharging" -> ControlCommand("193", """{"value":"start"}""", "开始充电")
         "stopCharging" -> ControlCommand("193", """{"value":"stop"}""", "停止充电")
         "unlockCharger" -> ControlCommand("192", """{"operation":"unlock"}""", "解锁充电枪")
-        else -> throw ApiException("未知命令: $name")
+        else -> {
+            when {
+                name.startsWith("driverSeatHeating_") -> {
+                    val lvl = name.removePrefix("driverSeatHeating_").toIntOrNull() ?: 0
+                    buildSeatHeating("left_front", lvl)
+                }
+                name.startsWith("passengerSeatHeating_") -> {
+                    val lvl = name.removePrefix("passengerSeatHeating_").toIntOrNull() ?: 0
+                    buildSeatHeating("right_front", lvl)
+                }
+                name.startsWith("driverSeatVentilation_") -> {
+                    val lvl = name.removePrefix("driverSeatVentilation_").toIntOrNull() ?: 0
+                    buildSeatVentilation("left_front", lvl)
+                }
+                name.startsWith("passengerSeatVentilation_") -> {
+                    val lvl = name.removePrefix("passengerSeatVentilation_").toIntOrNull() ?: 0
+                    buildSeatVentilation("right_front", lvl)
+                }
+                name.startsWith("steeringWheelHeating_") -> {
+                    val lvl = name.removePrefix("steeringWheelHeating_").toIntOrNull() ?: 0
+                    buildSteeringWheelHeating(lvl)
+                }
+                name == "rearviewMirrorHeating_on" -> buildRearviewMirrorHeating(true)
+                name == "rearviewMirrorHeating_off" -> buildRearviewMirrorHeating(false)
+                else -> throw ApiException("未知命令: $name")
+            }
+        }
+    }
+
+    /** 座椅加热（cmdid=301）：position: left_front / right_front，level: 0..3 */
+    fun buildSeatHeating(position: String = "left_front", level: Int): ControlCommand {
+        val cleanLevel = level.coerceIn(0, 3)
+        val posLabel = if (position == "left_front") "主驾" else "副驾"
+        val stateLabel = if (cleanLevel == 0) "关闭" else "${cleanLevel}档"
+        return ControlCommand(
+            "301",
+            """{"position":"$position","level":"$cleanLevel"}""",
+            "${posLabel}加热$stateLabel"
+        )
+    }
+
+    /** 座椅通风（cmdid=370）：position: left_front / right_front，level: 0..3 */
+    fun buildSeatVentilation(position: String = "left_front", level: Int): ControlCommand {
+        val cleanLevel = level.coerceIn(0, 3)
+        val posLabel = if (position == "left_front") "主驾" else "副驾"
+        val stateLabel = if (cleanLevel == 0) "关闭" else "${cleanLevel}档"
+        return ControlCommand(
+            "370",
+            """{"position":"$position","level":"$cleanLevel"}""",
+            "${posLabel}通风$stateLabel"
+        )
+    }
+
+    /** 方向盘加热（cmdid=320）：level: 0(关), 1(弱), 2(强) */
+    fun buildSteeringWheelHeating(level: Int): ControlCommand {
+        val cleanLevel = level.coerceIn(0, 2)
+        val stateLabel = when (cleanLevel) {
+            0 -> "关闭"
+            1 -> "弱档"
+            else -> "强档"
+        }
+        return ControlCommand(
+            "320",
+            """{"level":"$cleanLevel"}""",
+            "方向盘加热$stateLabel"
+        )
+    }
+
+    /** 后视镜加热（cmdid=440）：enabled=true -> "2"(开), enabled=false -> "1"(关) */
+    fun buildRearviewMirrorHeating(enabled: Boolean): ControlCommand {
+        val value = if (enabled) "2" else "1"
+        return ControlCommand(
+            "440",
+            """{"value":"$value"}""",
+            if (enabled) "开启后视镜加热" else "关闭后视镜加热"
+        )
     }
 
     /** 快捷空调：按自定义温度下发（≤26°C 制冷，≥27°C 制热）。 */
@@ -902,11 +1015,27 @@ object QuickCommandOrderPolicy {
     }
 }
 
+object QuickCommandExecutionPolicy {
+    fun isCommandInProgress(commandName: String, activeCmd: String?): Boolean {
+        if (activeCmd.isNullOrBlank()) return false
+        return when (commandName) {
+            "unlock" -> activeCmd == "unlock"
+            "lock" -> activeCmd == "lock"
+            "trunk" -> activeCmd == "trunkOpen" || activeCmd == "trunkClose"
+            "windowGroup" -> activeCmd.startsWith("window")
+            "sunshadeGroup" -> activeCmd.startsWith("sunshade")
+            "sentry" -> activeCmd.startsWith("sentry")
+            else -> activeCmd == commandName
+        }
+    }
+}
+
 object OperationPasswordErrorPolicy {
     const val ERROR_PROMPT_MESSAGE = "密码错误，请更新密码"
 
     fun isPasswordError(error: Throwable?): Boolean {
         val raw = error?.message.orEmpty().lowercase()
+        if (raw.contains("长度不足") || raw.contains("缺少用于加密")) return false
         return raw.contains("密码错误") ||
                raw.contains("密码不正确") ||
                raw.contains("密码校验失败") ||
@@ -918,3 +1047,21 @@ object OperationPasswordErrorPolicy {
                (raw.contains("密码") && (raw.contains("错") || raw.contains("不对") || raw.contains("失效") || raw.contains("失败") || raw.contains("重试")))
     }
 }
+
+/** 驻车实景环视照片信息 */
+data class ChassisParkingPhoto(
+    val fileUrl: String,
+    val uploadTimeMs: Long
+) {
+    val secureUrl: String
+        get() = fileUrl.replaceFirst("http://", "https://", ignoreCase = true)
+}
+
+sealed interface ParkingPhotoLoadState {
+    data object Idle : ParkingPhotoLoadState
+    data object Loading : ParkingPhotoLoadState
+    data class Success(val bitmap: android.graphics.Bitmap) : ParkingPhotoLoadState
+    data object Empty : ParkingPhotoLoadState
+    data class Failed(val message: String) : ParkingPhotoLoadState
+}
+

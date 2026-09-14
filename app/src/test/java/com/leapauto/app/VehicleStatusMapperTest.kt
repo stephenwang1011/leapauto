@@ -8,16 +8,6 @@ import org.junit.Test
 class VehicleStatusMapperTest {
 
     @Test
-    fun `all vehicle models use the single bundled default image`() {
-        listOf("零跑 C11 增程版", "C01 纯电", "T03 2024", "D19", "A10", "B05 纯电").forEach { model ->
-            assertEquals(
-                R.drawable.vehicle_lafa5_liquid_silver,
-                VehicleStatusMapper.vehicleImageResource(model)
-            )
-        }
-    }
-
-    @Test
     fun remainingRangeUsesStandardModeField() {
         val status = mapOf(
             "rangeMode" to 0,
@@ -194,65 +184,6 @@ class VehicleStatusMapperTest {
     }
 
     @Test
-    fun configuredTestVinReceivesFuelMockOnlyForRangeExtender() {
-        val original = org.json.JSONObject("""{"rangeMode":1,"3260":340,"3261":340}""")
-
-        val mocked = VehicleStatusMapper.withFuelMock(
-            status = original,
-            vin = "LFZ63AZ55SH023503",
-            powerType = SessionStore.VehiclePowerType.RANGE_EXTENDER
-        )
-
-        assertEquals(50, mocked.getInt("fuelSoc"))
-        assertEquals(300, mocked.getInt("fuelRangeDynamic"))
-        assertEquals(640, mocked.getInt("combinedRangeDynamic"))
-        assertEquals(640, mocked.getInt("3261"))
-        assertEquals(340, original.getInt("3260"))
-        assertNotSame(original, mocked)
-    }
-
-    @Test
-    fun fuelMockBuildsCombinedStandardRangeFromTheElectricRange() {
-        val original = org.json.JSONObject("""{"rangeMode":0,"3257":316,"3258":316}""")
-
-        val mocked = VehicleStatusMapper.withFuelMock(
-            status = original,
-            vin = "LFZ63AZ55SH023503",
-            powerType = SessionStore.VehiclePowerType.RANGE_EXTENDER
-        )
-
-        assertEquals(616, mocked.getInt("combinedRangeStandard"))
-        assertEquals(616, mocked.getInt("3258"))
-        assertEquals(
-            "616",
-            VehicleStatusMapper.widgetRange(
-                mocked,
-                "Lafa5",
-                VehicleStatusMapper.PowerType.RANGE_EXTENDER
-            )
-        )
-    }
-
-    @Test
-    fun fuelMockDoesNotApplyToOtherVinOrPureElectricConfiguration() {
-        val original = org.json.JSONObject("""{"3260":340}""")
-
-        val otherVin = VehicleStatusMapper.withFuelMock(
-            original,
-            "OTHER",
-            SessionStore.VehiclePowerType.RANGE_EXTENDER
-        )
-        val pureElectric = VehicleStatusMapper.withFuelMock(
-            original,
-            "LFZ63AZ55SH023503",
-            SessionStore.VehiclePowerType.PURE_ELECTRIC
-        )
-
-        assertEquals(null, otherVin.opt("fuelSoc").takeUnless { it == org.json.JSONObject.NULL })
-        assertEquals(null, pureElectric.opt("fuelRangeDynamic").takeUnless { it == org.json.JSONObject.NULL })
-    }
-
-    @Test
     fun missingFuelRangeIsDerivedFromCombinedAndElectricValues() {
         val values = org.json.JSONObject(
             """{"rangeMode":1,"3260":340,"3261":430}"""
@@ -302,9 +233,10 @@ class VehicleStatusMapperTest {
     }
 
     @Test
-    fun `display precise soc preserves decimal places and adds percentage sign`() {
-        assertEquals("82.5%", VehicleStatusMapper.displayPreciseSoc("82.50"))
-        assertEquals("82.5%", VehicleStatusMapper.displayPreciseSoc("82.5%"))
+    fun `display precise soc formats as integer percentage without decimals`() {
+        assertEquals("83%", VehicleStatusMapper.displayPreciseSoc("82.50"))
+        assertEquals("83%", VehicleStatusMapper.displayPreciseSoc("82.5%"))
+        assertEquals("98%", VehicleStatusMapper.displayPreciseSoc("98.3%"))
         assertEquals("100%", VehicleStatusMapper.displayPreciseSoc("101.2"))
         assertNull(VehicleStatusMapper.displayPreciseSoc("unknown"))
     }

@@ -61,7 +61,7 @@ class VersionUpdateTest {
     }
 
     @Test
-    fun showsPromptOnlyForUnhandledNewVersionOnVehicleTab() {
+    fun showsPromptForUnhandledNewVersionAcrossScreens() {
         val state = VersionUpdateState.UpdateAvailable(
             currentVersion = "1.5.6",
             latestRelease = PgyerRelease("1.5.7", 8, "修复问题")
@@ -69,8 +69,8 @@ class VersionUpdateTest {
 
         assertTrue(VersionUpdatePromptPolicy.shouldShow(state, null, loggedIn = true, onVehicleTab = true))
         assertFalse(VersionUpdatePromptPolicy.shouldShow(state, "1.5.7", loggedIn = true, onVehicleTab = true))
-        assertFalse(VersionUpdatePromptPolicy.shouldShow(state, null, loggedIn = false, onVehicleTab = true))
-        assertFalse(VersionUpdatePromptPolicy.shouldShow(state, null, loggedIn = true, onVehicleTab = false))
+        assertTrue(VersionUpdatePromptPolicy.shouldShow(state, null, loggedIn = false, onVehicleTab = true))
+        assertTrue(VersionUpdatePromptPolicy.shouldShow(state, null, loggedIn = true, onVehicleTab = false))
     }
 
     @Test

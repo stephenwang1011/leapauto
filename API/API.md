@@ -10,6 +10,53 @@
 
 路由域 `appRegion`（如 `https://app-gw-global-master.leapmotor.com`）由 getCarRoute 动态返回，用于车况和控车。
 
+## 蓝牙钥匙（手动控制与可选后台配置）
+
+新增蓝牙路径的证据来自 `D:/young/work/hackapp/BLUETOOTH_ANALYSIS.md`、对应 APK
+解壳源码和 smali。用户回传的 `3.3.33` 实车日志已到达认证阶段，但被车辆以结果码 `9` 拒绝；尚未完成认证与控车互通验收，不属于上述已实车验证的云接口范围。
+详细字段和离线向量分别见 [证书同步](BLUETOOTH_CERTIFICATE.md)、[蓝牙协议](BLUETOOTH_PROTOCOL.md) 和 [现场测试](BLUETOOTH_FIELD_TEST.md)。
+本节描述当前源码；本轮认证修复已随 `3.3.34`（versionCode `3003034`）生成本地签名 Release，实车复测待验收。
+
+- 蓝牙入口仅位于“我的（设置） → 蓝牙钥匙”。手动同步、扫描、连接、锁控、自动操作配置和诊断均从管理页发起；后台通知点击也定位到该页。
+- 爱车页不展示蓝牙入口、状态或通道选择；原有控车按钮均使用既有云端路径，不按蓝牙连接状态切换。
+  蓝牙动作确认仅在管理页可见时有效；关闭管理页或失去认证则取消待确认操作，失败不自动回退云端。
+  蓝牙锁控仍在等待车辆确认时，主界面暂不允许再次发出云端车锁指令，需本次操作结束后重新点击。
+- 证书同步使用运行时 `appCenter`：`POST /carownerservice/v3/api/bluetoothkey/combine/syncBluetoothKeys`，
+  签名表单为 `vin/timespan/nonce/deviceID/signStr`。证书请求不经过网络诊断拦截器；证书按账号及 VIN 在 Android Keystore 加密存储中隔离。
+  `APPVersion` 使用会话 App 版本；证书缓存绑定请求设备 ID，续期后的凭据与证书一起校验并提交，设备身份变化时旧连接失效。
+- 支持 `keyType=0` 的 P-256 / AES 与 `keyType=1` 的 SM2 / SM3 / SM4 会话，使用 FFFE 服务与 FFF2 特征、完整认证和手动上锁/解锁。
+  SM2 公钥从 X.509 证书提取，按已解包源码的协商和派生流程实现；两类协议均待实车互通验证。
+  未实现原版快速重连凭据或 EEED 座舱通道。后台断线恢复每次都重新完整认证，不复用会话密钥。
+- 扫描不依赖钥匙证书，用户可先搜索附近车辆；连接前必须持有当前车辆的受支持证书。
+  同 MAC 的广播信息跨包合并，缺少版本的后续广播不会覆盖已见版本；认证日志区分真实广播 minor 与默认回退 `8`。
+  同步钥匙、扫描和认证连接遵守互斥规则，页面退出或进入后台会作废待处理的权限回调。
+- 设置页新增四个开关：后台蓝牙钥匙 `enabled`、靠近自动解锁 `autoUnlock`、远离自动锁车 `autoLock`、微动开关控锁 `buttonEnabled`，本应用默认全部为 `false`。
+  三个子选项只有总开关打开后可编辑；微动选项要求协议 minor 至少为 9，未知或旧协议不假定支持。
+  开关只修改本地草稿，点击“保存设置”后仍须操作密码前置检查和明确确认；关闭总开关同时关闭三个子选项。蓝牙忙碌时暂不提交新配置。
+- 首次扫描连接只建立手动会话，自动解锁、自动锁车、微动选项保持关闭；完整认证成功后才保存设备绑定。
+  绑定含账号、VIN、设备地址、协议 minor 和证书指纹，按账号及 VIN 隔离加密存储；证书变化时不得直接复用旧绑定启动后台。
+- 配置同步复用加密命令 `cmdId=3`。仅当前认证会话的待同步配置收到可解密的 `2;3;0` 或 `2;3;00` 结果，并完成该帧全部写入，才进入本地确认流程。
+  持久状态区分 `desired`、`applied`、`revision/confirmedRevision`；只确认当前请求版本，即使新请求值与上次相同也必须重新确认。缺失、其他结果或超时都不标记“已同步”。
+  完整认证本身也携带配置字段；`cmd3` 是客户端确认依据，不能据此断言车辆仅在该回执之后才应用自动操作。
+- 关闭设置会记录全关闭目标并显示“关闭待同步”；在车辆确认前保留待同步状态，条件允许时继续后台连接以同步关闭，确认后停止后台服务。
+  断连、暂停通知服务、权限撤销或强制停止应用均不等于车辆已关闭自动操作。
+- 用户明确保存并确认后，`BleKeyService` 以 `connectedDevice` 前台服务维持当前绑定车辆连接，通知区显示连接/同步状态。
+  重连采用 2、5、10、20、30 秒退避，之后最多每 30 秒尝试一次；只重建连接、完整认证并同步当前保存配置，不排队或重发手动上锁/解锁。
+  靠近、远离和微动的物理动作由车辆按配置决定；手机没有根据 RSSI 阈值发送自动锁控命令，也不把信号强度换算成米。
+- 控制沿用应用已保存四位操作密码的本地前置检查，并要求一次用户动作确认；蓝牙控制帧本身不携带该密码，不代表车辆端校验了操作密码。
+- GATT 写入成功只代表传输回调。控制必须在当前认证连接中、开始写入后，收到匹配动作的 `AA AC / Active` 事件才报告确认。
+  事件尚无已证实的请求 ID 关联，每次认证连接仅执行一条手动控制，成功、失败或超时均断开；后台模式可重新建立认证连接，但不会代替用户发出下一条手动控制。
+- 已写入后的断连或超时一律显示“结果未确认”，不自动重发、不回退云控，也不修改云端遥测或桌面插件快照。
+- 收起管理页会取消待确认操作。未启用后台时离开前台会断开手动连接；已启动后台服务时，Activity 退到后台不主动销毁服务连接。
+  切车、会话过期及退出登录停止服务、关闭 GATT 并作废旧回调，旧绑定目标按全关闭保留待同步状态；退出登录清除本地证书。
+  从最近任务划掉应用会主动暂停后台连接，系统强制停止不保证自动恢复；重新打开后仅在当前会话、绑定、权限及操作密码满足时恢复此前已请求的配置或待关闭同步，也可点击“恢复连接”。
+- 连接诊断只在内存中保留最近 120 条结构化事件，包括相对耗时、系统 GATT 状态码、协议类型、报文长度和动作确认。
+  用户可主动复制或通过系统分享诊断；诊断、日志、通知与测试记录不得包含证书、密钥、PIN、VIN、蓝牙地址、设备名或原始报文。上述身份数据只可保存在明确用途的加密存储，扫描列表的设备地址仅供本机用户区分设备。
+
+Android 权限依据：[官方蓝牙权限文档](https://developer.android.com/develop/connectivity/bluetooth/bt-permissions)。
+Android 12+ 仅在用户启动扫描时请求附近设备权限；Android 11 及以前使用扫描所需定位权限，
+两者均不采集或保存位置，不添加后台定位权限。新增 `FOREGROUND_SERVICE_CONNECTED_DEVICE` 和非导出的 `BleKeyService`；通知可见性、系统省电限制及强制停止后的恢复均需按 Android 版本和手机厂商现场核验。
+
 ---
 
 ## 一、登录 / 会话（旧链路 appuser）
@@ -23,15 +70,36 @@
 - **代码**: `LeapmotorApi.sendSms()`
 
 ### 2. 短信验证码登录
-- **URL**: `POST /app-user/applogin/check_login_with_phone`（参数走 query + POST body）
+- **URL**: `POST /app-user/applogin/check_login_with_phone`（业务参数只走 URL query，POST body 为空）
 - **认证**: 无
 - **参数**（query）:
   - `phoneNoCiphertext`：RSA 加密的手机号
   - `smsCode`：6 位短信验证码
-  - `deviceID` / `smDeviceId`：设备 ID
+  - `deviceID`：应用生成并持久化的设备 ID，与请求头 `APPImei` 使用同一值
+  - `smDeviceId`：数美 SDK 在当前设备返回的风险指纹；与 `deviceID` 含义不同，不能互相替代
   - `os=android`，`pageUrl=`
-- **响应**: `data.appLoginVO` 含 `accountId / token / refreshToken / tokenExpired`（即 oldAuth）
+- **响应**: `data.appLoginVO` 或兼容节点 `data.appOneLoginVO` 含 `accountId / token / refreshToken / tokenExpired`（即 oldAuth）
 - **代码**: `LeapmotorApi.loginWithSms()`
+
+#### 设备验证与风控边界
+
+- 用户主动提交登录后，在后台初始化数美组件并有界等待 SDK 回调。组件加载失败、缺少当前进程 ABI 对应的原生库、指纹为空或获取超时时，终止本次登录，不使用普通 `deviceID` 或导入的历史指纹兜底发送请求。
+- 动态 DEX 必须从当前 APK 自带资产验证完整性，并在加载前满足 Android 14 及以上的只读要求。数美原生库由 SDK 所在类加载器加载，不在父类加载器手工预加载。
+- 当前数美 SDK 资产包含 175 个 SDK 类及 7 个必要辅助类的 10 个原始方法。辅助类置于 `com/leapauto/security/shumei/compat/`，避免与主应用混淆类名冲突；资产测试检查 DEX 完整性及非系统类型依赖闭合。缺少这些辅助类会使初始化的正常 URL 构建路径发生类加载错误。
+- `create()` 返回成功只表示 SDK 初始化成功，不表示设备已通过车厂服务端风控。不能仅凭 SDK 输出以 `D` 开头认定其为错误；参考 SDK 的本地生成路径和异常路径都可能使用该前缀。非空 SDK 输出是否被接受，仍由服务端判断。
+- 仅服务端实际返回且字段完整的挑战进入极验流程；临时管制文案本身不是挑战凭据，客户端不能自行生成服务端 `requestId`。登录错误保留可诊断的业务码及接口阶段，不记录手机号、验证码、指纹、Token 或完整响应。
+- 证据边界：请求结构与指纹来源对照本地 `D:/young/work/hackapp/LOGIN_API_ANALYSIS.md` 及其指向的 `com.qian.leapcontrol 0.6` 静态代码；该样本不是官方 App 的实时成功登录证明，也不能证明某次服务端风控的触发规则或解除时间。本轮使用离线测试验证客户端行为，真实登录需单独授权。
+
+SDK 资产由 `scripts/rebuild-shumei-dex.ps1` 离线重建，使用本地 Android 命令行工具中的 dexlib2；脚本校验来源 DEX 摘要，只提取必要方法，并校验重定位前后的执行代码一致性。当前环境的只读检查命令为：
+
+```powershell
+.\scripts\rebuild-shumei-dex.ps1 `
+  -SourceDex D:\young\work\hackapp\analysis\payload\classes1.dex `
+  -AndroidCommandLineLib D:\young\work\hackapp\android-sdk\cmdline-tools\latest\lib `
+  -CheckOnly
+```
+
+移除 `-CheckOnly` 可重建 `app/src/main/assets/shumei.dex`。SDK 更新后必须通过资产守卫测试与全量单测；该检查不运行 SDK，也不发起数美或车厂网络请求。
 
 ### 3. 旧 token 续期
 - **URL**: `GET /app-user/appuseroperate/getnewtoken`
@@ -179,7 +247,7 @@
 
 签名：`oldSignedParams()`（`timespan / nonce / deviceID / token` + 业务参数，MD5 前 16 位取 `signStr`）
 请求头：`APPPlatform / APPVersion / APPImei / C-VERSIONS / XFX-CDN-VRS / XFX-CDN-CROSS-NODE`（旧 token）
-`oppwd`：操作密码用 **AES-128-CBC**（key/iv 由旧 token 派生）加密
+`oppwd`：操作密码用 **AES-128-CBC** 加密。在新网关架构（v1.22+）下，Key/IV 由当前网关 JWT `accessToken` 前 64 位派生（`key = md5(accessToken[0..32])[8..24]`，`iv = md5(accessToken[32..64])[8..24]`）；旧版接口或无网关 Token 时兼容回退旧 Token。另官方 App 支持 `POST /carownerservice/v3/api/appoperate/verifyoperatepwdnew` 进行前置密码校验。
 
 ### 12. 下发控车命令
 - **URL**: `POST {appRegion}/app/app-control-service/v3/api/appremotectl`
@@ -214,6 +282,10 @@
 | `horn` | 120 | `{"value":"true"}` | 鸣笛寻车 |
 | `batteryPreheat` | 160 | `{"value":"ptcon"}` | 电池预热开 |
 | `batteryPreheatOff` | 160 | `{"value":"ptcoff"}` | 电池预热关 |
+| `seatHeat` | 301 | `{"position":"left_front","level":"3"}` | 座椅加热（position: left_front/right_front，level: 0..3） |
+| `seatVentilation` | 370 | `{"position":"left_front","level":"3"}` | 座椅通风（position: left_front/right_front，level: 0..3） |
+| `steeringWheelHeat` | 320 | `{"level":"2"}` | 方向盘加热（level: 0=关, 1=弱, 2=强） |
+| `rearviewMirrorHeat` | 440 | `{"value":"2"}` | 后视镜加热（value: 1=关, 2=开） |
 | `sentryOn` | 400 | `{"operation":"on"}` | 开启哨兵模式 |
 | `sentryOff` | 400 | `{"operation":"off"}` | 关闭哨兵模式 |
 
