@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 实装官方 3D 车模双包协同机制（H5 运行时 + 3D 车体资产解压合并）\n" +
-        "2. 补齐三维车模网格材质与门把手部件，消除 3D 引擎模型 404 加载失败\n" +
-        "3. 官方高清 3D 车模手势交互，支持 360 度前后左右无死角自由旋转"
+        "1. 3D 车模视觉放大 1.6 倍并居中悬浮展台，彻底告别微缩小车感\n" +
+        "2. 深度优化三维相机物理焦距与倾角，官方高清车模饱满大气\n" +
+        "3. 增加 Release 包 R8 WebGL 防混淆保护，全版本稳定支持 360 度手势旋转"
 }

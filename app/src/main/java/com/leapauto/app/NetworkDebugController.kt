@@ -50,8 +50,14 @@ object NetworkDebugController {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
-        if (enabled) {
-            appContext?.let { builder.addInterceptor(ChuckerInterceptor.Builder(it).build()) }
+        if (enabled || BuildConfig.DEBUG) {
+            appContext?.let {
+                val chucker = ChuckerInterceptor.Builder(it)
+                    .maxContentLength(250_000L)
+                    .alwaysReadResponseBody(true)
+                    .build()
+                builder.addInterceptor(chucker)
+            }
         }
         return builder.build()
     }

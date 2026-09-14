@@ -172,8 +172,8 @@ internal class CarModelWebView(
         obj.put("carTypeCode", carTypeCode)
         obj.put("colorCode", colorCode)
         obj.put("rudder", rudder)
-        obj.put("radius", 11)
-        obj.put("offset", 0.3)
+        obj.put("radius", 7.2)
+        obj.put("offset", 0.0)
 
         if (param != null) {
             if (param.has("roofColor") && !param.isNull("roofColor")) {
