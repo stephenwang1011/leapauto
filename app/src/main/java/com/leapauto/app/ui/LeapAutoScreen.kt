@@ -202,6 +202,7 @@ import com.leapauto.app.SentryModeControlPolicy
 import com.leapauto.app.SessionExpiredDialogAction
 import com.leapauto.app.SessionExpiredDialogPolicy
 import com.leapauto.app.SessionStore
+import com.leapauto.app.CarModel3DManager
 import com.leapauto.app.TireStatus
 import com.leapauto.app.TrunkState
 import com.leapauto.app.VehicleAppearance
@@ -2870,6 +2871,33 @@ fun VehicleHero(
     val remoteBitmap = remember(vehicleVin, vehicleImageVersion) {
         if (vehicleVin.isNotBlank()) VehicleImageCache.loadCachedImageBitmap(context, vehicleVin) else null
     }
+    val cachedMeta = remember(vehicleVin, vehicleImageVersion) {
+        if (vehicleVin.isNotBlank()) VehicleImageCache.getCachedMeta(context, vehicleVin) else null
+    }
+    val hasCustomImage = remember(vehicleVin, vehicleImageVersion) {
+        if (vehicleVin.isNotBlank()) VehicleImageCache.hasCustomImage(context, vehicleVin) else false
+    }
+    val h5Key = cachedMeta?.h5Key ?: CarModel3DManager.getFirstReadyKey(context)
+    var is3DReady by remember(h5Key, vehicleImageVersion) {
+        mutableStateOf(h5Key != null && CarModel3DManager.isModelReady(context, h5Key))
+    }
+    var is3DRendered by remember(h5Key, vehicleImageVersion) { mutableStateOf(false) }
+
+    androidx.compose.runtime.LaunchedEffect(h5Key, vehicleImageVersion) {
+        if (h5Key != null && !is3DReady) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                for (i in 0 until 40) {
+                    kotlinx.coroutines.delay(500)
+                    if (CarModel3DManager.isModelReady(context, h5Key)) {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            is3DReady = true
+                        }
+                        break
+                    }
+                }
+            }
+        }
+    }
     val heroColor = MaterialTheme.glassSurface
     val nickname = vehicleNickname.ifBlank { formatVehicleModel(vehicleModel) }
     val normalizedSoc = VehicleHomeStatus.resolvedSoc(status?.preciseSoc, status?.soc)
@@ -3392,16 +3420,28 @@ fun VehicleHero(
                 }
             }
 
-            // ====== 2. 100% 原始饱满比例车身主图 (纯净无额外背景杂质) ======
+            // ====== 2. 100% 原始饱满比例车身主图 / 3D 旋转交互车模 ======
+            val show3D = !hasCustomImage && is3DReady && h5Key != null
+            val bitmapAlpha by androidx.compose.animation.core.animateFloatAsState(
+                targetValue = if (show3D && is3DRendered) 0f else 1f,
+                animationSpec = androidx.compose.animation.core.tween(durationMillis = 400),
+                label = "2d_fade"
+            )
+            val modelAlpha by androidx.compose.animation.core.animateFloatAsState(
+                targetValue = if (show3D && is3DRendered) 1f else 0f,
+                animationSpec = androidx.compose.animation.core.tween(durationMillis = 400),
+                label = "3d_fade"
+            )
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .offset(y = (-8).dp)
                     .height(130.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .clickable(onClick = onOpenHealthCheck),
+                    .clip(RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
+                // 1. 底层 2D 静态渲染官图（极速秒开垫底）
                 if (remoteBitmap != null) {
                     Image(
                         bitmap = remoteBitmap,
@@ -3411,6 +3451,24 @@ fun VehicleHero(
                             .fillMaxWidth()
                             .height(130.dp)
                             .padding(horizontal = 16.dp)
+                            .graphicsLayer { alpha = bitmapAlpha }
+                            .clickable(enabled = !show3D, onClick = onOpenHealthCheck)
+                    )
+                }
+
+                // 2. 顶层 3D 交互三维车模（支持手势 360° 前后左右旋转，就绪后丝滑淡入）
+                if (show3D) {
+                    CarModel3DView(
+                        h5Key = h5Key!!,
+                        modelParam = cachedMeta?.modelParam,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(130.dp)
+                            .padding(horizontal = 8.dp)
+                            .graphicsLayer { alpha = modelAlpha },
+                        onReady = { is3DRendered = true },
+                        onError = { is3DRendered = false },
+                        onCarClick = onOpenHealthCheck
                     )
                 }
             }

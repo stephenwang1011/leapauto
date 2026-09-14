@@ -3,9 +3,13 @@ package com.leapauto.app
 import com.leapauto.app.bluetooth.BleKeyCertificate
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 import java.net.URLEncoder
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipInputStream
 import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
@@ -149,8 +153,8 @@ class LeapmotorApi internal constructor(
                     findObjectStatic(root.opt(i), predicate)?.let { return it }
                 }
             }
-            return null
-        }
+        return null
+    }
     }
 
     // ------------------------------------------------------------------ HTTP
@@ -814,6 +818,79 @@ class LeapmotorApi internal constructor(
             )
         }
         return null
+    }
+
+    /**
+     * 下载官方 3D 车模交互 H5/资产压缩包，并解压至目标缓存目录 [destDir]。
+     * 支持 h5Key 运行时网页包与 srcKey 3D 模型素材包在同一目录下的安全解压与合并。
+     */
+    fun downloadCarModelPackage(key: String, destDir: File): Boolean {
+        if (key.isBlank()) return false
+        val path = "/carownerservice/v3/api/carpicture/key/package"
+        val candidateHosts = listOf(
+            session.route?.appCenter?.takeIf { it.isNotBlank() },
+            session.route?.appRegion?.takeIf { it.isNotBlank() },
+            DRIVING_RECORD_HOST,
+            APP_USER_HOST
+        ).filterNotNull().distinct()
+
+        destDir.mkdirs()
+        val canonicalDest = destDir.canonicalFile
+
+        for (host in candidateHosts) {
+            val cleanHost = host.trim().removeSuffix("/")
+            val url = "$cleanHost$path"
+            try {
+                val signed = oldSignedParams(
+                    params = mapOf("key" to key),
+                    includeTimespan = true
+                )
+                // 官方 fb1.smali:14905 仅传入 oldAppHeaders，绝不注入新网关 headers
+                val headers = oldAppHeaders(withToken = true)
+                val queryStr = signed.entries.joinToString("&") { (k, v) ->
+                    "${URLEncoder.encode(k, "UTF-8")}=${URLEncoder.encode(v, "UTF-8")}"
+                }
+                val request = Request.Builder()
+                    .url("$url?$queryStr")
+                    .get()
+                    .apply { headers.forEach { (k, v) -> header(k, v) } }
+                    .build()
+
+                val client = NetworkDebugController.httpClient()
+                val success = client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use false
+                    val bytes = response.body?.bytes() ?: return@use false
+                    // 官方 fb1.smali:15008 校验首两字节必须为 0x50, 0x4B ('PK' ZIP 魔数)
+                    if (bytes.size < 4 || bytes[0] != 0x50.toByte() || bytes[1] != 0x4B.toByte()) {
+                        return@use false
+                    }
+
+                    ZipInputStream(java.io.ByteArrayInputStream(bytes)).use { zis ->
+                        while (true) {
+                            val entry = zis.nextEntry ?: break
+                            val targetFile = File(canonicalDest, entry.name).canonicalFile
+                            if (!targetFile.path.startsWith(canonicalDest.path + File.separator)) {
+                                throw IOException("Zip traversal entry rejected: ${entry.name}")
+                            }
+                            if (entry.isDirectory) {
+                                targetFile.mkdirs()
+                            } else {
+                                targetFile.parentFile?.mkdirs()
+                                FileOutputStream(targetFile).use { fos ->
+                                    zis.copyTo(fos)
+                                }
+                            }
+                            zis.closeEntry()
+                        }
+                    }
+                    true
+                }
+                if (success) return true
+            } catch (_: Exception) {
+                // 尝试下一个主机
+            }
+        }
+        return false
     }
 
     /**

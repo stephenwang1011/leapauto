@@ -157,7 +157,16 @@ data class VehiclePictureMeta(
     val shareBindUrl: String,
     val sourceUrl: String = "",
     val rawData: JSONObject? = null
-)
+) {
+    val h5Key: String?
+        get() = rawData?.optString("h5Key")?.takeIf { it.isNotBlank() }
+
+    val srcKey: String?
+        get() = rawData?.optString("srcKey")?.takeIf { it.isNotBlank() }
+
+    val modelParam: JSONObject?
+        get() = rawData?.optJSONObject("modelParam")
+}
 
 /** 登录会话（内存态），由 SessionStore 持久化。 */
 class Session(

@@ -15,8 +15,26 @@ object VehicleImageCache {
     private const val TAG = "LeapVehiclePic"
     private const val PREFS_NAME = "leap_vehicle_image_cache"
     private const val KEY_PREFIX_URL = "pic_url_"
+    private const val KEY_PREFIX_META = "pic_meta_"
 
     private val memoryCache = object : LruCache<String, Bitmap>(10) {}
+
+    fun getCachedMeta(context: Context, vin: String): VehiclePictureMeta? {
+        if (vin.isBlank()) return null
+        val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString("$KEY_PREFIX_META$vin", null) ?: return null
+        return try {
+            val json = org.json.JSONObject(raw)
+            VehiclePictureMeta(
+                pictureKey = json.optString("pictureKey"),
+                shareBindUrl = json.optString("shareBindUrl"),
+                sourceUrl = json.optString("sourceUrl"),
+                rawData = json.optJSONObject("rawData")
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     fun getCacheDir(context: Context): File {
         return File(context.filesDir, "vehicle_images").apply {
@@ -106,12 +124,13 @@ object VehicleImageCache {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .remove("$KEY_PREFIX_URL$vin")
+            .remove("$KEY_PREFIX_META$vin")
             .apply()
     }
 
     /**
-     * 同步远端车辆图片。
-     * @return 如果成功下载并保存了新的车辆图片，返回 true；若图片未变化或下载失败，返回 false。
+     * 同步远端车辆图片及 3D 模型资产。
+     * @return 如果成功下载并保存了新的车辆图片或 3D 资产，返回 true；若图片未变化或下载失败，返回 false。
      */
     fun sync(context: Context, api: LeapmotorApi, vin: String): Boolean {
         if (vin.isBlank()) return false
@@ -139,9 +158,30 @@ object VehicleImageCache {
         val cachedUrl = prefs.getString("$KEY_PREFIX_URL$vin", null)
         val file = getCacheFile(context, vin)
 
+        // 保存/更新元数据缓存
+        val metaJson = org.json.JSONObject().apply {
+            put("pictureKey", meta.pictureKey)
+            put("shareBindUrl", url)
+            put("sourceUrl", meta.sourceUrl)
+            if (meta.rawData != null) put("rawData", meta.rawData)
+        }
+        prefs.edit().putString("$KEY_PREFIX_META$vin", metaJson.toString()).apply()
+
+        // 尝试拉取 3D 模型双包（若元数据包含 h5Key，协同拉取并合并 srcKey）
+        var modelPackageUpdated = false
+        meta.h5Key?.let { h5Key ->
+            try {
+                if (!CarModel3DManager.isModelReady(context, h5Key)) {
+                    modelPackageUpdated = CarModel3DManager.syncModelPackage(context, api, h5Key, meta.srcKey)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "3D 模型同步跳过或异常: ${e.message}")
+            }
+        }
+
         if (cachedUrl == url && file.exists() && file.length() > 0) {
             Log.d(TAG, "车图 URL 未变化且本地已有缓存: $url")
-            return false
+            return modelPackageUpdated
         }
 
         return try {

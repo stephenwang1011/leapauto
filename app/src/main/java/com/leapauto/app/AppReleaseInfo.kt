@@ -6,6 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 统一2x2与4x2桌面小组件深色模式按钮颜色为高光钛白，解决车锁键黑/空调键灰不一致问题\n" +
-        "2. 小组件布局底层与渲染链路全面增加着色双保险，消除各大系统桌面偶发偏色"
+        "1. 实装官方 3D 车模双包协同机制（H5 运行时 + 3D 车体资产解压合并）\n" +
+        "2. 补齐三维车模网格材质与门把手部件，消除 3D 引擎模型 404 加载失败\n" +
+        "3. 官方高清 3D 车模手势交互，支持 360 度前后左右无死角自由旋转"
 }
