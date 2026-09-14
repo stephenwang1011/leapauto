@@ -3436,8 +3436,8 @@ fun VehicleHero(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .offset(y = (-4).dp)
-                    .height(165.dp)
+                    .offset(y = (-16).dp)
+                    .height(150.dp)
                     .clip(RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
@@ -3449,7 +3449,7 @@ fun VehicleHero(
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(165.dp)
+                            .height(150.dp)
                             .padding(horizontal = 16.dp)
                             .graphicsLayer { alpha = bitmapAlpha }
                             .clickable(enabled = !show3D, onClick = onOpenHealthCheck)
@@ -3463,7 +3463,7 @@ fun VehicleHero(
                         modelParam = cachedMeta?.modelParam,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(165.dp)
+                            .height(150.dp)
                             .padding(horizontal = 4.dp)
                             .graphicsLayer { alpha = modelAlpha },
                         onReady = { is3DRendered = true },
