@@ -239,8 +239,6 @@ object VehicleStatusMapper {
             ?.takeIf { it.isNotBlank() && it != "--" }
 
     private fun String?.isPureElectricModel(): Boolean =
-        this?.contains("纯电", ignoreCase = true) == true ||
-            this?.contains("EV", ignoreCase = true) == true ||
-            this?.contains("BEV", ignoreCase = true) == true
+        VehiclePowerTypeResolver.fromCarType(this) == SessionStore.VehiclePowerType.PURE_ELECTRIC
 
 }

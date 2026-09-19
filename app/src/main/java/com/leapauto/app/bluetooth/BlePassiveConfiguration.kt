@@ -4,15 +4,16 @@ data class BlePassiveConfiguration(
     val enabled: Boolean = false,
     val autoUnlock: Boolean = false,
     val autoLock: Boolean = false,
-    val buttonEnabled: Boolean = false
+    val buttonEnabled: Boolean = false,
+    val calibration: BleCalibration = BleCalibration.DEFAULT
 ) {
     val needsBackground: Boolean get() = enabled
 
     internal fun authenticationFields(protocolMinor: Int): String =
-        "56;2.00;08;16;${flags(protocolMinor).joinToString(";")};"
+        "${calibration.toProtocolText()};${flags(protocolMinor).joinToString(";")};"
 
     internal fun encoded(protocolMinor: Int): ByteArray =
-        byteArrayOf(56, 0xC8.toByte(), 0, 8, 16) + flags(protocolMinor)
+        calibration.encoded() + flags(protocolMinor)
 
     private fun flags(protocolMinor: Int): ByteArray {
         require(protocolMinor in 0..255) { "Invalid BLE configuration protocol minor" }

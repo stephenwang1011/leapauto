@@ -54,13 +54,31 @@ class BleSm2ProtocolTest {
         assertTrue(agreement.sharedSecret.all { it == 0.toByte() })
     }
 
+    @Test
+    fun certificateEmptyPlaceholdersAreReportedBeforeIdentityReplacement() {
+        for ((text, expected) in listOf(";;;001;1234567890000;1" to 3,
+                ";;device;001;1234567890000;1" to 1, ";account;;001;1234567890000;1" to 2)) {
+            val certificate = certificate().copy(plainText = text)
+            session(certificate).use { session ->
+                var structure: BleAuthenticationStructure? = null
+                session.buildAuthentication(certificate, "test-account", "test-device", 9, timestamp,
+                    onPrepared = { structure = it })
+                assertEquals(expected, requireNotNull(structure).identityEmptyMask)
+                assertEquals(0, requireNotNull(structure).identityMatchMask)
+            }
+        }
+    }
+
     // Expected frames come from test/resources/bluetooth/generate-sm2-vectors.cjs (Node/OpenSSL).
     @Test
     fun sm2FullAuthenticationMinorEightMatchesIndependentFrame() {
         val certificate = certificate()
         session(certificate).use { session ->
+            val summaries = mutableListOf<BleAuthenticationStructure>()
             assertArrayEquals(Base64.getDecoder().decode(AUTHENTICATION_8),
-                session.buildAuthentication(certificate, "test-account", "test-device", 8, timestamp))
+                session.buildAuthentication(certificate, "test-account", "test-device", 8, timestamp,
+                    onPrepared = { summaries += it }))
+            assertEquals(BleAuthenticationStructure(6, 0, 97, 16, 117, 128, 8, 0, 0), summaries.single())
         }
     }
 
@@ -68,8 +86,11 @@ class BleSm2ProtocolTest {
     fun sm2FullAuthenticationMinorNineKeepsPassiveActionsDisabled() {
         val certificate = certificate()
         session(certificate).use { session ->
+            val summaries = mutableListOf<BleAuthenticationStructure>()
             assertArrayEquals(Base64.getDecoder().decode(AUTHENTICATION_9),
-                session.buildAuthentication(certificate, "test-account", "test-device", 9, timestamp))
+                session.buildAuthentication(certificate, "test-account", "test-device", 9, timestamp,
+                    onPrepared = { summaries += it }))
+            assertEquals(BleAuthenticationStructure(6, 0, 101, 16, 121, 128, 9, 1, 0), summaries.single())
         }
     }
 

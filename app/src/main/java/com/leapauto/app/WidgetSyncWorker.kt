@@ -35,17 +35,10 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                 val config = store.loadVehicleConfig(current.selectedVin)
                 val status = LeapmotorApi(current).getVehicleState()
                 ChargeNotificationManager.process(context, store, current.selectedVin, status)
-                val hasFuel = VehicleStatusMapper.fuelRemainingRange(status) != null ||
-                    VehicleStatusMapper.fuelSocPercent(status) != null ||
-                    current.selectedCarType.contains("增程") ||
-                    current.selectedCarType.contains("REEV", ignoreCase = true) ||
-                    config.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER
-                val workerPowerType = if (hasFuel) {
-                    SessionStore.VehiclePowerType.RANGE_EXTENDER
-                } else {
-                    config.powerType
-                }
-                val powerType = workerPowerType?.let { if (it == SessionStore.VehiclePowerType.PURE_ELECTRIC) VehicleStatusMapper.PowerType.PURE_ELECTRIC else VehicleStatusMapper.PowerType.RANGE_EXTENDER }
+                val workerPowerType = VehiclePowerTypeResolver.fromStatus(
+                    status, config.powerType, current.selectedCarType
+                )
+                val powerType = workerPowerType.toStatusPowerType()
                 ControlWidget.renderStatus(context, views, status, current.selectedCarType)
                 store.save(current)
                 val updated = formatUpdatedTime()

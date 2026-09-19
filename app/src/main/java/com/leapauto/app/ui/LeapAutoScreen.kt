@@ -9,8 +9,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -36,7 +39,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import com.leapauto.app.SensitiveControlPolicy
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -60,6 +67,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -69,7 +79,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -110,6 +124,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import java.text.SimpleDateFormat
@@ -136,6 +153,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
@@ -156,6 +174,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -170,6 +189,7 @@ import com.leapauto.app.AirConditioningCommand
 import com.leapauto.app.AirOutlet
 import com.leapauto.app.AppearanceMode
 import com.leapauto.app.ClimateControlRequestState
+import com.leapauto.app.ClimateSliderMapping
 import com.leapauto.app.ClimatePresetAction
 import com.leapauto.app.ClimateTemperatureTone
 import com.leapauto.app.ClimateTemperatureToneResolver
@@ -295,7 +315,7 @@ fun LeapAutoScreen(
     pinSetupErrorMessage: String = "",
     showVehicleConfigConfirmationPrompt: Boolean,
     widgetOpacity: Int,
-    widgetSensitiveActionVerificationEnabled: Boolean,
+    widgetBackgroundStyle: Int = SessionStore.WIDGET_BG_STYLE_DEFAULT,
     widget4x2Actions: List<String> = Widget4x2ActionPolicy.DEFAULT_ACTIONS,
     onWidget4x2ActionsChange: (List<String>) -> Unit = {},
     appearanceMode: AppearanceMode,
@@ -318,8 +338,8 @@ fun LeapAutoScreen(
     currentReleaseNotes: String,
     versionUpdateState: VersionUpdateState,
     handledUpdateVersion: String? = null,
-    showAuthorSupportDialog: Boolean,
-    showSessionExpiredDialog: Boolean,
+    showAuthorSupportDialog: Boolean = false,
+    showSessionExpiredDialog: Boolean = false,
     phone: String,
     onPhoneChange: (String) -> Unit,
     code: String,
@@ -327,16 +347,16 @@ fun LeapAutoScreen(
     pin: String,
     onPinChange: (String) -> Unit,
     onSendSms: () -> Unit,
-    smsCountdownSeconds: Int = 0,
-    geetestChallenge: GeetestChallenge? = null,
-    onGeetestSuccess: (GeetestCaptchaResult) -> Unit = {},
-    onDismissGeetest: () -> Unit = {},
+    smsCountdownSeconds: Int,
+    geetestChallenge: GeetestChallenge?,
+    onGeetestSuccess: (GeetestCaptchaResult) -> Unit,
+    onDismissGeetest: () -> Unit,
     onLoginWithRawAuth: (String, String) -> Unit = { _, _ -> },
     onLogin: () -> Unit,
     onSavePin: () -> Unit,
     onCancelPinSetup: () -> Unit,
     onWidgetOpacityChange: (Int) -> Unit,
-    onWidgetSensitiveActionVerificationChange: (Boolean) -> Unit,
+    onWidgetBackgroundStyleChange: (Int) -> Unit = {},
     onAppearanceModeChange: (AppearanceMode) -> Unit,
     onSaveVehicleConfig: (String, String, SessionStore.VehiclePowerType?, String, String) -> Unit = { _, _, _, _, _ -> },
     onNetworkDebugEnabledChange: (Boolean) -> Unit = {},
@@ -353,6 +373,7 @@ fun LeapAutoScreen(
     onAutoRefreshActiveChange: (Boolean) -> Unit,
     onLogout: () -> Unit,
     onControl: (String) -> Unit,
+    onFridgeControl: (com.leapauto.app.FridgeControlCommand) -> Unit = {},
     onApplyClimateSettings: (AirConditioningCommand) -> Unit = {},
     onDismissControlFeedback: () -> Unit,
     onQuickAc: (Int, Long) -> Unit = { _, _ -> },
@@ -361,9 +382,11 @@ fun LeapAutoScreen(
     onUpdateNickname: (String) -> Unit = {},
     bluetoothSettingsRequestId: Long = 0,
     onOpenBluetoothKey: () -> Unit = {},
+    onRetryDownload3D: () -> Unit = {},
     onFetchParkingPhoto: ((ChassisParkingPhoto?, Bitmap?) -> Unit) -> Unit = {}
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
+    var settingsTitleTapCount by remember(loggedIn, selectedTab) { mutableIntStateOf(0) }
     var showVehicleLocation by rememberSaveable { mutableStateOf(false) }
     var showClimateControl by rememberSaveable { mutableStateOf(false) }
     var showHealthyChargingSheet by rememberSaveable { mutableStateOf(false) }
@@ -735,7 +758,15 @@ fun LeapAutoScreen(
                                 Text(
                                     appBarTitle,
                                     style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = if (destination == ScreenDestination.ACCOUNT) {
+                                        Modifier.clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) {
+                                            settingsTitleTapCount = (settingsTitleTapCount + 1).coerceAtMost(5)
+                                        }
+                                    } else Modifier
                                 )
                                 appBarSubtitle?.let { subtitle ->
                                     Text(
@@ -842,7 +873,11 @@ fun LeapAutoScreen(
                     },
                     onUpdateNickname = onUpdateNickname,
                     onFetchParkingPhoto = onFetchParkingPhoto,
-                    activeControlCommand = activeControlCommand
+                    activeControlCommand = activeControlCommand,
+                    onFridgeControl = onFridgeControl,
+                    hvacCapability = hvacCapability,
+                    onApplyClimateSettings = onApplyClimateSettings,
+                    onRetryDownload3D = onRetryDownload3D
                 )
                 ScreenDestination.LOCATION_DETAIL -> VehicleLocationDetailContent(
                     summary = status?.locationSummary,
@@ -856,6 +891,7 @@ fun LeapAutoScreen(
                     controlFeedback = controlFeedback,
                     statusUpdatedAtEpochMs = statusUpdatedAtEpochMs,
                     hvacCapability = hvacCapability,
+                    onDismissRequest = { showClimateControl = false },
                     onDismissControlFeedback = onDismissControlFeedback,
                     onRefresh = onRefresh,
                     onControl = onControl,
@@ -871,8 +907,8 @@ fun LeapAutoScreen(
                     onCancelPinSetup = onCancelPinSetup,
                     widgetOpacity = widgetOpacity,
                     onWidgetOpacityChange = onWidgetOpacityChange,
-                    widgetSensitiveActionVerificationEnabled = widgetSensitiveActionVerificationEnabled,
-                    onWidgetSensitiveActionVerificationChange = onWidgetSensitiveActionVerificationChange,
+                    widgetBackgroundStyle = widgetBackgroundStyle,
+                    onWidgetBackgroundStyleChange = onWidgetBackgroundStyleChange,
                     widget4x2Actions = widget4x2Actions,
                     onWidget4x2ActionsChange = onWidget4x2ActionsChange,
                     appearanceMode = appearanceMode,
@@ -891,12 +927,66 @@ fun LeapAutoScreen(
                     vehicleImageVersion = vehicleImageVersion,
                     onSelectCustomVehicleImage = onSelectCustomVehicleImage,
                     onResetCustomVehicleImage = onResetCustomVehicleImage,
+                    showBluetoothKeyEntry = settingsTitleTapCount >= 5,
                     onOpenBluetoothKey = onOpenBluetoothKey,
                     onLogout = onLogout
-                )
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun WidgetBackgroundStyleCard(
+    style: Int,
+    onStyleChange: (Int) -> Unit
+) {
+    val options = listOf(
+        SessionStore.WIDGET_BG_STYLE_DEFAULT to "经典微晶",
+        SessionStore.WIDGET_BG_STYLE_LANDSCAPE to "官方山河"
+    )
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = glassCardBorder(),
+        shadowElevation = 0.dp
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("小组件背景风格", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("支持经典微晶毛玻璃与官方山河天幕画卷", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(
+                    options.firstOrNull { it.first == style }?.second ?: "经典微晶",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                options.forEachIndexed { index, option ->
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                        onClick = { onStyleChange(option.first) },
+                        selected = style == option.first,
+                        colors = SegmentedButtonDefaults.colors(
+                            activeContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            activeContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            activeBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                            inactiveContainerColor = MaterialTheme.colorScheme.surface,
+                            inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        label = { Text(option.second, style = MaterialTheme.typography.labelSmall) }
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1187,6 +1277,55 @@ private fun LoginContent(
 }
 
 @Composable
+private fun CabinDivider(
+    modifier: Modifier = Modifier,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp
+) {
+    val isDark = LocalAppDarkTheme.current
+    val dividerColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color(0xFF0F172A).copy(alpha = 0.06f)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = horizontalPadding)
+            .height(0.6.dp)
+            .background(
+                Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        dividerColor,
+                        dividerColor,
+                        Color.Transparent
+                    )
+                )
+            )
+    )
+}
+
+@Composable
+private fun CabinVerticalDivider(
+    height: androidx.compose.ui.unit.Dp = 80.dp,
+    modifier: Modifier = Modifier
+) {
+    val isDark = LocalAppDarkTheme.current
+    val dividerColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color(0xFF0F172A).copy(alpha = 0.06f)
+    Box(
+        modifier = modifier
+            .width(0.6.dp)
+            .height(height)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        dividerColor,
+                        dividerColor,
+                        Color.Transparent
+                    )
+                )
+            )
+    )
+}
+
+@Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun HomeContent(
     isRefreshing: Boolean, vehicleVin: String, vehicleModel: String, vehicleDisplayModel: String = vehicleModel,
@@ -1207,10 +1346,16 @@ private fun HomeContent(
     onOpenHealthCheck: () -> Unit = {},
     onUpdateNickname: (String) -> Unit = {},
     onFetchParkingPhoto: ((ChassisParkingPhoto?, Bitmap?) -> Unit) -> Unit = {},
-    activeControlCommand: String? = null
+    activeControlCommand: String? = null,
+    onFridgeControl: (com.leapauto.app.FridgeControlCommand) -> Unit = {},
+    hvacCapability: HvacCapability = HvacCapability.fallback(),
+    onApplyClimateSettings: (AirConditioningCommand) -> Unit = {},
+    onRetryDownload3D: () -> Unit = {}
 ) {
     var showAddressNavigationDialog by rememberSaveable { mutableStateOf(false) }
     var showParkingDetailDialog by rememberSaveable { mutableStateOf(false) }
+    var showFridgeControlBottomSheet by rememberSaveable { mutableStateOf(false) }
+    var showClimateControlBottomSheet by rememberSaveable { mutableStateOf(false) }
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -1231,7 +1376,7 @@ private fun HomeContent(
                     viewportHeightPx = with(density) { viewportHeight.roundToPx() },
                     topContentHeightPx = topContentHeightPx,
                     topPaddingPx = with(density) { 4.dp.roundToPx() },
-                    spacingPx = with(density) { 8.dp.roundToPx() },
+                    spacingPx = with(density) { 4.dp.roundToPx() },
                     bottomPaddingPx = with(density) { bottomPadding.roundToPx() },
                     density = density.density,
                     minHeightDp = EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP
@@ -1273,44 +1418,102 @@ private fun HomeContent(
                         onSwitchVehicle = onSwitchVehicle,
                         onOpenHealthCheck = onOpenHealthCheck,
                         onUpdateNickname = onUpdateNickname,
+                        onRetryDownload3D = onRetryDownload3D,
                         onParkingClick = { showParkingDetailDialog = true }
                     )
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        HomeTirePressureCard(status, Modifier.weight(1f))
-                        VehicleStatusCard(
-                            status = status,
-                            todayMileage = EnergyHomeCardPolicy.todayMileage((energyState as? EnergyAnalyticsState.Success)?.data),
-                            onOpenHealthyCharging = onOpenHealthyCharging,
-                            modifier = Modifier.weight(1f)
-                        )
+
+                    if (!showClimateControlBottomSheet) {
+                        controlFeedback?.let { feedback ->
+                            ControlFeedbackBanner(feedback, onDismissControlFeedback)
+                        }
                     }
-                    controlFeedback?.let { feedback ->
-                        ControlFeedbackBanner(feedback, onDismissControlFeedback)
-                    }
+
                     QuickVehicleActions(
                         vehicleVin = vehicleVin,
                         vehicleModel = vehicleModel,
                         status = status,
                         locationSnapshot = locationSnapshot,
                         onControl = onControl,
-                        activeControlCommand = activeControlCommand
+                        activeControlCommand = activeControlCommand,
+                        seamless = false
                     )
-                    ClimateOverviewCard(
-                        status = status,
-                        onOpenClimate = onOpenClimateControl,
-                        onQuickAcToggle = onControl,
-                        controlBusy = isRefreshing,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        HomeTirePressureCard(
+                            status = status,
+                            modifier = Modifier.weight(1f),
+                            onCarClick = onOpenHealthCheck,
+                            seamless = false
+                        )
+                        VehicleStatusCard(
+                            status = status,
+                            todayMileage = EnergyHomeCardPolicy.todayMileage((energyState as? EnergyAnalyticsState.Success)?.data),
+                            onOpenHealthyCharging = onOpenHealthyCharging,
+                            modifier = Modifier.weight(1f),
+                            seamless = false
+                        )
+                    }
+
+                    if (status?.fridgeStatus != null) {
+                        // 有车载冰箱车型：左右 50:50 并排双子温控舱
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            ClimateOverviewCard(
+                                status = status,
+                                onOpenClimate = { showClimateControlBottomSheet = true },
+                                onQuickAcToggle = onControl,
+                                controlBusy = isRefreshing,
+                                compact = true,
+                                seamless = false,
+                                modifier = Modifier.weight(1f)
+                            )
+                            FridgeOverviewCard(
+                                fridgeStatus = status.fridgeStatus,
+                                onOpenFridgeControl = { showFridgeControlBottomSheet = true },
+                                onToggleFridge = { enable ->
+                                    val current = status.fridgeStatus
+                                    onFridgeControl(
+                                        com.leapauto.app.FridgeControlCommand(
+                                            enable = enable,
+                                            mode = current.mode,
+                                            temp = current.targetTemp,
+                                            style = current.style,
+                                            parkEnable = current.parkEnable,
+                                            durationSeconds = current.parkDurationHours * 3600,
+                                            cycles = if (current.parkCycles == 1) "2" else "1"
+                                        )
+                                    )
+                                },
+                                controlBusy = isRefreshing || activeControlCommand?.startsWith("fridge") == true,
+                                compact = true,
+                                seamless = false,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    } else {
+                        // 无车载冰箱车型：空调卡片全宽独占整行
+                        ClimateOverviewCard(
+                            status = status,
+                            onOpenClimate = { showClimateControlBottomSheet = true },
+                            onQuickAcToggle = onControl,
+                            controlBusy = isRefreshing,
+                            compact = false,
+                            seamless = false,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
 
                 EnergyHomePagerCard(
                     state = energyState,
                     vehicleTotalMileage = status?.totalMileage,
                     vehicleModel = vehicleDisplayModel.ifBlank { vehicleModel },
+                    seamless = false,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(dynamicCardHeight)
@@ -1334,6 +1537,28 @@ private fun HomeContent(
             locationSnapshot = locationSnapshot,
             onFetchParkingPhoto = onFetchParkingPhoto,
             onDismiss = { showParkingDetailDialog = false }
+        )
+    }
+
+    if (showFridgeControlBottomSheet && status?.fridgeStatus != null) {
+        FridgeControlBottomSheet(
+            onDismissRequest = { showFridgeControlBottomSheet = false },
+            fridgeStatus = status.fridgeStatus,
+            onApplyFridgeControl = onFridgeControl,
+            busy = isRefreshing || activeControlCommand?.startsWith("fridge") == true
+        )
+    }
+
+    if (showClimateControlBottomSheet) {
+        ClimateControlBottomSheet(
+            onDismissRequest = { showClimateControlBottomSheet = false },
+            status = status,
+            busy = isRefreshing,
+            hvacCapability = hvacCapability,
+            onControl = onControl,
+            onApplyClimateSettings = onApplyClimateSettings,
+            controlFeedback = controlFeedback,
+            onDismissControlFeedback = onDismissControlFeedback
         )
     }
 }
@@ -1418,8 +1643,8 @@ private fun MyContent(
     onCancelPinSetup: () -> Unit,
     widgetOpacity: Int,
     onWidgetOpacityChange: (Int) -> Unit,
-    widgetSensitiveActionVerificationEnabled: Boolean,
-    onWidgetSensitiveActionVerificationChange: (Boolean) -> Unit,
+    widgetBackgroundStyle: Int = SessionStore.WIDGET_BG_STYLE_DEFAULT,
+    onWidgetBackgroundStyleChange: (Int) -> Unit = {},
     widget4x2Actions: List<String> = Widget4x2ActionPolicy.DEFAULT_ACTIONS,
     onWidget4x2ActionsChange: (List<String>) -> Unit = {},
     appearanceMode: AppearanceMode,
@@ -1438,6 +1663,7 @@ private fun MyContent(
     vehicleImageVersion: Int = 0,
     onSelectCustomVehicleImage: (Uri) -> Unit = {},
     onResetCustomVehicleImage: () -> Unit = {},
+    showBluetoothKeyEntry: Boolean = false,
     onOpenBluetoothKey: () -> Unit = {},
     onLogout: () -> Unit = {}
 ) {
@@ -1502,7 +1728,9 @@ private fun MyContent(
             }
         }
 
-        BluetoothKeyEntry(onClick = onOpenBluetoothKey)
+        if (showBluetoothKeyEntry) {
+            BluetoothKeyEntry(onClick = onOpenBluetoothKey)
+        }
 
         VehicleCustomImageCard(
             vehicleVin = vehicleVin,
@@ -1513,10 +1741,7 @@ private fun MyContent(
 
         AppearanceModeCard(appearanceMode, onAppearanceModeChange)
         WidgetOpacityCard(widgetOpacity, onWidgetOpacityChange)
-        WidgetSensitiveActionVerificationCard(
-            enabled = widgetSensitiveActionVerificationEnabled,
-            onEnabledChange = onWidgetSensitiveActionVerificationChange
-        )
+        WidgetBackgroundStyleCard(widgetBackgroundStyle, onWidgetBackgroundStyleChange)
         Widget4x2ActionsCard(
             actions = widget4x2Actions,
             onActionsChange = onWidget4x2ActionsChange
@@ -1939,9 +2164,9 @@ private fun VehicleCustomImageCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+            .clip(RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        color = Color.Transparent,
+        color = MaterialTheme.glassSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = glassCardBorder(),
         shadowElevation = 0.dp
@@ -2313,46 +2538,6 @@ private fun WidgetOpacityCard(opacity: Int, onOpacityChange: (Int) -> Unit) {
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun WidgetSensitiveActionVerificationCard(
-    enabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        color = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = glassCardBorder(),
-        shadowElevation = 0.dp
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "小组件敏感操作验证",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    "解锁和开启后备箱前需验证密码或指纹",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = enabled,
-                onCheckedChange = onEnabledChange
-            )
         }
     }
 }
@@ -2827,7 +3012,7 @@ internal fun Modifier.frostedGlassCard(
                 )
             }
         }
-}
+    }
 
 @Composable
 internal fun solidDialogModifier(
@@ -2865,6 +3050,7 @@ fun VehicleHero(
     onSwitchVehicle: (String) -> Unit = {},
     onOpenHealthCheck: () -> Unit = {},
     onUpdateNickname: (String) -> Unit = {},
+    onRetryDownload3D: () -> Unit = {},
     onParkingClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -2882,19 +3068,35 @@ fun VehicleHero(
         mutableStateOf(h5Key != null && CarModel3DManager.isModelReady(context, h5Key))
     }
     var is3DRendered by remember(h5Key, vehicleImageVersion) { mutableStateOf(false) }
+    var is3DLoadFailed by remember(h5Key, vehicleImageVersion) { mutableStateOf(false) }
+    var is3DTimedOut by remember(h5Key, vehicleImageVersion) { mutableStateOf(false) }
+    var prefer2DModel by remember(vehicleVin) { mutableStateOf(false) }
+    val gear = status?.gearStatus?.trim()?.uppercase()
+    val isDrivingGear = gear in setOf("D", "D挡", "DRIVE", "前进", "3", "R", "R挡", "REVERSE", "倒车", "1")
+    val speedValue = status?.speed?.replace("km/h", "", ignoreCase = true)?.trim()?.toFloatOrNull() ?: 0f
+    val isActuallyDriving = isDrivingGear || status?.isDriving == true || speedValue > 0f
+    val show3D = !hasCustomImage && !prefer2DModel && is3DReady && h5Key != null && !is3DLoadFailed && !is3DTimedOut
+    val modelAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (is3DRendered) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 350),
+        label = "3d_fade"
+    )
 
-    androidx.compose.runtime.LaunchedEffect(h5Key, vehicleImageVersion) {
-        if (h5Key != null && !is3DReady) {
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                for (i in 0 until 40) {
-                    kotlinx.coroutines.delay(500)
-                    if (CarModel3DManager.isModelReady(context, h5Key)) {
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            is3DReady = true
-                        }
-                        break
+    // 15 秒超时倒计时：若 15 秒内未渲染完成，自动提示超时并提供重试与使用 2D 车图选项
+    androidx.compose.runtime.LaunchedEffect(h5Key, vehicleImageVersion, is3DLoadFailed, prefer2DModel) {
+        if (h5Key != null && !hasCustomImage && !prefer2DModel && !is3DRendered) {
+            is3DTimedOut = false
+            val completed = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
+                while (!is3DRendered && !is3DLoadFailed) {
+                    kotlinx.coroutines.delay(300)
+                    if (!is3DReady && CarModel3DManager.isModelReady(context, h5Key)) {
+                        is3DReady = true
                     }
                 }
+                true
+            }
+            if (completed == null && !is3DRendered) {
+                is3DTimedOut = true
             }
         }
     }
@@ -2924,104 +3126,155 @@ fun VehicleHero(
         VehicleHomeStatus.SocBand.WARNING -> if (isDark) MaterialTheme.statusWarn.copy(alpha = 0.20f) else MaterialTheme.statusWarn.copy(alpha = 0.12f)
         VehicleHomeStatus.SocBand.CRITICAL -> if (isDark) MaterialTheme.colorScheme.error.copy(alpha = 0.20f) else MaterialTheme.colorScheme.error.copy(alpha = 0.10f)
     }
-    val glassBorder = remember(isDark) {
-        val topLeftColor = if (isDark) Color.White.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.88f)
-        val middleColor = if (isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.45f)
-        val bottomRightColor = if (isDark) Color.White.copy(alpha = 0.05f) else Color.White.copy(alpha = 0.20f)
-        BorderStroke(
-            1.0.dp,
-            Brush.linearGradient(
-                colors = listOf(topLeftColor, middleColor, bottomRightColor),
-                start = Offset.Zero,
-                end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-            )
-        )
-    }
+
+    val pageBg = MaterialTheme.colorScheme.background
+    val heroCardShape = RoundedCornerShape(16.dp)
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
+            .clip(heroCardShape),
+        shape = heroCardShape,
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            // 真实毛玻璃折射层（微晶渐变基底 + 能量环境极光 + 展台漫反射）
-            androidx.compose.foundation.Canvas(modifier = Modifier.matchParentSize()) {
-                val w = size.width
-                val h = size.height
+        Box(modifier = Modifier.fillMaxWidth().clip(heroCardShape)) {
+            if (!show3D) {
+                // 真实毛玻璃折射层（全景微晶渐变基底 + 能量环境极光 + 展台漫反射）
+                androidx.compose.foundation.Canvas(modifier = Modifier.matchParentSize()) {
+                    val w = size.width
+                    val h = size.height
 
-                // 1. 基底磨砂微晶渐变（深浅色自适应半透）
-                val baseGradient = if (isDark) {
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFF222938).copy(alpha = 0.82f),
-                            Color(0xFF181E2A).copy(alpha = 0.70f),
-                            Color(0xFF131722).copy(alpha = 0.80f)
-                        ),
-                        start = Offset(0f, 0f),
-                        end = Offset(w, h)
-                    )
-                } else {
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFFFFFFFF).copy(alpha = 0.88f),
-                            Color(0xFFF6F8FC).copy(alpha = 0.72f),
-                            Color(0xFFFFFFFF).copy(alpha = 0.82f)
-                        ),
-                        start = Offset(0f, 0f),
-                        end = Offset(w, h)
-                    )
-                }
-                drawRect(brush = baseGradient)
+                    // 1. 基底磨砂微晶渐变（深浅色自适应半透）
+                    val baseGradient = if (isDark) {
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFF222938).copy(alpha = 0.82f),
+                                Color(0xFF181E2A).copy(alpha = 0.70f),
+                                Color(0xFF131722).copy(alpha = 0.80f)
+                            ),
+                            start = Offset(0f, 0f),
+                            end = Offset(w, h)
+                        )
+                    } else {
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFFFFFFFF).copy(alpha = 0.88f),
+                                Color(0xFFF6F8FC).copy(alpha = 0.72f),
+                                Color(0xFFFFFFFF).copy(alpha = 0.82f)
+                            ),
+                            start = Offset(0f, 0f),
+                            end = Offset(w, h)
+                        )
+                    }
+                    drawRect(brush = baseGradient)
 
-                // 2. 左上方能量环境极光晕（经毛玻璃折射后泛起的深层光晕）
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            auraColor,
-                            auraColor.copy(alpha = auraColor.alpha * 0.4f),
-                            Color.Transparent
+                    // 2. 左上方能量环境极光晕（经毛玻璃折射后泛起的深层光晕）
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                auraColor,
+                                auraColor.copy(alpha = auraColor.alpha * 0.4f),
+                                Color.Transparent
+                            ),
+                            center = Offset(w * 0.18f, h * 0.22f),
+                            radius = w * 0.45f
                         ),
                         center = Offset(w * 0.18f, h * 0.22f),
                         radius = w * 0.45f
-                    ),
-                    center = Offset(w * 0.18f, h * 0.22f),
-                    radius = w * 0.45f
+                    )
+
+                    // 3. 车模下方柔光漫反射（提升立体浮空展台感）
+                    val stageLightColor = if (isDark) Color(0xFF384358).copy(alpha = 0.18f) else Color(0xFFFFFFFF).copy(alpha = 0.45f)
+                    drawOval(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                stageLightColor,
+                                Color.Transparent
+                            ),
+                            center = Offset(w * 0.50f, h * 0.78f),
+                            radius = w * 0.50f
+                        ),
+                        topLeft = Offset(0f, h * 0.55f),
+                        size = androidx.compose.ui.geometry.Size(w, h * 0.45f)
+                    )
+                }
+
+                // 2D 展台底部地平线地雾消融层
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    pageBg.copy(alpha = 0.50f),
+                                    pageBg
+                                )
+                            )
+                        )
+                )
+            } else {
+                // 1. 3D 原厂 4K 全景天幕完全铺满整张首卡视口（浑然天成无任何画中画黑边断层）
+                val isDarkTheme = LocalAppDarkTheme.current
+                CarModel3DView(
+                    h5Key = h5Key!!,
+                    modelParam = cachedMeta?.modelParam,
+                    status = status,
+                    vin = vehicleVin,
+                    isCruising = isActuallyDriving,
+                    isDark = isDarkTheme,
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(heroCardShape)
+                        .graphicsLayer { alpha = modelAlpha },
+                    onReady = {
+                        is3DRendered = true
+                        is3DLoadFailed = false
+                    },
+                    onError = {
+                        is3DRendered = false
+                        is3DLoadFailed = true
+                    },
+                    onCarClick = null
                 )
 
-                // 3. 车模下方柔光漫反射（提升立体浮空展台感）
-                val stageLightColor = if (isDark) Color(0xFF384358).copy(alpha = 0.18f) else Color(0xFFFFFFFF).copy(alpha = 0.45f)
-                drawOval(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            stageLightColor,
-                            Color.Transparent
-                        ),
-                        center = Offset(w * 0.50f, h * 0.78f),
-                        radius = w * 0.50f
-                    ),
-                    topLeft = Offset(0f, h * 0.55f),
-                    size = androidx.compose.ui.geometry.Size(w, h * 0.45f)
+                // 2. 顶部微晶 HUD 渐变保护层（确保天幕上方的数据文字字字清晰锐利）
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp)
+                        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    pageBg.copy(alpha = if (isDark) 0.65f else 0.55f),
+                                    pageBg.copy(alpha = if (isDark) 0.22f else 0.16f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
                 )
 
-                // 4. 顶端高光玻璃折射微横光（极轻 0.5dp 顶层晶边）
-                drawLine(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            if (isDark) Color.White.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.90f),
-                            Color.Transparent
-                        ),
-                        startX = w * 0.10f,
-                        endX = w * 0.90f
-                    ),
-                    start = Offset(w * 0.10f, 0.5f),
-                    end = Offset(w * 0.90f, 0.5f),
-                    strokeWidth = 1f
+                // 3. 底部地平线地雾消融层（从透明自然过渡到底色，杜绝生硬地表切线）
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    pageBg.copy(alpha = 0.45f),
+                                    pageBg
+                                )
+                            )
+                        )
                 )
             }
 
@@ -3034,7 +3287,8 @@ fun VehicleHero(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 20.dp, end = 16.dp),
+                    .padding(start = 20.dp, end = 16.dp)
+                    .zIndex(2f),
                 verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -3106,9 +3360,44 @@ fun VehicleHero(
                         maxLines = 1
                     )
 
-                    // 核心数据组整体上提，大字与下方电量收紧至精致的 3~4dp 间隙
-                    val mileageDisplayColor = if (isRangeExtender) MaterialTheme.colorScheme.onSurface else rangeColor
-                    val unitDisplayColor = if (isRangeExtender) MaterialTheme.colorScheme.onSurfaceVariant else rangeColor
+                    // 方案 A 智能座舱极光双色微晶体系：
+                    // 1. 里程大字统一为纯净微晶高光白 (深色) / 深邃科技黑曜灰 (浅色)
+                    val mileageDisplayColor = MaterialTheme.colorScheme.onSurface
+                    val unitDisplayColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+                    // 2. 纯电与增程纯电百分比：极光薄荷青 (深色 #00E676 / 浅色 #00B42A) / 警示色
+                    val auroraMintGreen = if (isDark) Color(0xFF00E676) else Color(0xFF00B42A)
+                    val electricSocColor = when (VehicleHomeStatus.socBand(normalizedSoc)) {
+                        VehicleHomeStatus.SocBand.NORMAL -> auroraMintGreen
+                        VehicleHomeStatus.SocBand.WARNING -> MaterialTheme.statusWarn
+                        VehicleHomeStatus.SocBand.CRITICAL -> MaterialTheme.colorScheme.error
+                    }
+
+                    // 3. 纯电微晶流光渐变（零跑蓝 ➔ 极光能量绿）
+                    val electricGradientColors = when (VehicleHomeStatus.socBand(normalizedSoc)) {
+                        VehicleHomeStatus.SocBand.NORMAL -> if (isDark) {
+                            listOf(Color(0xFF0066FF), Color(0xFF00E676))
+                        } else {
+                            listOf(Color(0xFF0052D9), Color(0xFF00B42A))
+                        }
+                        VehicleHomeStatus.SocBand.WARNING -> listOf(Color(0xFFFF9800), Color(0xFFFFB74D))
+                        VehicleHomeStatus.SocBand.CRITICAL -> listOf(Color(0xFFE53935), Color(0xFFFF5252))
+                    }
+
+                    // 4. 增程燃油：科技暖金双色微晶体系
+                    val fuelSocValue = status?.fuelSoc?.trim()?.removeSuffix("%")?.toIntOrNull() ?: 100
+                    val fuelAmberGold = if (isDark) Color(0xFFFFB300) else Color(0xFFD97706)
+                    val fuelColor = when {
+                        fuelSocValue <= 10 -> MaterialTheme.colorScheme.error
+                        fuelSocValue <= 20 -> MaterialTheme.statusWarn
+                        else -> fuelAmberGold
+                    }
+                    val fuelGradientColors = when {
+                        fuelSocValue <= 10 -> listOf(Color(0xFFE53935), Color(0xFFFF5252))
+                        fuelSocValue <= 20 -> listOf(Color(0xFFFF5722), Color(0xFFFF9800))
+                        else -> if (isDark) listOf(Color(0xFFFF8F00), Color(0xFFFFCA28))
+                                else listOf(Color(0xFFD97706), Color(0xFFF59E0B))
+                    }
 
                     Column(
                         modifier = Modifier
@@ -3148,7 +3437,7 @@ fun VehicleHero(
                                     fontSize = 13.sp,
                                     lineHeight = 14.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = rangeColor,
+                                    color = electricSocColor,
                                     modifier = Modifier.padding(bottom = 1.5.dp)
                                 )
                             }
@@ -3162,15 +3451,6 @@ fun VehicleHero(
                             ) ?: "--"
                             val fuelMiles = status?.fuelMileage?.trim()?.takeIf { it.isNotEmpty() } ?: "--"
                             val fSoc = VehicleStatusMapper.displayPreciseSoc(status?.fuelSoc) ?: "--"
-
-                            val electricColor = rangeColor
-                            val fuelColor = rangeColorForSoc(
-                                soc = status?.fuelSoc,
-                                fallback = MaterialTheme.colorScheme.onSurfaceVariant,
-                                normal = MaterialTheme.statusGood,
-                                warning = MaterialTheme.statusWarn,
-                                critical = MaterialTheme.colorScheme.error
-                            )
 
                             Column(
                                 modifier = Modifier.padding(top = 1.dp),
@@ -3187,7 +3467,8 @@ fun VehicleHero(
                                     ) {
                                         EnergyCapsuleProgressBar(
                                             progress = chargeProgress(normalizedSoc),
-                                            color = electricColor,
+                                            color = electricSocColor,
+                                            gradientColors = electricGradientColors,
                                             isCharging = status?.chargeState == 1,
                                             modifier = Modifier.width(44.dp).height(4.5.dp)
                                         )
@@ -3197,7 +3478,7 @@ fun VehicleHero(
                                             fontSize = 10.sp,
                                             lineHeight = 12.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = electricColor.copy(alpha = 0.90f),
+                                            color = electricSocColor.copy(alpha = 0.90f),
                                             maxLines = 1,
                                             softWrap = false
                                         )
@@ -3209,6 +3490,7 @@ fun VehicleHero(
                                         EnergyCapsuleProgressBar(
                                             progress = chargeProgress(status?.fuelSoc),
                                             color = fuelColor,
+                                            gradientColors = fuelGradientColors,
                                             isCharging = false,
                                             modifier = Modifier.width(44.dp).height(4.5.dp)
                                         )
@@ -3240,7 +3522,7 @@ fun VehicleHero(
                                             painter = painterResource(R.drawable.ic_hybrid_electric),
                                             contentDescription = null,
                                             modifier = Modifier.size(11.dp),
-                                            tint = electricColor
+                                            tint = electricSocColor
                                         )
                                         Spacer(Modifier.width(3.dp))
                                         Text(
@@ -3248,7 +3530,7 @@ fun VehicleHero(
                                             fontSize = 11.sp,
                                             lineHeight = 13.sp,
                                             fontWeight = FontWeight.Normal,
-                                            color = electricColor,
+                                            color = electricSocColor,
                                             maxLines = 1,
                                             softWrap = false
                                         )
@@ -3291,9 +3573,10 @@ fun VehicleHero(
                             ) {
                                 EnergyCapsuleProgressBar(
                                     progress = chargeProgress(normalizedSoc),
-                                    color = rangeColor,
+                                    color = electricSocColor,
+                                    gradientColors = electricGradientColors,
                                     isCharging = status?.chargeState == 1,
-                                    modifier = Modifier.width(110.dp).height(5.dp)
+                                    modifier = Modifier.width(110.dp).height(4.5.dp)
                                 )
                                 ChargingCenterPill(
                                     isCharging = status?.chargeState == 1,
@@ -3318,9 +3601,10 @@ fun VehicleHero(
                             onClick = onOpenAccount,
                             modifier = Modifier.size(28.dp)
                         ) {
-                            Image(
-                                painter = painterResource(R.drawable.ic_settings_tight),
+                            Icon(
+                                painter = painterResource(R.drawable.ic_settings_gear),
                                 contentDescription = "设置",
+                                tint = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -3331,27 +3615,28 @@ fun VehicleHero(
                         Spacer(Modifier.height(2.dp))
                         Row(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(5.dp))
                                 .clickable(onClick = onAddressClick)
                                 .background(MaterialTheme.glassInsetSurface.copy(alpha = 0.85f))
                                 .border(
                                     0.5.dp,
                                     MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f),
-                                    RoundedCornerShape(6.dp)
+                                    RoundedCornerShape(5.dp)
                                 )
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                                .padding(horizontal = 5.dp, vertical = 0.5.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            horizontalArrangement = Arrangement.spacedBy(2.5.dp)
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_location_pin),
                                 contentDescription = null,
-                                modifier = Modifier.size(11.dp),
+                                modifier = Modifier.size(10.dp),
                                 tint = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = displayAddress,
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelSmall.copy(lineHeight = 11.sp),
+                                fontSize = 10.5.sp,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
@@ -3369,9 +3654,9 @@ fun VehicleHero(
                     )
                     detailedDrivingState?.let { drivingState ->
                         val isParked = drivingState.label == "已驻车"
-                        Spacer(Modifier.height(if (address != null) 4.dp else 2.dp))
+                        Spacer(Modifier.height(if (address != null) 3.dp else 2.dp))
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
+                            shape = RoundedCornerShape(5.dp),
                             color = if (drivingState.isMoving) {
                                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.60f)
                             } else {
@@ -3388,21 +3673,22 @@ fun VehicleHero(
                             ),
                             modifier = if (isParked) {
                                 Modifier
-                                    .clip(RoundedCornerShape(6.dp))
+                                    .clip(RoundedCornerShape(5.dp))
                                     .clickable(onClick = onParkingClick)
                             } else Modifier
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 0.5.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
                                 if (drivingState.isMoving) {
                                     DrivingBreathingDot()
                                 }
                                 Text(
                                     text = drivingState.label,
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.labelSmall.copy(lineHeight = 11.sp),
+                                    fontSize = 10.5.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1
                                 )
@@ -3410,7 +3696,7 @@ fun VehicleHero(
                                     Icon(
                                         painter = painterResource(R.drawable.ic_phosphor_caret_right),
                                         contentDescription = "查看驻车实景与位置",
-                                        modifier = Modifier.size(11.dp),
+                                        modifier = Modifier.size(9.dp),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -3420,60 +3706,189 @@ fun VehicleHero(
                 }
             }
 
-            // ====== 2. 100% 原始饱满比例车身主图 / 3D 旋转交互车模 ======
-            val show3D = !hasCustomImage && is3DReady && h5Key != null
-            val bitmapAlpha by androidx.compose.animation.core.animateFloatAsState(
-                targetValue = if (show3D && is3DRendered) 0f else 1f,
-                animationSpec = androidx.compose.animation.core.tween(durationMillis = 400),
-                label = "2d_fade"
-            )
-            val modelAlpha by androidx.compose.animation.core.animateFloatAsState(
-                targetValue = if (show3D && is3DRendered) 1f else 0f,
-                animationSpec = androidx.compose.animation.core.tween(durationMillis = 400),
-                label = "3d_fade"
-            )
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .offset(y = (-16).dp)
-                    .height(150.dp)
-                    .clip(RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                // 1. 底层 2D 静态渲染官图（极速秒开垫底）
-                if (remoteBitmap != null) {
+            // ====== 2. 底部展台区域（若开启 3D 则留出开阔舞台，2D 则展示静态图） ======
+            if (!show3D && remoteBitmap != null && (!is3DLoadFailed || hasCustomImage || prefer2DModel)) {
+                Box(modifier = Modifier.fillMaxWidth()) {
                     Image(
                         bitmap = remoteBitmap,
                         contentDescription = "车身展示主图",
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(150.dp)
-                            .padding(horizontal = 16.dp)
-                            .graphicsLayer { alpha = bitmapAlpha }
-                            .clickable(enabled = !show3D, onClick = onOpenHealthCheck)
+                            .height(218.dp)
+                            .padding(horizontal = 10.dp)
+                            .clickable(onClick = onOpenHealthCheck)
                     )
+                    // 若车主主动切换为 2D 视图，提供随时轻触切回 3D 的快捷入口
+                    if (prefer2DModel && h5Key != null && !hasCustomImage) {
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 8.dp, end = 12.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    prefer2DModel = false
+                                    is3DTimedOut = false
+                                    is3DLoadFailed = false
+                                    onRetryDownload3D()
+                                },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isDark) Color(0xFF1E2330).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.88f),
+                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
+                            shadowElevation = 0.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_phosphor_arrow_clockwise),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(11.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    "切回3D",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
                 }
+            } else {
+                // 3D 展台区域：包含高度支撑与加载中/加载失败/15秒超时重试状态提示
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(155.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // 当 3D 尚未渲染就绪且无自定义图且未主动偏好 2D 时展示加载提示或操作选项
+                    if (!is3DRendered && h5Key != null && !hasCustomImage && !prefer2DModel) {
+                        if (is3DLoadFailed || is3DTimedOut) {
+                            Surface(
+                                shape = RoundedCornerShape(18.dp),
+                                color = if (isDark) Color(0xFF181C26).copy(alpha = 0.90f) else Color.White.copy(alpha = 0.92f),
+                                border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                                shadowElevation = 0.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text(
+                                        if (is3DTimedOut) "3D车模加载超时 (15秒)" else "3D车模加载失败",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // 按钮 1：重新下载 / 重试
+                                        Surface(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .clickable {
+                                                    is3DTimedOut = false
+                                                    is3DLoadFailed = false
+                                                    onRetryDownload3D()
+                                                },
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.50f)),
+                                            shadowElevation = 0.dp
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                            ) {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.ic_phosphor_arrow_clockwise),
+                                                    contentDescription = "重试下载",
+                                                    modifier = Modifier.size(13.dp),
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                                Text(
+                                                    "重新下载3D车模",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        }
 
-                // 2. 顶层 3D 交互三维车模（支持手势 360° 前后左右旋转，就绪后丝滑淡入）
-                if (show3D) {
-                    CarModel3DView(
-                        h5Key = h5Key!!,
-                        modelParam = cachedMeta?.modelParam,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(150.dp)
-                            .padding(horizontal = 4.dp)
-                            .graphicsLayer { alpha = modelAlpha },
-                        onReady = { is3DRendered = true },
-                        onError = { is3DRendered = false },
-                        onCarClick = onOpenHealthCheck
-                    )
+                                        // 按钮 2：使用 2D 车图
+                                        Surface(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .clickable {
+                                                    prefer2DModel = true
+                                                },
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                                            shadowElevation = 0.dp
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                            ) {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.ic_phosphor_car),
+                                                    contentDescription = "使用2D车图",
+                                                    modifier = Modifier.size(13.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    "使用2D车图",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isDark) Color(0xFF131722).copy(alpha = 0.70f) else Color.White.copy(alpha = 0.75f),
+                                border = BorderStroke(0.5.dp, if (isDark) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.08f)),
+                                shadowElevation = 0.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        "3D车模加载中...",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
-        }
+    }
 
         if (showVehicleSelectorDialog && availableVehicles.size > 1) {
             VehicleSelectorDialog(
@@ -3744,28 +4159,29 @@ private fun ChargingCenterPill(
         modifier = Modifier.clickable(onClick = onClick)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.5.dp),
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
+            horizontalArrangement = Arrangement.spacedBy(2.5.dp)
         ) {
             if (isCharging) {
                 Icon(
                     painter = painterResource(R.drawable.ic_widget_charging_bolt),
                     contentDescription = "充电中",
-                    modifier = Modifier.size(11.dp),
+                    modifier = Modifier.size(10.dp),
                     tint = MaterialTheme.statusGood
                 )
             }
             Text(
                 text = labelText,
-                fontSize = 11.sp,
+                fontSize = 10.5.sp,
+                lineHeight = 11.sp,
                 fontWeight = FontWeight.Medium,
                 color = if (isCharging) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
             )
             Icon(
                 painter = painterResource(R.drawable.ic_phosphor_caret_right),
                 contentDescription = null,
-                modifier = Modifier.size(10.dp),
+                modifier = Modifier.size(9.dp),
                 tint = if (isCharging) MaterialTheme.statusGood.copy(alpha = 0.80f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f)
             )
         }
@@ -3775,22 +4191,22 @@ private fun ChargingCenterPill(
 @Composable
 private fun EnergyCapsuleProgressBar(
     progress: Float,
-    color: Color,
+    color: Color = MaterialTheme.statusGood,
+    gradientColors: List<Color>? = null,
     isCharging: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val clampedProgress = progress.coerceIn(0f, 1f)
     val isDark = LocalAppDarkTheme.current
 
-    // 底槽与已消耗背景：深色凹槽基底 + 微量语义底透 + 晶体高光微轮廓，清晰界定整个胶囊形态与已消耗区间
-    val slotBaseColor = if (isDark) Color(0xFF10141C).copy(alpha = 0.95f) else Color(0xFFE4E8F0).copy(alpha = 0.95f)
-    val consumedTrackColor = color.copy(alpha = if (isDark) 0.16f else 0.12f)
+    // 底槽：告别死黑槽！深色模式下使用 12% 半透微晶白槽，浅色模式下使用 8% 柔和冰雾槽，隐隐透出背景天幕
+    val slotBaseColor = if (isDark) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.08f)
     val trackBorderColor = if (isDark) Color.White.copy(alpha = 0.18f) else Color.Black.copy(alpha = 0.10f)
 
     val pulseAlpha = if (isCharging) {
         val transition = rememberInfiniteTransition(label = "chargingPulse")
         val alpha by transition.animateFloat(
-            initialValue = 0.55f,
+            initialValue = 0.60f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(
                 animation = tween(1100, easing = FastOutSlowInEasing),
@@ -3802,19 +4218,25 @@ private fun EnergyCapsuleProgressBar(
     } else {
         1f
     }
-    val progressBrush = Brush.horizontalGradient(
-        listOf(
-            color.copy(alpha = 0.80f * pulseAlpha),
-            color.copy(alpha = pulseAlpha)
+
+    val progressBrush = if (!gradientColors.isNullOrEmpty()) {
+        Brush.horizontalGradient(
+            gradientColors.map { it.copy(alpha = it.alpha * pulseAlpha) }
         )
-    )
+    } else {
+        Brush.horizontalGradient(
+            listOf(
+                color.copy(alpha = 0.80f * pulseAlpha),
+                color.copy(alpha = pulseAlpha)
+            )
+        )
+    }
 
     Box(
         modifier = modifier
-            .height(5.dp)
+            .height(4.5.dp)
             .clip(CircleShape)
             .background(slotBaseColor)
-            .background(consumedTrackColor)
             .border(0.5.dp, trackBorderColor, CircleShape)
     ) {
         if (clampedProgress > 0f) {
@@ -3964,7 +4386,8 @@ private fun QuickVehicleActions(
     status: VehicleStatus?,
     locationSnapshot: VehicleLocationSnapshot?,
     onControl: (String) -> Unit,
-    activeControlCommand: String? = null
+    activeControlCommand: String? = null,
+    seamless: Boolean = false
 ) {
     val context = LocalContext.current
     val sessionStore = remember(context) { SessionStore(context) }
@@ -3978,7 +4401,7 @@ private fun QuickVehicleActions(
     var sunshadeButtonWidth by remember { mutableStateOf(0f) }
     var sunshadeButtonHeight by remember { mutableStateOf(0f) }
     val trunkState = status?.trunkState ?: TrunkState.UNKNOWN
-    val commandsPerPage = 4
+    val commandsPerPage = 5
     val availableCommands = remember(vehicleModel, status?.sentryMode) {
         val supportsWindowGroup = !vehicleModel.contains("T03", ignoreCase = true)
         val supportsFrunk = VehicleQuickControlCapabilities.supportsFrunk(vehicleModel)
@@ -4023,10 +4446,18 @@ private fun QuickVehicleActions(
         saved = savedOrder,
         available = availableCommands.map { it.name }
     ).mapNotNull { id -> availableCommands.firstOrNull { it.name == id } }
+    // 常驻末尾的【自定义 ✎】编辑按钮，永远排在快捷操作最后一位，不参与排序
+    val displayCommands = remember(orderedCommands) {
+        orderedCommands + Cmd(
+            name = "quickActionCustomize",
+            label = "自定义",
+            iconRes = R.drawable.ic_edit
+        )
+    }
     val lockPresentation = VehicleHomeStatus.lockButtonPresentation(status?.locked)
     val windowOpen = status?.windowStatusAvailable == true && status.openWindows.isNotEmpty()
     val trunkOpen = trunkState == TrunkState.OPEN
-    val pageCount = (orderedCommands.size + commandsPerPage - 1) / commandsPerPage
+    val pageCount = (displayCommands.size + commandsPerPage - 1) / commandsPerPage
     val pagerState = rememberPagerState(pageCount = { pageCount })
 
     fun openEditor() {
@@ -4087,32 +4518,36 @@ private fun QuickVehicleActions(
     }
 
     val primaryColor = MaterialTheme.colorScheme.primary
+    val dockShape = RoundedCornerShape(16.dp)
+
     Box(modifier = Modifier.fillMaxWidth()) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .frostedGlassCard(
-                    shape = RoundedCornerShape(16.dp),
+                    shape = dockShape,
                     auraColor = primaryColor.copy(alpha = 0.08f),
                     auraCenter = Offset(0.5f, 0.5f)
                 ),
-            shape = RoundedCornerShape(16.dp),
+            shape = dockShape,
             color = Color.Transparent,
             contentColor = MaterialTheme.colorScheme.onSurface,
             border = glassCardBorder(),
             shadowElevation = 0.dp
         ) {
             Column(
-                Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = if (pageCount > 1) 8.dp else 12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = if (pageCount > 1) 4.dp else 6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.fillMaxWidth().height(84.dp),
+                    modifier = Modifier.fillMaxWidth().height(72.dp),
                     beyondViewportPageCount = 1
                 ) { page ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        val pageCommands = orderedCommands.drop(page * commandsPerPage).take(commandsPerPage)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        val pageCommands = displayCommands.drop(page * commandsPerPage).take(commandsPerPage)
                         pageCommands.forEach { command ->
                             val cmdInProgress = QuickCommandExecutionPolicy.isCommandInProgress(command.name, activeControlCommand)
                             val label = if (command.name == "trunk") {
@@ -4122,13 +4557,24 @@ private fun QuickVehicleActions(
                                     TrunkState.UNKNOWN -> "后备箱状态未知"
                                 }
                             } else command.label
-                            if (command.name == "windowGroup") {
+                            if (command.name == "quickActionCustomize") {
+                                // 独立常驻末尾的【自定义 ✎】编辑按钮（不参与排序）
+                                QuickVehicleButton(
+                                    label = "自定义",
+                                    iconRes = R.drawable.ic_edit,
+                                    inProgress = false,
+                                    isSensitive = false,
+                                    onClick = { if (!editing) openEditor() },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            } else if (command.name == "windowGroup") {
                                 Box(modifier = Modifier.weight(1f)) {
                                     QuickVehicleButton(
                                         label = label,
                                         iconRes = command.iconRes,
                                         warning = windowOpen,
                                         inProgress = cmdInProgress,
+                                        isSensitive = false,
                                         onClick = {
                                             if (!editing) {
                                                 sunshadeMenuExpanded = false
@@ -4143,8 +4589,7 @@ private fun QuickVehicleActions(
                                                 windowButtonTopLeft = coordinates.positionInWindow()
                                                 windowButtonWidth = coordinates.size.width.toFloat()
                                                 windowButtonHeight = coordinates.size.height.toFloat()
-                                            },
-                                        onLongClick = if (!editing) ::openEditor else null
+                                            }
                                     )
                                     if (windowOpen) {
                                         WindowBadge(modifier = Modifier.align(Alignment.TopEnd))
@@ -4155,6 +4600,7 @@ private fun QuickVehicleActions(
                                     label = label,
                                     iconRes = command.iconRes,
                                     inProgress = cmdInProgress,
+                                    isSensitive = false,
                                     onClick = {
                                         if (!editing) {
                                             windowMenuExpanded = false
@@ -4167,33 +4613,34 @@ private fun QuickVehicleActions(
                                             sunshadeButtonTopLeft = coordinates.positionInWindow()
                                             sunshadeButtonWidth = coordinates.size.width.toFloat()
                                             sunshadeButtonHeight = coordinates.size.height.toFloat()
-                                        },
-                                    onLongClick = if (!editing) ::openEditor else null
+                                        }
                                 )
                             } else if (command.name == "trunk") {
+                                val isSensitiveTrunkOpen = trunkState != TrunkState.OPEN
                                 Box(modifier = Modifier.weight(1f)) {
                                     QuickVehicleButton(
                                         label = label,
                                         iconRes = command.iconRes,
                                         warning = trunkOpen,
                                         inProgress = cmdInProgress,
+                                        isSensitive = isSensitiveTrunkOpen,
                                         onClick = {
                                             if (!editing) {
-                                                when (trunkState) {
-                                                    TrunkState.CLOSED -> onControl("trunkOpen")
-                                                    TrunkState.OPEN -> onControl("trunkClose")
-                                                    TrunkState.UNKNOWN -> Toast.makeText(
-                                                        context,
-                                                        "请先刷新后备箱状态",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
+                                                if (trunkOpen) {
+                                                    onControl("trunkClose")
+                                                } else {
+                                                    showUpperToast(context, SensitiveControlPolicy.SENSITIVE_ACTION_HINT)
                                                 }
+                                            }
+                                        },
+                                        onLongPressConfirm = {
+                                            if (!editing && !trunkOpen) {
+                                                onControl("trunkOpen")
                                             }
                                         },
                                         iconTint = if (trunkOpen) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                                         labelTint = if (trunkOpen) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        onLongClick = if (!editing) ::openEditor else null
+                                        modifier = Modifier.fillMaxWidth()
                                     )
                                     if (trunkOpen) {
                                         WindowBadge(modifier = Modifier.align(Alignment.TopEnd))
@@ -4205,32 +4652,29 @@ private fun QuickVehicleActions(
                                     "windowOpen" -> windowOpen
                                     else -> false
                                 }
+                                val isFrunkOpen = command.name == "frunkOpen"
                                 QuickVehicleButton(
                                     label = label,
                                     iconRes = command.iconRes,
                                     warning = isWarningCmd,
                                     inProgress = cmdInProgress,
+                                    isSensitive = isFrunkOpen,
                                     onClick = {
                                         if (!editing) {
-                                            when (command.name) {
-                                                "trunk" -> {
-                                                    when (trunkState) {
-                                                        TrunkState.CLOSED -> onControl("trunkOpen")
-                                                        TrunkState.OPEN -> onControl("trunkClose")
-                                                        TrunkState.UNKNOWN -> Toast.makeText(
-                                                            context,
-                                                            "请先刷新后备箱状态",
-                                                            Toast.LENGTH_SHORT
-                                                        ).show()
-                                                    }
+                                            if (isFrunkOpen) {
+                                                showUpperToast(context, SensitiveControlPolicy.SENSITIVE_ACTION_HINT)
+                                            } else {
+                                                when (command.name) {
+                                                    "sentry" -> onControl(SentryModeControlPolicy.commandName(status?.sentryMode))
+                                                    else -> onControl(command.name)
                                                 }
-                                                "sentry" -> onControl(SentryModeControlPolicy.commandName(status?.sentryMode))
-                                                else -> onControl(command.name)
                                             }
                                         }
                                     },
-                                    modifier = Modifier.weight(1f),
-                                    onLongClick = if (!editing) ::openEditor else null
+                                    onLongPressConfirm = if (isFrunkOpen) {
+                                        { if (!editing) onControl("frunkOpen") }
+                                    } else null,
+                                    modifier = Modifier.weight(1f)
                                 )
                             }
                         }
@@ -4474,9 +4918,11 @@ private fun QuickVehicleButton(
     iconRes: Int,
     warning: Boolean = false,
     inProgress: Boolean = false,
+    isSensitive: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier,
     onLongClick: (() -> Unit)? = null,
+    onLongPressConfirm: (() -> Unit)? = null,
     iconTint: Color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
     labelTint: Color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
 ) {
@@ -4491,6 +4937,9 @@ private fun QuickVehicleButton(
         label = "quickBtnScale"
     )
     val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
+    var isHolding by remember { mutableStateOf(false) }
+    val holdProgress = remember { androidx.compose.animation.core.Animatable(0f) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "inProgressPulse")
     val pulseAlpha by infiniteTransition.animateFloat(
@@ -4503,70 +4952,127 @@ private fun QuickVehicleButton(
         label = "pulseAlpha"
     )
 
+    val isDark = LocalAppDarkTheme.current
     val isWarning = warning || iconTint == MaterialTheme.colorScheme.error
     val circleBg = when {
-        inProgress -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f * pulseAlpha)
-        isWarning -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.30f)
-        isPressed -> MaterialTheme.colorScheme.surfaceContainerHighest
-        else -> MaterialTheme.colorScheme.surfaceContainerHigh
+        inProgress -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f * pulseAlpha)
+        isWarning -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+        isPressed || isHolding -> MaterialTheme.glassInsetSurface.copy(alpha = 0.90f)
+        else -> MaterialTheme.glassSurface.copy(alpha = if (isDark) 0.85f else 0.92f)
     }
     val circleBorder = when {
         inProgress -> BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = pulseAlpha))
         isWarning -> BorderStroke(0.8.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
-        else -> BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isPressed) 0.6f else 0.35f))
+        else -> BorderStroke(
+            0.8.dp,
+            if (isDark) Color.White.copy(alpha = if (isPressed || isHolding) 0.30f else 0.16f)
+            else Color.White.copy(alpha = if (isPressed || isHolding) 0.98f else 0.85f)
+        )
+    }
+
+    val buttonTouchModifier = if (isSensitive && !inProgress) {
+        Modifier.pointerInput(Unit) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false)
+                var completed = false
+                val job = coroutineScope.launch {
+                    isHolding = true
+                    holdProgress.snapTo(0f)
+                    holdProgress.animateTo(
+                        targetValue = 1f,
+                        animationSpec = tween(
+                            durationMillis = SensitiveControlPolicy.LONG_PRESS_HOLD_DURATION_MS.toInt(),
+                            easing = LinearEasing
+                        )
+                    )
+                    completed = true
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongPressConfirm?.invoke()
+                }
+                val up = waitForUpOrCancellation()
+                job.cancel()
+                coroutineScope.launch {
+                    holdProgress.snapTo(0f)
+                    isHolding = false
+                }
+                if (up != null && !completed) {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick()
+                }
+            }
+        }
+    } else {
+        Modifier.combinedClickable(
+            interactionSource = interactionSource,
+            indication = null,
+            enabled = !inProgress,
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            },
+            onLongClick = onLongClick?.let { longClick ->
+                {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    longClick()
+                }
+            }
+        )
     }
 
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
-        Surface(
-            modifier = Modifier
-                .size(54.dp)
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
+        Box(contentAlignment = Alignment.Center) {
+            // 高敏感操作 1.2 秒长按环形外圈蓄力进度光环
+            if (isSensitive && isHolding) {
+                val successColor = MaterialTheme.statusGood
+                val chargingColor = MaterialTheme.colorScheme.primary
+                Canvas(modifier = Modifier.size(50.dp)) {
+                    val strokeW = 2.5.dp.toPx()
+                    drawArc(
+                        color = if (holdProgress.value >= 1f) successColor else chargingColor,
+                        startAngle = -90f,
+                        sweepAngle = holdProgress.value * 360f,
+                        useCenter = false,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeW, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                    )
                 }
-                .combinedClickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    enabled = !inProgress,
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onClick()
-                    },
-                    onLongClick = onLongClick?.let { longClick ->
-                        {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            longClick()
-                        }
+            }
+            Surface(
+                modifier = Modifier
+                    .size(44.dp)
+                    .graphicsLayer {
+                        scaleX = if (isHolding) 0.94f else scale
+                        scaleY = if (isHolding) 0.94f else scale
                     }
-                ),
-            shape = CircleShape,
-            color = circleBg,
-            border = circleBorder
-        ) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                if (inProgress) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Icon(
-                        painterResource(iconRes),
-                        contentDescription = label,
-                        tint = iconTint,
-                        modifier = Modifier.size(22.dp)
-                    )
+                    .then(buttonTouchModifier),
+                shape = CircleShape,
+                color = circleBg,
+                border = circleBorder
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    if (inProgress) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(19.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            painterResource(iconRes),
+                            contentDescription = label,
+                            tint = iconTint,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
                 }
             }
         }
         Text(
             label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
             color = if (inProgress) MaterialTheme.colorScheme.primary else labelTint,
             fontWeight = if (isWarning || inProgress) FontWeight.Bold else FontWeight.Medium,
             maxLines = 1
@@ -4574,8 +5080,41 @@ private fun QuickVehicleButton(
     }
 }
 
+/** 将原始系统 Toast 上移至屏幕中上部（快捷操作栏正上方），确保视线清晰可见且不被手掌遮挡。 */
+private fun showUpperToast(context: Context, text: String) {
+    try {
+        val toast = Toast(context.applicationContext)
+        val textView = android.widget.TextView(context).apply {
+            this.text = text
+            setTextColor(android.graphics.Color.WHITE)
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13.5f)
+            setPadding(42, 22, 42, 22)
+            val bg = android.graphics.drawable.GradientDrawable().apply {
+                setColor(android.graphics.Color.parseColor("#E620242F"))
+                cornerRadius = 32f
+                setStroke(2, android.graphics.Color.parseColor("#40FFFFFF"))
+            }
+            background = bg
+        }
+        @Suppress("DEPRECATION")
+        toast.view = textView
+        toast.duration = Toast.LENGTH_SHORT
+        toast.setGravity(android.view.Gravity.CENTER, 0, -220)
+        toast.show()
+    } catch (_: Throwable) {
+        val fallback = Toast.makeText(context, text, Toast.LENGTH_SHORT)
+        fallback.setGravity(android.view.Gravity.CENTER, 0, -220)
+        fallback.show()
+    }
+}
+
 @Composable
-private fun HomeTirePressureCard(status: VehicleStatus?, modifier: Modifier = Modifier) {
+private fun HomeTirePressureCard(
+    status: VehicleStatus?,
+    modifier: Modifier = Modifier,
+    onCarClick: () -> Unit = {},
+    seamless: Boolean = false
+) {
     val tireByPosition = status?.tires.orEmpty().associateBy { it.position }
     val hasTireData = tireByPosition.isNotEmpty()
     val hasWarning = tireByPosition.values.any { it.warning }
@@ -4584,21 +5123,23 @@ private fun HomeTirePressureCard(status: VehicleStatus?, modifier: Modifier = Mo
     Surface(
         modifier = modifier
             .heightIn(min = 120.dp)
-            .frostedGlassCard(
-                shape = RoundedCornerShape(16.dp),
-                auraColor = if (hasWarning) warningColor.copy(alpha = 0.15f) else null,
-                auraCenter = Offset(0.85f, 0.15f)
+            .then(
+                if (!seamless) Modifier.frostedGlassCard(
+                    shape = RoundedCornerShape(16.dp),
+                    auraColor = if (hasWarning) warningColor.copy(alpha = 0.15f) else null,
+                    auraCenter = Offset(0.85f, 0.15f)
+                ) else Modifier
             ),
-        shape = RoundedCornerShape(16.dp),
+        shape = if (!seamless) RoundedCornerShape(16.dp) else androidx.compose.ui.graphics.RectangleShape,
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = cardBorder,
+        border = if (!seamless) cardBorder else null,
         shadowElevation = 0.dp
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
             contentAlignment = Alignment.Center
         ) {
             // 仅在胎压异常时在右上角显示警示圆点与文本
@@ -4642,13 +5183,16 @@ private fun HomeTirePressureCard(status: VehicleStatus?, modifier: Modifier = Mo
 
                 Spacer(Modifier.width(6.dp))
 
-                // 中央俯视极简车模（适配卡片比例，大小适中）
+                // 中央俯视极简车模（点击直接进入全车体检/健康诊断界面）
                 TopDownCarModel(
                     leftFrontWarning = tireByPosition["左前"]?.warning == true,
                     rightFrontWarning = tireByPosition["右前"]?.warning == true,
                     leftRearWarning = tireByPosition["左后"]?.warning == true,
                     rightRearWarning = tireByPosition["右后"]?.warning == true,
-                    modifier = Modifier.size(width = 46.dp, height = 94.dp)
+                    modifier = Modifier
+                        .size(width = 46.dp, height = 94.dp)
+                        .clip(RoundedCornerShape(23.dp))
+                        .clickable(onClick = onCarClick)
                 )
 
                 Spacer(Modifier.width(6.dp))
@@ -4714,96 +5258,115 @@ private fun TopDownCarModel(
 ) {
     val isDark = LocalAppDarkTheme.current
     val outlineColor = if (isDark) {
-        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
+        Color(0xFF5E6D82).copy(alpha = 0.65f)
     } else {
-        MaterialTheme.colorScheme.outline.copy(alpha = 0.40f)
+        Color(0xFF7D8C9F).copy(alpha = 0.55f)
     }
     val bodyBgColor = if (isDark) {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        Color(0xFF222731).copy(alpha = 0.90f)
     } else {
-        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.45f)
+        Color(0xFFE6EBF2).copy(alpha = 0.95f)
     }
-    val roofBgColor = if (isDark) {
-        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.60f)
+    val glassCanopyColor = if (isDark) {
+        Color(0xFF11151C).copy(alpha = 0.96f)
     } else {
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+        Color(0xFF242A36).copy(alpha = 0.88f)
+    }
+    val glassBorderColor = if (isDark) {
+        Color(0xFF3F4A5A).copy(alpha = 0.60f)
+    } else {
+        Color(0xFF1E242E).copy(alpha = 0.35f)
+    }
+    val mirrorColor = if (isDark) {
+        Color(0xFF3A4352)
+    } else {
+        Color(0xFF8F9DAE)
     }
     val wheelNormalColor = if (isDark) {
-        Color(0xFF42424A)
+        Color(0xFF282D36)
     } else {
-        Color(0xFF5A5A65)
+        Color(0xFF48505E)
     }
     val wheelNormalBorder = if (isDark) {
-        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
+        Color(0xFF4E5A6C).copy(alpha = 0.65f)
     } else {
-        MaterialTheme.colorScheme.outline.copy(alpha = 0.40f)
+        Color(0xFF717E90).copy(alpha = 0.55f)
+    }
+    val wheelRimColor = if (isDark) {
+        Color(0xFF7E8D9F).copy(alpha = 0.60f)
+    } else {
+        Color(0xFFC4D0DE).copy(alpha = 0.75f)
     }
     val wheelWarningColor = MaterialTheme.colorScheme.error
-    val headlightColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
-    val taillightColor = Color(0xFFE53935).copy(alpha = 0.85f)
+
+    // 车灯科技微光
+    val headlightColor = if (isDark) Color(0xFF64B5F6) else MaterialTheme.colorScheme.primary
+    val taillightColor = Color(0xFFFF3B30)
 
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
         val cx = w / 2f
 
-        val bodyW = w * 0.74f
-        val bodyH = h * 0.90f
-        val bodyLeft = cx - bodyW / 2f
-        val bodyRight = cx + bodyW / 2f
         val bodyTop = h * 0.05f
-        val bodyBottom = bodyTop + bodyH
+        val bodyBottom = h * 0.95f
+        val bodyH = bodyBottom - bodyTop
 
-        val frontAxleY = bodyTop + bodyH * 0.22f
-        val rearAxleY = bodyTop + bodyH * 0.78f
+        val frontAxleY = bodyTop + bodyH * 0.20f
+        val rearAxleY = bodyTop + bodyH * 0.77f
 
         val stroke1dp = 1.dp.toPx()
         val stroke05dp = 0.6.dp.toPx()
 
-        // 1. 轮轴辅助线
-        val axleLeft = bodyLeft - 3.dp.toPx()
-        val axleRight = bodyRight + 3.dp.toPx()
-        drawLine(
-            color = outlineColor.copy(alpha = 0.35f),
-            start = Offset(axleLeft, frontAxleY),
-            end = Offset(axleRight, frontAxleY),
-            strokeWidth = stroke05dp
-        )
-        drawLine(
-            color = outlineColor.copy(alpha = 0.35f),
-            start = Offset(axleLeft, rearAxleY),
-            end = Offset(axleRight, rearAxleY),
-            strokeWidth = stroke05dp
-        )
-
-        // 2. 车身流线轮廓
+        // 1. 宽体肌肉轿跑流线车身 (前悬俯冲弧线、前轮拱舒展、腰线自然收束、后轮拱宽体外扩)
         val bodyPath = Path().apply {
             moveTo(cx, bodyTop)
+            // 右侧流线：车头微弧 -> 前轮拱 -> 收腰 -> 宽体后轮包 -> 尾翼
             cubicTo(
-                cx - bodyW * 0.35f, bodyTop,
-                bodyLeft, bodyTop + bodyH * 0.06f,
-                bodyLeft, bodyTop + bodyH * 0.16f
+                cx + w * 0.20f, bodyTop,
+                cx + w * 0.34f, bodyTop + bodyH * 0.05f,
+                cx + w * 0.35f, bodyTop + bodyH * 0.18f
             )
-            lineTo(bodyLeft, bodyTop + bodyH * 0.84f)
             cubicTo(
-                bodyLeft, bodyBottom - bodyH * 0.06f,
-                cx - bodyW * 0.35f, bodyBottom,
+                cx + w * 0.35f, bodyTop + bodyH * 0.28f,
+                cx + w * 0.30f, bodyTop + bodyH * 0.38f,
+                cx + w * 0.30f, bodyTop + bodyH * 0.50f
+            )
+            cubicTo(
+                cx + w * 0.30f, bodyTop + bodyH * 0.62f,
+                cx + w * 0.37f, bodyTop + bodyH * 0.68f,
+                cx + w * 0.37f, bodyTop + bodyH * 0.78f
+            )
+            cubicTo(
+                cx + w * 0.37f, bodyTop + bodyH * 0.88f,
+                cx + w * 0.30f, bodyBottom,
                 cx, bodyBottom
             )
+            // 左侧对称流线
             cubicTo(
-                cx + bodyW * 0.35f, bodyBottom,
-                bodyRight, bodyBottom - bodyH * 0.06f,
-                bodyRight, bodyTop + bodyH * 0.84f
+                cx - w * 0.30f, bodyBottom,
+                cx - w * 0.37f, bodyTop + bodyH * 0.88f,
+                cx - w * 0.37f, bodyTop + bodyH * 0.78f
             )
-            lineTo(bodyRight, bodyTop + bodyH * 0.16f)
             cubicTo(
-                bodyRight, bodyTop + bodyH * 0.06f,
-                cx + bodyW * 0.35f, bodyTop,
+                cx - w * 0.37f, bodyTop + bodyH * 0.68f,
+                cx - w * 0.30f, bodyTop + bodyH * 0.62f,
+                cx - w * 0.30f, bodyTop + bodyH * 0.50f
+            )
+            cubicTo(
+                cx - w * 0.30f, bodyTop + bodyH * 0.38f,
+                cx - w * 0.35f, bodyTop + bodyH * 0.28f,
+                cx - w * 0.35f, bodyTop + bodyH * 0.18f
+            )
+            cubicTo(
+                cx - w * 0.34f, bodyTop + bodyH * 0.05f,
+                cx - w * 0.20f, bodyTop,
                 cx, bodyTop
             )
             close()
         }
 
+        // 绘制车身底色与流线高光切边
         drawPath(path = bodyPath, color = bodyBgColor)
         drawPath(
             path = bodyPath,
@@ -4811,72 +5374,132 @@ private fun TopDownCarModel(
             style = Stroke(width = stroke1dp)
         )
 
-        // 3. 全景天幕车顶
-        val roofW = bodyW * 0.65f
-        val roofH = bodyH * 0.50f
-        val roofLeft = cx - roofW / 2f
-        val roofTop = bodyTop + bodyH * 0.22f
-        val roofRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
-        drawRoundRect(
-            color = roofBgColor,
-            topLeft = Offset(roofLeft, roofTop),
-            size = Size(roofW, roofH),
-            cornerRadius = roofRadius
-        )
-        drawRoundRect(
-            color = outlineColor.copy(alpha = 0.40f),
-            topLeft = Offset(roofLeft, roofTop),
-            size = Size(roofW, roofH),
-            cornerRadius = roofRadius,
-            style = Stroke(width = stroke05dp)
-        )
+        // 2. 左右流线外后视镜 (羽翼微角)
+        val mirrorY = bodyTop + bodyH * 0.28f
+        val mirrorLen = 3.8.dp.toPx()
+        // 左外后视镜
+        val leftMirrorPath = Path().apply {
+            moveTo(cx - w * 0.31f, mirrorY)
+            lineTo(cx - w * 0.43f, mirrorY + 1.2.dp.toPx())
+            lineTo(cx - w * 0.42f, mirrorY + mirrorLen)
+            lineTo(cx - w * 0.30f, mirrorY + 2.5.dp.toPx())
+            close()
+        }
+        drawPath(leftMirrorPath, color = mirrorColor)
+        drawPath(leftMirrorPath, color = outlineColor, style = Stroke(width = stroke05dp))
 
-        // 4. 前后风挡与车灯细节
-        val windshieldY = roofTop + 2.dp.toPx()
+        // 右外后视镜
+        val rightMirrorPath = Path().apply {
+            moveTo(cx + w * 0.31f, mirrorY)
+            lineTo(cx + w * 0.43f, mirrorY + 1.2.dp.toPx())
+            lineTo(cx + w * 0.42f, mirrorY + mirrorLen)
+            lineTo(cx + w * 0.30f, mirrorY + 2.5.dp.toPx())
+            close()
+        }
+        drawPath(rightMirrorPath, color = mirrorColor)
+        drawPath(rightMirrorPath, color = outlineColor, style = Stroke(width = stroke05dp))
+
+        // 3. 黑曜石全景天幕与前后风挡一体化座舱舱体
+        val roofTop = bodyTop + bodyH * 0.21f
+        val roofBottom = bodyTop + bodyH * 0.78f
+        val canopyPath = Path().apply {
+            moveTo(cx, roofTop)
+            // 前风挡弧度
+            cubicTo(
+                cx + w * 0.15f, roofTop,
+                cx + w * 0.22f, roofTop + bodyH * 0.04f,
+                cx + w * 0.22f, roofTop + bodyH * 0.10f
+            )
+            // 天幕中段微收
+            lineTo(cx + w * 0.20f, bodyTop + bodyH * 0.48f)
+            // 后风挡弧度延伸
+            cubicTo(
+                cx + w * 0.23f, bodyTop + bodyH * 0.65f,
+                cx + w * 0.21f, roofBottom - bodyH * 0.02f,
+                cx + w * 0.15f, roofBottom
+            )
+            lineTo(cx - w * 0.15f, roofBottom)
+            cubicTo(
+                cx - w * 0.21f, roofBottom - bodyH * 0.02f,
+                cx - w * 0.23f, bodyTop + bodyH * 0.65f,
+                cx - w * 0.20f, bodyTop + bodyH * 0.48f
+            )
+            lineTo(cx - w * 0.22f, roofTop + bodyH * 0.10f)
+            cubicTo(
+                cx - w * 0.22f, roofTop + bodyH * 0.04f,
+                cx - w * 0.15f, roofTop,
+                cx, roofTop
+            )
+            close()
+        }
+        drawPath(canopyPath, color = glassCanopyColor)
+        drawPath(canopyPath, color = glassBorderColor, style = Stroke(width = stroke05dp))
+
+        // 前后风挡与天幕分界线
+        val frontDividerY = roofTop + bodyH * 0.11f
         drawLine(
-            color = outlineColor.copy(alpha = 0.50f),
-            start = Offset(roofLeft + 2.dp.toPx(), windshieldY),
-            end = Offset(roofLeft + roofW - 2.dp.toPx(), windshieldY),
+            color = glassBorderColor.copy(alpha = 0.55f),
+            start = Offset(cx - w * 0.21f, frontDividerY),
+            end = Offset(cx + w * 0.21f, frontDividerY),
             strokeWidth = stroke05dp
         )
-        val rearWindowY = roofTop + roofH - 2.dp.toPx()
+        val rearDividerY = bodyTop + bodyH * 0.65f
         drawLine(
-            color = outlineColor.copy(alpha = 0.50f),
-            start = Offset(roofLeft + 2.dp.toPx(), rearWindowY),
-            end = Offset(roofLeft + roofW - 2.dp.toPx(), rearWindowY),
+            color = glassBorderColor.copy(alpha = 0.55f),
+            start = Offset(cx - w * 0.21f, rearDividerY),
+            end = Offset(cx + w * 0.21f, rearDividerY),
             strokeWidth = stroke05dp
         )
 
-        val hlLen = 4.dp.toPx()
+        // 玻璃全景高光晶线 (45° 优雅反光，彰显黑曜石通透感)
         drawLine(
-            color = headlightColor,
-            start = Offset(bodyLeft + 1.5.dp.toPx(), bodyTop + bodyH * 0.05f),
-            end = Offset(bodyLeft + 1.5.dp.toPx() + hlLen, bodyTop + bodyH * 0.02f),
-            strokeWidth = 1.3.dp.toPx()
-        )
-        drawLine(
-            color = headlightColor,
-            start = Offset(bodyRight - 1.5.dp.toPx(), bodyTop + bodyH * 0.05f),
-            end = Offset(bodyRight - 1.5.dp.toPx() - hlLen, bodyTop + bodyH * 0.02f),
-            strokeWidth = 1.3.dp.toPx()
+            color = Color.White.copy(alpha = if (isDark) 0.16f else 0.26f),
+            start = Offset(cx - w * 0.13f, bodyTop + bodyH * 0.32f),
+            end = Offset(cx + w * 0.15f, bodyTop + bodyH * 0.50f),
+            strokeWidth = 0.8.dp.toPx()
         )
 
-        val tlW = bodyW * 0.55f
-        drawLine(
+        // 4. 星环贯穿科技大灯与星翼贯穿尾灯
+        // 车头星环贯穿式前灯
+        val hlSpan = w * 0.21f
+        val frontLightPath = Path().apply {
+            moveTo(cx - hlSpan, bodyTop + 2.2.dp.toPx())
+            quadraticTo(
+                cx, bodyTop + 0.8.dp.toPx(),
+                cx + hlSpan, bodyTop + 2.2.dp.toPx()
+            )
+        }
+        drawPath(
+            path = frontLightPath,
+            color = headlightColor,
+            style = Stroke(width = 1.4.dp.toPx(), cap = StrokeCap.Round)
+        )
+
+        // 车尾星翼贯穿式尾灯
+        val tlSpan = w * 0.21f
+        val rearLightPath = Path().apply {
+            moveTo(cx - tlSpan, bodyBottom - 1.8.dp.toPx())
+            quadraticTo(
+                cx, bodyBottom - 0.6.dp.toPx(),
+                cx + tlSpan, bodyBottom - 1.8.dp.toPx()
+            )
+        }
+        drawPath(
+            path = rearLightPath,
             color = taillightColor,
-            start = Offset(cx - tlW / 2f, bodyBottom - 1.dp.toPx()),
-            end = Offset(cx + tlW / 2f, bodyBottom - 1.dp.toPx()),
-            strokeWidth = 1.3.dp.toPx()
+            style = Stroke(width = 1.4.dp.toPx(), cap = StrokeCap.Round)
         )
 
-        // 5. 四车轮 (带预警独立高亮)
+        // 5. 四轮双层机械轮毂（外层胎面 + 内层微光轮心）
         val wheelW = 4.5.dp.toPx()
-        val wheelH = 13.dp.toPx()
+        val wheelH = 13.5.dp.toPx()
         val wheelRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
 
         fun drawWheel(x: Float, y: Float, isWarning: Boolean) {
             val fillColor = if (isWarning) wheelWarningColor else wheelNormalColor
             val borderColor = if (isWarning) wheelWarningColor else wheelNormalBorder
+
+            // 外层轮胎本体
             drawRoundRect(
                 color = fillColor,
                 topLeft = Offset(x - wheelW / 2f, y - wheelH / 2f),
@@ -4890,21 +5513,36 @@ private fun TopDownCarModel(
                 cornerRadius = wheelRadius,
                 style = Stroke(width = stroke05dp)
             )
-            if (isWarning) {
+
+            // 内层轮毂微光纵线 (精致机械质感)
+            if (!isWarning) {
+                drawLine(
+                    color = wheelRimColor,
+                    start = Offset(x, y - wheelH * 0.28f),
+                    end = Offset(x, y + wheelH * 0.28f),
+                    strokeWidth = 0.8.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+            } else {
+                // 异常轮胎向外呼吸红光波纹
                 drawRoundRect(
                     color = wheelWarningColor.copy(alpha = 0.35f),
-                    topLeft = Offset(x - wheelW / 2f - 1.5.dp.toPx(), y - wheelH / 2f - 1.5.dp.toPx()),
-                    size = Size(wheelW + 3.dp.toPx(), wheelH + 3.dp.toPx()),
+                    topLeft = Offset(x - wheelW / 2f - 2.dp.toPx(), y - wheelH / 2f - 2.dp.toPx()),
+                    size = Size(wheelW + 4.dp.toPx(), wheelH + 4.dp.toPx()),
                     cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
                     style = Stroke(width = 1.dp.toPx())
                 )
             }
         }
 
-        drawWheel(bodyLeft, frontAxleY, leftFrontWarning)
-        drawWheel(bodyLeft, rearAxleY, leftRearWarning)
-        drawWheel(bodyRight, frontAxleY, rightFrontWarning)
-        drawWheel(bodyRight, rearAxleY, rightRearWarning)
+        // 左右四轮位置，依前轮包与宽体后肩精确贴合
+        val frontWheelOffset = w * 0.36f
+        val rearWheelOffset = w * 0.38f
+
+        drawWheel(cx - frontWheelOffset, frontAxleY, leftFrontWarning)
+        drawWheel(cx - rearWheelOffset, rearAxleY, leftRearWarning)
+        drawWheel(cx + frontWheelOffset, frontAxleY, rightFrontWarning)
+        drawWheel(cx + rearWheelOffset, rearAxleY, rightRearWarning)
     }
 }
 
@@ -4946,7 +5584,8 @@ fun VehicleStatusCard(
     todayMileage: String = "--",
     modifier: Modifier = Modifier,
     powerAutoPlayEnabled: Boolean = false,
-    onOpenHealthyCharging: () -> Unit = {}
+    onOpenHealthyCharging: () -> Unit = {},
+    seamless: Boolean = false
 ) {
     val powerSummary = VehicleHomeStatus.powerSummary(
         chargeState = status?.chargeState,
@@ -4976,15 +5615,114 @@ fun VehicleStatusCard(
     Surface(
         modifier = modifier
             .heightIn(min = 120.dp)
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
+            .then(if (!seamless) Modifier.frostedGlassCard(shape = RoundedCornerShape(16.dp)) else Modifier),
+        shape = if (!seamless) RoundedCornerShape(16.dp) else androidx.compose.ui.graphics.RectangleShape,
         color = Color.Transparent,
-        border = cardBorder,
+        border = if (!seamless) cardBorder else null,
         shadowElevation = 0.dp
     ) {
-        Column(Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(
+            modifier = Modifier.padding(start = 6.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                VehicleStatusCell("今日里程", todayMileage, Modifier.weight(1f))
+                // 左侧里程卡片：支持点击/滑动在「今日里程」与「总里程」之间平滑切换
+                val formattedTotalMileage = remember(status?.totalMileage) {
+                    val raw = status?.totalMileage?.trim().orEmpty()
+                    when {
+                        raw.isEmpty() || raw == "--" || raw == "-- km" -> "--"
+                        raw.endsWith("km", ignoreCase = true) -> raw.replace(" ", "")
+                        else -> "${raw}km"
+                    }
+                }
+                val mileageItems = listOf(
+                    "今日里程" to todayMileage,
+                    "总里程" to formattedTotalMileage
+                )
+                val mileagePagerState = rememberPagerState { mileageItems.size }
+                var mileageNextPageRequest by rememberSaveable { mutableStateOf<Int?>(null) }
+                LaunchedEffect(mileageNextPageRequest) {
+                    mileageNextPageRequest?.let { page ->
+                        mileagePagerState.animateScrollToPage(page)
+                        mileageNextPageRequest = null
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.glassInsetSurface,
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                ) {
+                    HorizontalPager(
+                        state = mileagePagerState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                mileageNextPageRequest = (mileagePagerState.currentPage + 1) % mileageItems.size
+                            },
+                        pageSpacing = 8.dp,
+                        beyondViewportPageCount = 1,
+                        userScrollEnabled = true
+                    ) { page ->
+                        val item = mileageItems[page]
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(start = 6.dp, top = 6.dp, end = 6.dp, bottom = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = item.first,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Normal,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = item.second,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = 3.5.dp),
+                                horizontalArrangement = Arrangement.spacedBy(2.5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                repeat(mileageItems.size) { dotIndex ->
+                                    val isCurrent = mileagePagerState.currentPage == dotIndex
+                                    val indicatorWidth by animateDpAsState(
+                                        targetValue = if (isCurrent) 6.dp else 2.5.dp,
+                                        animationSpec = tween(200),
+                                        label = "mileageIndicatorWidth"
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(indicatorWidth, 1.8.dp)
+                                            .clip(RoundedCornerShape(1.dp))
+                                            .background(
+                                                if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.70f)
+                                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                                            )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 右侧功率卡片：充电功率 / 剩余时间 / 电压 / 电流 / 电池温度
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     val speedValue = status?.speed?.trim()?.removeSuffix("km/h")?.toDoubleOrNull()
                     val powerTitle = if (speedValue != null && speedValue > 0.0) "行车功率" else "充电功率"
@@ -5723,26 +6461,29 @@ fun EnergyHomePagerCard(
     state: EnergyAnalyticsState,
     vehicleTotalMileage: String? = null,
     vehicleModel: String = "",
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    seamless: Boolean = false
 ) {
     val pagerState = rememberPagerState(initialPage = EnergyHomePage.RECENT_MILEAGE.ordinal) { EnergyHomePage.entries.size }
     val goodColor = MaterialTheme.statusGood
     Surface(
         modifier = modifier
             .heightIn(min = EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP.dp)
-            .frostedGlassCard(
-                shape = RoundedCornerShape(16.dp),
-                auraColor = goodColor.copy(alpha = 0.10f),
-                auraCenter = Offset(0.85f, 0.15f)
+            .then(
+                if (!seamless) Modifier.frostedGlassCard(
+                    shape = RoundedCornerShape(16.dp),
+                    auraColor = goodColor.copy(alpha = 0.10f),
+                    auraCenter = Offset(0.85f, 0.15f)
+                ) else Modifier
             ),
-        shape = RoundedCornerShape(16.dp),
+        shape = if (!seamless) RoundedCornerShape(16.dp) else androidx.compose.ui.graphics.RectangleShape,
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = glassCardBorder(),
+        border = if (!seamless) glassCardBorder() else null,
         shadowElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             val pageTitle = when (EnergyHomePage.entries[pagerState.currentPage]) {
@@ -6469,7 +7210,9 @@ fun ClimateOverviewCard(
     onOpenClimate: () -> Unit,
     onQuickAcToggle: (String) -> Unit,
     controlBusy: Boolean = false,
-    modifier: Modifier = Modifier
+    compact: Boolean = false,
+    modifier: Modifier = Modifier,
+    seamless: Boolean = false
 ) {
     val temperatureTarget = Commands.acTemperatureTarget(status?.acSetting)
     val quickToggle = HomeClimateTogglePresentationMapper.from(status?.acSwitch, controlBusy)
@@ -6548,22 +7291,24 @@ fun ClimateOverviewCard(
     }
 
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = if (!seamless) RoundedCornerShape(16.dp) else androidx.compose.ui.graphics.RectangleShape,
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = if (status?.acSwitch == true && climateTone != ClimateTemperatureTone.DEFAULT) {
+        border = if (!seamless && status?.acSwitch == true && climateTone != ClimateTemperatureTone.DEFAULT) {
             BorderStroke(1.dp, temperatureColor.copy(alpha = 0.45f))
-        } else {
+        } else if (!seamless) {
             glassCardBorder()
-        },
+        } else null,
         shadowElevation = 0.dp,
         modifier = modifier
-            .height(56.dp)
-            .frostedGlassCard(
-                shape = RoundedCornerShape(16.dp),
-                auraColor = if (status?.acSwitch == true) temperatureColor.copy(alpha = 0.16f) else null,
-                auraCenter = Offset(0.06f, 0.5f),
-                auraRadiusRatio = 0.5f
+            .height(if (compact) 60.dp else 56.dp)
+            .then(
+                if (!seamless) Modifier.frostedGlassCard(
+                    shape = RoundedCornerShape(16.dp),
+                    auraColor = if (status?.acSwitch == true) temperatureColor.copy(alpha = 0.16f) else null,
+                    auraCenter = Offset(0.06f, 0.5f),
+                    auraRadiusRatio = 0.5f
+                ) else Modifier
             )
     ) {
         Box(
@@ -6571,78 +7316,143 @@ fun ClimateOverviewCard(
                 .fillMaxSize()
                 .then(if (ambientBrush != null) Modifier.background(ambientBrush) else Modifier)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = 12.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(16.dp))
-                    .clickable(onClick = onOpenClimate),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_phosphor_fan),
-                    contentDescription = "空调状态",
+            if (compact) {
+                // 并排紧凑双子舱布局
+                Row(
                     modifier = Modifier
-                        .size(22.dp)
-                        .graphicsLayer {
-                            rotationZ = rotationAngle
-                        },
-                    tint = temperatureColor
-                )
-                Spacer(Modifier.width(10.dp))
-                Row(
+                        .fillMaxSize()
+                        .padding(start = 14.dp, end = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        "设定：",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        "${temperatureTarget.value} °C",
-                        style = MaterialTheme.typography.labelLarge.energyStyle(),
-                        fontWeight = FontWeight.Bold,
-                        color = temperatureColor
-                    )
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable(onClick = onOpenClimate),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_phosphor_fan),
+                            contentDescription = "空调状态",
+                            modifier = Modifier
+                                .size(20.dp)
+                                .graphicsLayer { rotationZ = rotationAngle },
+                            tint = temperatureColor
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column(verticalArrangement = Arrangement.Center) {
+                            Text(
+                                if (status?.acSwitch == true) "空调 · ${temperatureTarget.value}°C" else "座舱空调",
+                                style = MaterialTheme.typography.labelMedium.energyStyle(),
+                                fontWeight = FontWeight.Bold,
+                                color = if (status?.acSwitch == true) temperatureColor else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
+                            )
+                            Spacer(Modifier.height(1.dp))
+                            Text(
+                                if (status?.acSwitch == true) {
+                                    if (indoorTempClean.isNullOrBlank()) "运行中" else "车内 $indoorTempClean°C"
+                                } else "已关闭",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        ClimateToggle(
+                            checked = status?.acSwitch == true,
+                            onCheckedChange = if (quickToggle.enabled && quickToggleCommand != null) {
+                                { onQuickAcToggle(quickToggleCommand) }
+                            } else null,
+                            contentDescription = quickToggle.contentDescription,
+                            stateDescription = acStateLabel
+                        )
+                    }
                 }
-                Spacer(Modifier.width(16.dp))
+            } else {
+                // 原有全宽独立布局
                 Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 16.dp, end = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable(onClick = onOpenClimate),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_phosphor_fan),
+                            contentDescription = "空调状态",
+                            modifier = Modifier
+                                .size(22.dp)
+                                .graphicsLayer {
+                                    rotationZ = rotationAngle
+                                },
+                            tint = temperatureColor
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "设定：",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "${temperatureTarget.value} °C",
+                                style = MaterialTheme.typography.labelLarge.energyStyle(),
+                                fontWeight = FontWeight.Bold,
+                                color = temperatureColor
+                            )
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "车内：",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                if (indoorTempClean.isNullOrBlank()) "-- °C" else "$indoorTempClean °C",
+                                style = MaterialTheme.typography.labelLarge.energyStyle(),
+                                fontWeight = FontWeight.Bold,
+                                color = indoorTempColor
+                            )
+                        }
+                    }
                     Text(
-                        "车内：",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        acStateLabel,
+                        style = MaterialTheme.typography.labelMedium.energyStyle(),
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (status?.acSwitch == true) temperatureColor else MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text(
-                        if (indoorTempClean.isNullOrBlank()) "-- °C" else "$indoorTempClean °C",
-                        style = MaterialTheme.typography.labelLarge.energyStyle(),
-                        fontWeight = FontWeight.Bold,
-                        color = indoorTempColor
+                    ClimateToggle(
+                        checked = status?.acSwitch == true,
+                        onCheckedChange = if (quickToggle.enabled && quickToggleCommand != null) {
+                            { onQuickAcToggle(quickToggleCommand) }
+                        } else null,
+                        contentDescription = quickToggle.contentDescription,
+                        stateDescription = acStateLabel
                     )
                 }
             }
-            Text(
-                acStateLabel,
-                style = MaterialTheme.typography.labelMedium.energyStyle(),
-                fontWeight = FontWeight.SemiBold,
-                color = if (status?.acSwitch == true) temperatureColor else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            ClimateToggle(
-                checked = status?.acSwitch == true,
-                onCheckedChange = if (quickToggle.enabled && quickToggleCommand != null) {
-                    { onQuickAcToggle(quickToggleCommand) }
-                } else null,
-                contentDescription = quickToggle.contentDescription,
-                stateDescription = acStateLabel
-            )
-        }
         }
     }
 }
@@ -6677,19 +7487,19 @@ private fun circulationModeLabel(status: VehicleStatus): String? =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ClimateControlContent(
+fun ClimateControlBottomSheet(
+    onDismissRequest: () -> Unit,
     status: VehicleStatus?,
-    statusError: String,
-    busy: Boolean,
-    controlFeedback: ControlFeedback?,
-    statusUpdatedAtEpochMs: Long,
-    hvacCapability: HvacCapability,
-    onDismissControlFeedback: () -> Unit,
-    onRefresh: () -> Unit,
+    busy: Boolean = false,
+    hvacCapability: HvacCapability = HvacCapability.fallback(),
     onControl: (String) -> Unit,
-    onApplyClimateSettings: (AirConditioningCommand) -> Unit
+    onApplyClimateSettings: (AirConditioningCommand) -> Unit,
+    controlFeedback: ControlFeedback? = null,
+    onDismissControlFeedback: () -> Unit = {}
 ) {
-    LaunchedEffect(Unit) { onRefresh() }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val coroutineScope = rememberCoroutineScope()
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val actionsEnabled = Commands.canSubmitClimateControl(status != null, busy)
     val fanRange = hvacCapability.effectiveUiFanRange()
     var editedTemperature by rememberSaveable(hvacCapability.temperatureMinC, hvacCapability.temperatureMaxC) {
@@ -6703,6 +7513,8 @@ fun ClimateControlContent(
     var editedCircle by rememberSaveable {
         mutableStateOf(AirCircle.fromTelemetryValue(status?.recirculationMode) ?: AirCircle.INNER)
     }
+    var userLastActionEpochMs by remember { mutableLongStateOf(0L) }
+    var pendingTemperatureJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     LaunchedEffect(
         status?.acSetting,
@@ -6712,7 +7524,9 @@ fun ClimateControlContent(
         hvacCapability,
         busy
     ) {
-        if (!busy) {
+        // 若车主在 6 秒内刚手动操作过，保护本地状态不被未生效的车辆旧遥测覆盖冲刷
+        val isProtected = System.currentTimeMillis() - userLastActionEpochMs < 6000L
+        if (!busy && !isProtected) {
             editedTemperature = climateWholeNumber(status?.acSetting)
                 ?.coerceIn(hvacCapability.temperatureMinC, hvacCapability.temperatureMaxC)
                 ?: 22.coerceIn(hvacCapability.temperatureMinC, hvacCapability.temperatureMaxC)
@@ -6738,173 +7552,425 @@ fun ClimateControlContent(
         )
     }
 
+    fun restoreEditedClimateFromStatus() {
+        editedTemperature = climateWholeNumber(status?.acSetting)
+            ?.coerceIn(hvacCapability.temperatureMinC, hvacCapability.temperatureMaxC)
+            ?: 22.coerceIn(hvacCapability.temperatureMinC, hvacCapability.temperatureMaxC)
+        editedWindLevel = climateWholeNumber(status?.acAirVolume)
+            ?.coerceIn(fanRange)
+            ?: 3.coerceIn(fanRange)
+        editedDefogging = status?.windshieldDefrost ?: false
+        editedOutletName = if (editedDefogging) AirOutlet.WINDSHIELD.name else AirOutlet.ALL.name
+        AirCircle.fromTelemetryValue(status?.recirculationMode)?.let {
+            editedCircle = it
+        }
+        userLastActionEpochMs = 0L
+        pendingTemperatureJob?.cancel()
+    }
+
     fun submitSettings(operation: HvacOperation) {
         if (!actionsEnabled) return
         val command = currentCommand(operation)
         onApplyClimateSettings(command)
     }
 
-    val activePresetName = activeClimatePresetName(status)
+    var optimisticAcSwitch by remember(status?.acSwitch) {
+        mutableStateOf(status?.acSwitch)
+    }
+    var optimisticPresetName by remember(status?.climateMode, status?.windshieldDefrost) {
+        mutableStateOf<String?>(null)
+    }
 
-    PullToRefreshBox(
-        isRefreshing = busy,
-        onRefresh = onRefresh,
-        modifier = Modifier.fillMaxSize()
+    LaunchedEffect(controlFeedback?.kind, controlFeedback?.message) {
+        if (controlFeedback?.kind == ControlFeedbackKind.SUCCESS ||
+            controlFeedback?.kind == ControlFeedbackKind.ERROR
+        ) {
+            // A terminal result must clear the local preset highlight even if
+            // its telemetry enum did not change and Compose cannot use it as a key.
+            optimisticPresetName = null
+            val terminalFailure = controlFeedback.kind == ControlFeedbackKind.ERROR ||
+                controlFeedback.message.contains("暂未确认")
+            if (terminalFailure) {
+                optimisticAcSwitch = status?.acSwitch
+                restoreEditedClimateFromStatus()
+            } else if (controlFeedback.kind == ControlFeedbackKind.SUCCESS) {
+                restoreEditedClimateFromStatus()
+            }
+        }
+    }
+
+    val isAcOn = optimisticAcSwitch == true
+    val activePresetName = optimisticPresetName ?: activeClimatePresetName(status)
+    val temperatureTarget = Commands.acTemperatureTarget(status?.acSetting)
+    val indoorTemp = climateWholeNumber(status?.indoorTemp)
+    val climateTone = when {
+        activePresetName == ClimatePresetAction.QUICK_COOL.name -> ClimateTemperatureTone.COOLING
+        activePresetName == ClimatePresetAction.QUICK_HEAT.name -> ClimateTemperatureTone.HEATING
+        activePresetName == ClimatePresetAction.WINDSHIELD_DEFROST.name -> ClimateTemperatureTone.COOLING
+        status?.acCoolingAndHeating == 1 -> ClimateTemperatureTone.COOLING
+        status?.acCoolingAndHeating == 2 -> ClimateTemperatureTone.HEATING
+        indoorTemp != null && editedTemperature < indoorTemp -> ClimateTemperatureTone.COOLING
+        indoorTemp != null && editedTemperature > indoorTemp -> ClimateTemperatureTone.HEATING
+        else -> ClimateTemperatureTone.COOLING
+    }
+    val activeAcColor = when (climateTone) {
+        ClimateTemperatureTone.COOLING -> MaterialTheme.colorScheme.primary
+        ClimateTemperatureTone.HEATING -> MaterialTheme.statusWarn
+        ClimateTemperatureTone.VENTILATION -> MaterialTheme.statusGood
+        ClimateTemperatureTone.DEFAULT -> MaterialTheme.colorScheme.primary
+    }
+    val currentAcColor = if (isAcOn) activeAcColor else MaterialTheme.colorScheme.onSurfaceVariant
+
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Column(
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            val climateAura = if (status?.acSwitch == true) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else null
+            controlFeedback?.let { feedback ->
+                ControlFeedbackBanner(feedback, onDismissControlFeedback)
+            }
+
+            // 1. 顶部标题栏：图标 + 标题 + 状态标签 + 一键开关胶囊
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = currentAcColor.copy(alpha = if (isAcOn) 0.15f else 0.08f),
+                        border = BorderStroke(0.8.dp, currentAcColor.copy(alpha = if (isAcOn) 0.5f else 0.25f)),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Icon(
+                                painter = painterResource(if (isAcOn) R.drawable.ic_phosphor_fan else R.drawable.ic_phosphor_snowflake),
+                                contentDescription = null,
+                                tint = currentAcColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    Column {
+                        Text(
+                            text = if (isAcOn) {
+                                when (climateTone) {
+                                    ClimateTemperatureTone.COOLING -> "强劲制冷"
+                                    ClimateTemperatureTone.HEATING -> "舒暖制热"
+                                    ClimateTemperatureTone.VENTILATION -> "自然通风"
+                                    else -> "运行中"
+                                }
+                            } else "空调已关闭",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isAcOn) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "车内 ${status?.indoorTemp ?: "--"}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // 一键开启/关闭快捷触控胶囊
+                Surface(
+                    shape = CircleShape,
+                    color = if (isAcOn) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.glassInsetSurface,
+                    border = BorderStroke(
+                        0.8.dp,
+                        if (isAcOn) MaterialTheme.colorScheme.primary.copy(alpha = 0.40f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
+                    ),
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable(enabled = actionsEnabled) {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            userLastActionEpochMs = System.currentTimeMillis()
+                            val nextOn = !isAcOn
+                            optimisticAcSwitch = nextOn
+                            if (!nextOn) optimisticPresetName = null
+                            if (isAcOn) onControl("acOff") else onControl("acOn")
+                        }
+                ) {
+                    Text(
+                        text = if (isAcOn) "关闭" else "开启",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isAcOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp)
+                    )
+                }
+            }
+
+            // 2. 全息光环温控主盘 (38sp 超大字 + 两侧 44dp 舒适步进触控 + 极光光晕)
+            val climateRingAura = if (isAcOn) currentAcColor.copy(alpha = 0.22f) else null
             Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Color.Transparent,
+                border = BorderStroke(1.dp, if (isAcOn) currentAcColor.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                shadowElevation = 0.dp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .frostedGlassCard(
                         shape = RoundedCornerShape(20.dp),
-                        auraColor = climateAura,
-                        auraCenter = Offset(0.2f, 0.2f)
-                    ),
-                shape = RoundedCornerShape(20.dp),
-                color = Color.Transparent,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                border = glassCardBorder(),
-                shadowElevation = 0.dp
+                        auraColor = climateRingAura,
+                        auraCenter = Offset(0.5f, 0.4f),
+                        auraRadiusRatio = 0.65f
+                    )
             ) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                    // 1. 温度调节 (支持 - / + 步进快捷点按与滑动松手即刻下发)
-                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("温度设定", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .clickable(enabled = actionsEnabled && editedTemperature > hvacCapability.temperatureMinC) {
-                                            editedTemperature = (editedTemperature - 1).coerceAtLeast(hvacCapability.temperatureMinC)
-                                            submitSettings(HvacOperation.ON)
-                                        }
-                                ) {
-                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        Text("-", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                                Text(
-                                    "$editedTemperature °C",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .clickable(enabled = actionsEnabled && editedTemperature < hvacCapability.temperatureMaxC) {
-                                            editedTemperature = (editedTemperature + 1).coerceAtMost(hvacCapability.temperatureMaxC)
-                                            submitSettings(HvacOperation.ON)
-                                        }
-                                ) {
-                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        Text("+", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                    }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.glassSurface,
+                        border = BorderStroke(1.dp, if (isAcOn) currentAcColor.copy(alpha = 0.30f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .clickable(enabled = actionsEnabled && editedTemperature > hvacCapability.temperatureMinC) {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                userLastActionEpochMs = System.currentTimeMillis()
+                                optimisticAcSwitch = true
+                                editedTemperature = (editedTemperature - 1).coerceAtLeast(hvacCapability.temperatureMinC)
+                                pendingTemperatureJob?.cancel()
+                                pendingTemperatureJob = coroutineScope.launch {
+                                    kotlinx.coroutines.delay(400L)
+                                    submitSettings(HvacOperation.ON)
                                 }
                             }
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("-", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = if (actionsEnabled && editedTemperature > hvacCapability.temperatureMinC) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
                         }
-                        ThinClimateSlider(
-                            value = editedTemperature.toFloat(),
-                            onValueChange = {
-                                editedTemperature = it.roundToInt().coerceIn(hvacCapability.temperatureMinC, hvacCapability.temperatureMaxC)
-                            },
-                            onValueChangeFinished = {
-                                submitSettings(HvacOperation.ON)
-                            },
-                            enabled = actionsEnabled,
-                            valueRange = hvacCapability.temperatureMinC.toFloat()..hvacCapability.temperatureMaxC.toFloat(),
-                            steps = (hvacCapability.temperatureMaxC - hvacCapability.temperatureMinC - 1).coerceAtLeast(0),
-                            modifier = Modifier.fillMaxWidth()
+                    }
+
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Row(verticalAlignment = Alignment.Top) {
+                            Text(
+                                text = "$editedTemperature",
+                                fontSize = 38.sp,
+                                lineHeight = 40.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = currentAcColor
+                            )
+                            Text(
+                                text = "°C",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = currentAcColor.copy(alpha = 0.85f),
+                                modifier = Modifier.padding(start = 2.dp, top = 3.dp)
+                            )
+                        }
+                        Text(
+                            text = "设定温度",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
-                    // 2. 风量滑块 (松手即刻下发)
-                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("风量", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("$editedWindLevel 挡", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        }
-                        if (fanRange.first < fanRange.last) {
-                            ThinClimateSlider(
-                                value = editedWindLevel.toFloat(),
-                                onValueChange = {
-                                    editedWindLevel = it.roundToInt().coerceIn(fanRange)
-                                },
-                                onValueChangeFinished = {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.glassSurface,
+                        border = BorderStroke(1.dp, if (isAcOn) currentAcColor.copy(alpha = 0.30f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .clickable(enabled = actionsEnabled && editedTemperature < hvacCapability.temperatureMaxC) {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                userLastActionEpochMs = System.currentTimeMillis()
+                                optimisticAcSwitch = true
+                                editedTemperature = (editedTemperature + 1).coerceAtMost(hvacCapability.temperatureMaxC)
+                                pendingTemperatureJob?.cancel()
+                                pendingTemperatureJob = coroutineScope.launch {
+                                    kotlinx.coroutines.delay(400L)
                                     submitSettings(HvacOperation.ON)
-                                },
-                                enabled = actionsEnabled,
-                                valueRange = fanRange.first.toFloat()..fanRange.last.toFloat(),
-                                steps = (fanRange.last - fanRange.first - 1).coerceAtLeast(0),
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                                }
+                            }
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("+", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = if (actionsEnabled && editedTemperature < hvacCapability.temperatureMaxC) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+                        }
+                    }
+                }
+            }
+
+            // 3. 高频快捷微晶金刚键 (4 列均分：极速降温 / 一键制热 / 前挡除霜 / 内外循环)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val isCoolActive = activePresetName == ClimatePresetAction.QUICK_COOL.name
+                QuickClimateCircleAction(
+                    icon = R.drawable.ic_phosphor_snowflake,
+                    label = "极速降温",
+                    isActive = isCoolActive,
+                    activeColor = MaterialTheme.colorScheme.primary,
+                    enabled = actionsEnabled,
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        userLastActionEpochMs = System.currentTimeMillis()
+                        optimisticAcSwitch = true
+                        optimisticPresetName = ClimatePresetAction.QUICK_COOL.name
+                        onControl("quickCool")
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+
+                val isHeatActive = activePresetName == ClimatePresetAction.QUICK_HEAT.name
+                QuickClimateCircleAction(
+                    icon = R.drawable.ic_phosphor_sun,
+                    label = "一键制热",
+                    isActive = isHeatActive,
+                    activeColor = MaterialTheme.statusWarn,
+                    enabled = actionsEnabled,
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        userLastActionEpochMs = System.currentTimeMillis()
+                        optimisticAcSwitch = true
+                        optimisticPresetName = ClimatePresetAction.QUICK_HEAT.name
+                        onControl("quickHeat")
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+
+                val isDefrostActive = activePresetName == ClimatePresetAction.WINDSHIELD_DEFROST.name || editedDefogging
+                QuickClimateCircleAction(
+                    icon = R.drawable.ic_phosphor_wind,
+                    label = "前挡除霜",
+                    isActive = isDefrostActive,
+                    activeColor = MaterialTheme.colorScheme.primary,
+                    enabled = actionsEnabled,
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        userLastActionEpochMs = System.currentTimeMillis()
+                        optimisticAcSwitch = true
+                        optimisticPresetName = ClimatePresetAction.WINDSHIELD_DEFROST.name
+                        onControl("defrost")
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+
+                val isInner = editedCircle == AirCircle.INNER
+                QuickClimateCircleAction(
+                    icon = R.drawable.ic_phosphor_arrow_clockwise,
+                    label = if (isInner) "内循环" else "外循环",
+                    isActive = isInner,
+                    activeColor = MaterialTheme.colorScheme.primary,
+                    enabled = actionsEnabled,
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        userLastActionEpochMs = System.currentTimeMillis()
+                        optimisticAcSwitch = true
+                        editedCircle = if (isInner) AirCircle.OUTER else AirCircle.INNER
+                        submitSettings(HvacOperation.ON)
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            // 4. 上拉显示完整设置交互提示条 (支持手指直接上拉展开，也支持轻触一键上拉/收回)
+            val isExpanded = sheetState.targetValue == SheetValue.Expanded
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.glassInsetSurface.copy(alpha = 0.85f),
+                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable {
+                        coroutineScope.launch {
+                            if (isExpanded) {
+                                sheetState.partialExpand()
+                            } else {
+                                sheetState.expand()
+                            }
+                        }
+                    }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_phosphor_caret_right),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(12.dp)
+                            .graphicsLayer { rotationZ = if (isExpanded) 90f else 270f },
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = if (isExpanded) "下滑收回轻量模式" else "上拉显示完整的空调设置界面",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            // 5. 完整空调设置界面 (风量滑块 / 出风方向 / 座椅舒适度)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // 风量调节
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("风量", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("$editedWindLevel 挡", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    }
+                    if (fanRange.first < fanRange.last) {
+                        ThinClimateSlider(
+                            value = editedWindLevel.toFloat(),
+                            onValueChange = {
+                                userLastActionEpochMs = System.currentTimeMillis()
+                                editedWindLevel = it.roundToInt().coerceIn(fanRange)
+                            },
+                            onValueChangeFinished = {
+                                userLastActionEpochMs = System.currentTimeMillis()
+                                optimisticAcSwitch = true
+                                submitSettings(HvacOperation.ON)
+                            },
+                            onValueChangeCancelled = {
+                                restoreEditedClimateFromStatus()
+                            },
+                            enabled = actionsEnabled,
+                            valueRange = fanRange.first.toFloat()..fanRange.last.toFloat(),
+                            steps = (fanRange.last - fanRange.first - 1).coerceAtLeast(0),
+                            modifier = Modifier.fillMaxWidth()
+                        )
                         } else {
-                            Text("当前车型仅支持该风量挡位", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("固定挡位", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
 
-                    // 3. 内外循环分段切换 (即点即生效)
-                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("循环模式", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                if (editedCircle == AirCircle.INNER) "内循环" else "外循环",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (editedCircle == AirCircle.INNER) MaterialTheme.colorScheme.primary else MaterialTheme.statusWarn
-                            )
-                        }
-                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                            SegmentedButton(
-                                selected = editedCircle == AirCircle.INNER,
-                                onClick = {
-                                    editedCircle = AirCircle.INNER
-                                    submitSettings(HvacOperation.ON)
-                                },
-                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                                label = { Text("内循环 (速冷/隔绝尾气)", style = MaterialTheme.typography.labelSmall) }
-                            )
-                            SegmentedButton(
-                                selected = editedCircle == AirCircle.OUTER,
-                                onClick = {
-                                    editedCircle = AirCircle.OUTER
-                                    submitSettings(HvacOperation.ON)
-                                },
-                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                                label = { Text("外循环 (引入新风)", style = MaterialTheme.typography.labelSmall) }
-                            )
-                        }
-                    }
-
-                    // 4. 出风方向分段切换 (即点即生效)
+                    // 出风方向
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("出风方向", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(
-                                if (editedOutletName == AirOutlet.ALL.name) "全车出风" else "前风挡除雾出风",
+                                if (editedOutletName == AirOutlet.ALL.name) "全车出风" else "前风挡出风",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary
@@ -6914,57 +7980,129 @@ fun ClimateControlContent(
                             SegmentedButton(
                                 selected = editedOutletName == AirOutlet.ALL.name,
                                 onClick = {
+                                    userLastActionEpochMs = System.currentTimeMillis()
+                                    optimisticAcSwitch = true
                                     editedOutletName = AirOutlet.ALL.name
                                     editedDefogging = false
                                     submitSettings(HvacOperation.ON)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                                label = { Text("全车环绕出风", style = MaterialTheme.typography.labelSmall) }
+                                icon = {},
+                                label = { Text("全车出风", style = MaterialTheme.typography.labelSmall) }
                             )
                             SegmentedButton(
                                 selected = editedOutletName == AirOutlet.WINDSHIELD.name,
                                 onClick = {
+                                    userLastActionEpochMs = System.currentTimeMillis()
+                                    optimisticAcSwitch = true
                                     editedOutletName = AirOutlet.WINDSHIELD.name
                                     editedDefogging = true
                                     submitSettings(HvacOperation.ON)
                                 },
-                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                                label = { Text("前风挡除雾", style = MaterialTheme.typography.labelSmall) }
-                            )
-                        }
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                            icon = {},
+                            label = { Text("前风挡出风", style = MaterialTheme.typography.labelSmall) }
+                        )
                     }
-
-                    ClimateSegmentedSetting(
-                        title = "快捷预设",
-                        options = listOf(
-                            ClimatePresetAction.QUICK_COOL.name to "制冷",
-                            ClimatePresetAction.WINDSHIELD_DEFROST.name to "除霜",
-                            ClimatePresetAction.QUICK_HEAT.name to "制热",
-                            ClimatePresetAction.DEODORIZE.name to "除味"
-                        ),
-                        selected = activePresetName.orEmpty(),
-                        enabled = actionsEnabled,
-                        onSelected = { name ->
-                            val action = ClimatePresetAction.valueOf(name)
-                            val cmd = when (action) {
-                                ClimatePresetAction.QUICK_COOL -> "quickCool"
-                                ClimatePresetAction.WINDSHIELD_DEFROST -> "defrost"
-                                ClimatePresetAction.QUICK_HEAT -> "quickHeat"
-                                ClimatePresetAction.DEODORIZE -> "deodorize"
-                            }
-                            onControl(cmd)
-                        }
-                    )
                 }
-            }
 
-            SeatComfortControlCard(
-                status = status,
-                enabled = actionsEnabled,
-                onControl = onControl
+                // 座椅舒适度控制卡片
+                SeatComfortControlCard(
+                    status = status,
+                    enabled = actionsEnabled,
+                    onControl = onControl
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun QuickClimateCircleAction(
+    icon: Int,
+    label: String,
+    isActive: Boolean,
+    activeColor: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "climate-button-press"
+    )
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (isActive) activeColor.copy(alpha = 0.16f) else MaterialTheme.glassInsetSurface,
+        border = BorderStroke(
+            0.8.dp,
+            if (isActive) activeColor.copy(alpha = 0.50f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f)
+        ),
+        shadowElevation = 0.dp,
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .clickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = label,
+                tint = if (isActive) activeColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                color = if (isActive) activeColor else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
             )
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ClimateControlContent(
+    status: VehicleStatus?,
+    statusError: String,
+    busy: Boolean,
+    controlFeedback: ControlFeedback?,
+    statusUpdatedAtEpochMs: Long,
+    hvacCapability: HvacCapability,
+    onDismissRequest: () -> Unit = {},
+    onDismissControlFeedback: () -> Unit,
+    onRefresh: () -> Unit,
+    onControl: (String) -> Unit,
+    onApplyClimateSettings: (AirConditioningCommand) -> Unit
+) {
+    ClimateControlBottomSheet(
+        onDismissRequest = onDismissRequest,
+        status = status,
+        busy = busy,
+        hvacCapability = hvacCapability,
+        onControl = onControl,
+        onApplyClimateSettings = onApplyClimateSettings,
+        controlFeedback = controlFeedback,
+        onDismissControlFeedback = onDismissControlFeedback
+    )
 }
 
 @Composable
@@ -6977,16 +8115,16 @@ fun SeatComfortControlCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(20.dp)),
-        shape = RoundedCornerShape(20.dp),
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -7006,102 +8144,186 @@ fun SeatComfortControlCard(
                 )
             }
 
-            // 主驾驶
-            ComfortLevelSegmentedRow(
-                title = "主驾座椅加热",
-                levels = listOf("关", "1档", "2档", "3档"),
-                selectedLevel = status?.driverSeatHeating ?: 0,
-                enabled = enabled,
-                onLevelSelected = { onControl("driverSeatHeating_$it") },
-                activeColor = MaterialTheme.statusWarn
-            )
-            ComfortLevelSegmentedRow(
-                title = "主驾座椅通风",
-                levels = listOf("关", "1档", "2档", "3档"),
-                selectedLevel = status?.driverSeatVentilation ?: 0,
-                enabled = enabled,
-                onLevelSelected = { onControl("driverSeatVentilation_$it") },
-                activeColor = MaterialTheme.colorScheme.primary
-            )
+            // ====== 主驾与副驾并排双舱 ======
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // 主驾驶舱
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.glassInsetSurface,
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "主驾驶位",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        val isHeating = (status?.driverSeatHeating ?: 0) > 0
+                        SeatComfortTogglePill(
+                            icon = R.drawable.ic_phosphor_sun,
+                            label = "座椅加热",
+                            isActive = isHeating,
+                            activeColor = MaterialTheme.statusWarn,
+                            enabled = enabled,
+                            onToggle = { onControl(if (it) "driverSeatHeating_2" else "driverSeatHeating_0") }
+                        )
+                        val isVent = (status?.driverSeatVentilation ?: 0) > 0
+                        SeatComfortTogglePill(
+                            icon = R.drawable.ic_phosphor_snowflake,
+                            label = "座椅通风",
+                            isActive = isVent,
+                            activeColor = MaterialTheme.colorScheme.primary,
+                            enabled = enabled,
+                            onToggle = { onControl(if (it) "driverSeatVentilation_2" else "driverSeatVentilation_0") }
+                        )
+                    }
+                }
 
-            // 副驾驶
-            ComfortLevelSegmentedRow(
-                title = "副驾座椅加热",
-                levels = listOf("关", "1档", "2档", "3档"),
-                selectedLevel = status?.passengerSeatHeating ?: 0,
-                enabled = enabled,
-                onLevelSelected = { onControl("passengerSeatHeating_$it") },
-                activeColor = MaterialTheme.statusWarn
-            )
-            ComfortLevelSegmentedRow(
-                title = "副驾座椅通风",
-                levels = listOf("关", "1档", "2档", "3档"),
-                selectedLevel = status?.passengerSeatVentilation ?: 0,
-                enabled = enabled,
-                onLevelSelected = { onControl("passengerSeatVentilation_$it") },
-                activeColor = MaterialTheme.colorScheme.primary
-            )
+                // 副驾驶舱
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.glassInsetSurface,
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "副驾驶位",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        val isHeating = (status?.passengerSeatHeating ?: 0) > 0
+                        SeatComfortTogglePill(
+                            icon = R.drawable.ic_phosphor_sun,
+                            label = "座椅加热",
+                            isActive = isHeating,
+                            activeColor = MaterialTheme.statusWarn,
+                            enabled = enabled,
+                            onToggle = { onControl(if (it) "passengerSeatHeating_2" else "passengerSeatHeating_0") }
+                        )
+                        val isVent = (status?.passengerSeatVentilation ?: 0) > 0
+                        SeatComfortTogglePill(
+                            icon = R.drawable.ic_phosphor_snowflake,
+                            label = "座椅通风",
+                            isActive = isVent,
+                            activeColor = MaterialTheme.colorScheme.primary,
+                            enabled = enabled,
+                            onToggle = { onControl(if (it) "passengerSeatVentilation_2" else "passengerSeatVentilation_0") }
+                        )
+                    }
+                }
+            }
 
-            // 方向盘与后视镜加热
-            ComfortLevelSegmentedRow(
-                title = "方向盘加热",
-                levels = listOf("关", "弱档", "强档"),
-                selectedLevel = status?.steeringWheelHeatingLevel ?: if (status?.steeringWheelHeating == true) 2 else 0,
-                enabled = enabled,
-                onLevelSelected = { onControl("steeringWheelHeating_$it") },
-                activeColor = MaterialTheme.statusWarn
-            )
-            ComfortLevelSegmentedRow(
-                title = "后视镜加热",
-                levels = listOf("关", "开"),
-                selectedLevel = if (status?.rearviewMirrorHeating == true) 1 else 0,
-                enabled = enabled,
-                onLevelSelected = { onControl(if (it == 1) "rearviewMirrorHeating_on" else "rearviewMirrorHeating_off") },
-                activeColor = MaterialTheme.statusWarn
-            )
+            // ====== 底部并排：方向盘加热 + 后视镜加热 ======
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.glassInsetSurface,
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val isSteerHeating = (status?.steeringWheelHeatingLevel ?: if (status?.steeringWheelHeating == true) 2 else 0) > 0
+                        SeatComfortTogglePill(
+                            icon = R.drawable.ic_phosphor_sun,
+                            label = "方向盘加热",
+                            isActive = isSteerHeating,
+                            activeColor = MaterialTheme.statusWarn,
+                            enabled = enabled,
+                            onToggle = { onControl(if (it) "steeringWheelHeating_2" else "steeringWheelHeating_0") }
+                        )
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.glassInsetSurface,
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val isMirrorHeating = status?.rearviewMirrorHeating == true
+                        SeatComfortTogglePill(
+                            icon = R.drawable.ic_phosphor_sun,
+                            label = "后视镜加热",
+                            isActive = isMirrorHeating,
+                            activeColor = MaterialTheme.statusWarn,
+                            enabled = enabled,
+                            onToggle = { onControl(if (it) "rearviewMirrorHeating_on" else "rearviewMirrorHeating_off") }
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun ComfortLevelSegmentedRow(
-    title: String,
-    levels: List<String>,
-    selectedLevel: Int,
+private fun SeatComfortTogglePill(
+    icon: Int,
+    label: String,
+    isActive: Boolean,
+    activeColor: Color,
     enabled: Boolean,
-    onLevelSelected: (Int) -> Unit,
-    activeColor: Color = MaterialTheme.colorScheme.primary,
+    onToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            val currentText = levels.getOrElse(selectedLevel) { "关" }
-            Text(
-                currentText,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = if (selectedLevel > 0) activeColor else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            levels.forEachIndexed { index, label ->
-                SegmentedButton(
-                    selected = selectedLevel == index,
-                    onClick = { onLevelSelected(index) },
-                    enabled = enabled,
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = levels.size),
-                    label = { Text(label, style = MaterialTheme.typography.labelSmall) }
-                )
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = if (isActive) activeColor.copy(alpha = 0.16f) else MaterialTheme.glassSurface,
+        border = BorderStroke(
+            0.8.dp,
+            if (isActive) activeColor.copy(alpha = 0.50f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+        ),
+        shadowElevation = 0.dp,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled) {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                onToggle(!isActive)
             }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = label,
+                tint = if (isActive) activeColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(15.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp),
+                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                color = if (isActive) activeColor else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false
+            )
         }
     }
 }
@@ -7111,28 +8333,38 @@ fun ThinClimateSlider(
     value: Float,
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: () -> Unit,
+    onValueChangeCancelled: () -> Unit = {},
     enabled: Boolean,
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
     modifier: Modifier = Modifier
 ) {
+    val isDark = LocalAppDarkTheme.current
+    val latestOnValueChange by rememberUpdatedState(onValueChange)
+    val latestOnValueChangeFinished by rememberUpdatedState(onValueChangeFinished)
+    val latestOnValueChangeCancelled by rememberUpdatedState(onValueChangeCancelled)
+    val thumbRadiusPx = with(LocalDensity.current) { 10.dp.toPx() }
     val total = valueRange.endInclusive - valueRange.start
     val fraction = if (total <= 0f) 0f else ((value - valueRange.start) / total).coerceIn(0f, 1f)
     val enabledColor = MaterialTheme.colorScheme.primary
     val disabledColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
     val trackColor = if (enabled) enabledColor else disabledColor
     val trackBackground = if (enabled) {
-        MaterialTheme.colorScheme.surfaceVariant
+        if (isDark) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.08f)
     } else {
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
     }
     Box(
         modifier = modifier
             .heightIn(min = 32.dp)
-            .pointerInput(valueRange, steps, enabled) {
+            .pointerInput(valueRange, steps, enabled, thumbRadiusPx) {
                 if (!enabled) return@pointerInput
                 fun snap(x: Float, width: Int): Float {
-                    val f = (x / width.toFloat()).coerceIn(0f, 1f)
+                    val f = ClimateSliderMapping.fractionAt(
+                        pointerX = x,
+                        widthPx = width.toFloat(),
+                        thumbRadiusPx = thumbRadiusPx
+                    )
                     val raw = valueRange.start + f * total
                     return if (steps > 0) {
                         val stepSize = total / (steps + 1)
@@ -7142,11 +8374,13 @@ fun ThinClimateSlider(
                         raw.coerceIn(valueRange.start, valueRange.endInclusive)
                     }
                 }
-                detectDragGestures(
-                    onDragStart = { offset -> onValueChange(snap(offset.x, size.width)) },
-                    onDrag = { change, _ -> onValueChange(snap(change.position.x, size.width)) },
-                    onDragEnd = { onValueChangeFinished() },
-                    onDragCancel = { onValueChangeFinished() }
+                detectHorizontalDragGestures(
+                    onDragStart = { offset -> latestOnValueChange(snap(offset.x, size.width)) },
+                    onHorizontalDrag = { change, _ ->
+                        latestOnValueChange(snap(change.position.x, size.width))
+                    },
+                    onDragEnd = { latestOnValueChangeFinished() },
+                    onDragCancel = { latestOnValueChangeCancelled() }
                 )
             }
     ) {
@@ -7157,7 +8391,7 @@ fun ThinClimateSlider(
                 .align(Alignment.Center)
         ) {
             val trackY = size.height / 2f
-            val trackHeightPx = 2.dp.toPx()
+            val trackHeightPx = 3.5.dp.toPx()
             val trackTop = trackY - trackHeightPx / 2f
             val thumbRadius = 10.dp.toPx()
             val trackStart = thumbRadius
@@ -7199,6 +8433,13 @@ fun ClimateSegmentedSetting(
         Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             options.forEachIndexed { index, option ->
+                val presetIcon = when (option.first) {
+                    ClimatePresetAction.QUICK_COOL.name -> R.drawable.ic_phosphor_snowflake
+                    ClimatePresetAction.WINDSHIELD_DEFROST.name -> R.drawable.ic_phosphor_wind
+                    ClimatePresetAction.QUICK_HEAT.name -> R.drawable.ic_phosphor_sun
+                    ClimatePresetAction.DEODORIZE.name -> R.drawable.ic_phosphor_fan
+                    else -> null
+                }
                 SegmentedButton(
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
                     onClick = { onSelected(option.first) },
@@ -7213,7 +8454,21 @@ fun ClimateSegmentedSetting(
                         inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant
                     ),
                     icon = {},
-                    label = { Text(option.second, style = MaterialTheme.typography.labelSmall) }
+                    label = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            if (presetIcon != null) {
+                                Icon(
+                                    painter = painterResource(presetIcon),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                            Text(option.second, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)
+                        }
+                    }
                 )
             }
         }

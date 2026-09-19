@@ -1,6 +1,5 @@
 package com.leapauto.app.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -43,13 +42,19 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.leapauto.app.R
 import com.leapauto.app.bluetooth.BleAccessPolicy
+import com.leapauto.app.bluetooth.BleCalibration
+import com.leapauto.app.bluetooth.BleCloudSaveStatus
+import com.leapauto.app.bluetooth.BleCloudSyncState
 import com.leapauto.app.bluetooth.BleConnectionPhase
 import com.leapauto.app.bluetooth.BleConnectionState
 import com.leapauto.app.bluetooth.BleDiagnosticEntry
 import com.leapauto.app.bluetooth.BleLockAction
 import com.leapauto.app.bluetooth.BleNearbyDevice
 import com.leapauto.app.bluetooth.BlePassiveConfiguration
+import com.leapauto.app.bluetooth.BleVehicleMetadata
 import com.leapauto.app.ui.theme.statusGood
+import java.text.DateFormat
+import java.util.Date
 
 @Composable
 internal fun BluetoothKeyEntry(onClick: () -> Unit) {
@@ -108,7 +113,16 @@ fun BluetoothKeyDialog(
     onCopyDiagnostics: () -> Unit,
     onShareDiagnostics: () -> Unit,
     onClearDiagnostics: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    metadata: BleVehicleMetadata? = null,
+    metadataLoading: Boolean = false,
+    metadataMessage: String = "",
+    cloudState: BleCloudSyncState = BleCloudSyncState(),
+    onRetryCloudSync: () -> Unit = {},
+    calibration: BleCalibration = BleCalibration.DEFAULT,
+    calibrationApplied: Boolean = false,
+    calibrationPending: Boolean = false,
+    onSaveCalibration: (BleCalibration?) -> Unit = {}
 ) {
     val screenConfiguration = LocalConfiguration.current
     val dialogWidth = (screenConfiguration.screenWidthDp * 0.92f).dp.coerceAtMost(560.dp)
@@ -119,10 +133,12 @@ fun BluetoothKeyDialog(
         Surface(
             modifier = Modifier
                 .width(dialogWidth)
-                .heightIn(max = dialogHeight),
+                .heightIn(max = dialogHeight)
+                .then(solidDialogModifier(RoundedCornerShape(20.dp))),
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
         ) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 BluetoothDialogHeader(onDismiss)
@@ -133,6 +149,7 @@ fun BluetoothKeyDialog(
                     BluetoothCertificateStatus(
                         state, certificateReady, certificateLoading, certificateMessage, backgroundRunning, onSyncCertificate
                     )
+                    BluetoothMetadataStatus(metadata, metadataLoading, metadataMessage)
                     HorizontalDivider()
                     BluetoothConnectionStatus(state)
                     HorizontalDivider()
@@ -143,6 +160,7 @@ fun BluetoothKeyDialog(
                         backgroundEnabled = configuration.enabled,
                         reconnectDevice = reconnectDevice,
                         canConnect = manualConnectionAllowed && BleAccessPolicy.canConnect(state.phase, certificateLoading, certificateReady),
+                        metadata = metadata,
                         onScan = onScan,
                         onDisconnect = onDisconnect,
                         onResumeBackground = onResumeBackground,
@@ -161,11 +179,21 @@ fun BluetoothKeyDialog(
                         onApplyConfiguration = onApplyConfiguration,
                         onResumeBackground = onResumeBackground
                     )
+                    BluetoothCloudStatus(cloudState, onRetryCloudSync)
                     TextButton(onClick = onOpenSettings, modifier = Modifier.align(Alignment.End)) {
                         Text(if (permissionsGranted) "系统权限设置" else "开启附近设备权限")
                     }
                     HorizontalDivider()
                     BluetoothManualControlSection(state, onControl)
+                    HorizontalDivider()
+                    BluetoothCalibrationEditor(
+                        calibration = calibration,
+                        applied = calibrationApplied,
+                        pending = calibrationPending,
+                        busy = state.isBusy || state.phase == BleConnectionPhase.SCANNING || certificateLoading ||
+                            cloudState.calibration == BleCloudSaveStatus.SAVING,
+                        onSave = onSaveCalibration
+                    )
                     HorizontalDivider()
                     BluetoothDiagnosticsSection(state, onCopyDiagnostics, onShareDiagnostics, onClearDiagnostics)
                 }
@@ -203,6 +231,7 @@ private fun BluetoothNearbyVehicles(
     backgroundEnabled: Boolean,
     reconnectDevice: BleNearbyDevice?,
     canConnect: Boolean,
+    metadata: BleVehicleMetadata?,
     onScan: () -> Unit,
     onDisconnect: () -> Unit,
     onResumeBackground: () -> Unit,
@@ -231,7 +260,7 @@ private fun BluetoothNearbyVehicles(
                     overflow = TextOverflow.Ellipsis)
             }
         }
-        BluetoothDeviceList(state, canConnect, onConnect)
+        BluetoothDeviceList(state, canConnect, metadata, onConnect)
     }
 }
 
@@ -282,6 +311,101 @@ private fun BluetoothCertificateStatus(
             Text(if (loading) "同步中" else "同步钥匙", modifier = Modifier.padding(start = 8.dp))
         }
     }
+}
+
+@Composable
+private fun BluetoothMetadataStatus(metadata: BleVehicleMetadata?, loading: Boolean, message: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("车辆蓝牙配置", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+        }
+        Text(message.ifBlank {
+            when {
+                loading -> "正在获取车辆配置"
+                metadata != null -> "已获取车辆配置"
+                else -> "尚未获取车辆配置"
+            }
+        }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        metadata?.let {
+            if (it.address.isNotBlank()) {
+                Text("配置地址 ${maskBluetoothAddress(it.address)}", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (it.controllerVersion.isNotBlank()) {
+                Text("控制器版本 ${it.controllerVersion}", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (it.fetchedAtMillis > 0) {
+                val fetchedAt = remember(it.fetchedAtMillis) {
+                    DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it.fetchedAtMillis))
+                }
+                Text("获取时间 $fetchedAt", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun BluetoothCloudStatus(state: BleCloudSyncState, onRetry: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("云端保存", style = MaterialTheme.typography.titleSmall)
+        BluetoothCloudStatusRow("自动操作设置", state.configuration)
+        BluetoothCloudStatusRow("标定参数", state.calibration)
+        if (BluetoothKeyPresentation.canRetryCloud(state)) {
+            OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Icon(painterResource(R.drawable.ic_phosphor_arrow_clockwise), null, Modifier.size(18.dp))
+                Text("重试云端保存", Modifier.padding(start = 8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun BluetoothCloudStatusRow(label: String, status: BleCloudSaveStatus) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        if (status == BleCloudSaveStatus.SAVING) {
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+        }
+        Text(BluetoothKeyPresentation.cloudLabel(status), style = MaterialTheme.typography.bodySmall,
+            color = when (status) {
+                BleCloudSaveStatus.SAVED -> MaterialTheme.statusGood
+                BleCloudSaveStatus.FAILED -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            })
+    }
+}
+
+internal object BluetoothKeyPresentation {
+    fun matchesTarget(address: String, targetAddress: String?): Boolean {
+        val target = targetAddress?.let(BleVehicleMetadata::normalizeAddress) ?: return false
+        return BleVehicleMetadata.normalizeAddress(address) == target
+    }
+
+    fun sortedCandidates(devices: List<BleNearbyDevice>, targetAddress: String?): List<BleNearbyDevice> =
+        devices.sortedWith(compareByDescending<BleNearbyDevice> { matchesTarget(it.address, targetAddress) }
+            .thenByDescending { it.rssi })
+
+    fun candidateLabel(matchesTarget: Boolean): String =
+        if (matchesTarget) "与车辆配置一致" else "身份待核对"
+
+    fun cloudLabel(status: BleCloudSaveStatus): String = when (status) {
+        BleCloudSaveStatus.UNSAVED -> "未保存"
+        BleCloudSaveStatus.PENDING -> "待上传"
+        BleCloudSaveStatus.SAVING -> "保存中"
+        BleCloudSaveStatus.SAVED -> "已保存"
+        BleCloudSaveStatus.FAILED -> "保存失败"
+    }
+
+    fun canRetryCloud(state: BleCloudSyncState): Boolean =
+        listOf(state.configuration, state.calibration).let { statuses ->
+            BleCloudSaveStatus.SAVING !in statuses && statuses.any {
+                it == BleCloudSaveStatus.FAILED || it == BleCloudSaveStatus.PENDING
+            }
+        }
 }
 
 @Composable
@@ -348,6 +472,7 @@ private fun BluetoothConnectionActions(
 private fun BluetoothDeviceList(
     state: BleConnectionState,
     canConnect: Boolean,
+    metadata: BleVehicleMetadata?,
     onConnect: (BleNearbyDevice) -> Unit
 ) {
     val selecting = state.phase in setOf(BleConnectionPhase.IDLE, BleConnectionPhase.SCANNING, BleConnectionPhase.FAILED)
@@ -359,17 +484,18 @@ private fun BluetoothDeviceList(
         return
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("附近车辆", style = MaterialTheme.typography.titleSmall)
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 224.dp)) {
-            items(state.devices, key = { it.address }) { device ->
-                BluetoothDeviceRow(device, enabled = canConnect, onClick = { onConnect(device) })
+            items(BluetoothKeyPresentation.sortedCandidates(state.devices, metadata?.address), key = { it.address }) { device ->
+                BluetoothDeviceRow(device, enabled = canConnect,
+                    matchesTarget = BluetoothKeyPresentation.matchesTarget(device.address, metadata?.address),
+                    onClick = { onConnect(device) })
             }
         }
     }
 }
 
 @Composable
-private fun BluetoothDeviceRow(device: BleNearbyDevice, enabled: Boolean, onClick: () -> Unit) {
+private fun BluetoothDeviceRow(device: BleNearbyDevice, enabled: Boolean, matchesTarget: Boolean, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -384,6 +510,8 @@ private fun BluetoothDeviceRow(device: BleNearbyDevice, enabled: Boolean, onClic
             )
             Text(maskBluetoothAddress(device.address), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(BluetoothKeyPresentation.candidateLabel(matchesTarget), style = MaterialTheme.typography.labelSmall,
+                color = if (matchesTarget) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             Text("信号 ${device.rssi} dBm", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Icon(painterResource(R.drawable.ic_phosphor_caret_right), contentDescription = "连接车辆", modifier = Modifier.size(18.dp))

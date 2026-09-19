@@ -172,6 +172,16 @@ class VehicleStatusMapperTest {
     }
 
     @Test
+    fun rangeExtenderSuffixDoesNotMatchPureElectricMarker() {
+        val values = SignalTable.decode(
+            org.json.JSONObject("""{"rangeMode":1,"3260":137,"3259":71,"3261":208,"3235":0}""")
+        )
+
+        assertEquals("208", VehicleStatusMapper.widgetRange(values, "C01 REEV"))
+        assertEquals("208", VehicleStatusMapper.remainingRange(values, "C01 REEV", null))
+    }
+
+    @Test
     fun hybridVehicleKeepsZeroFuelRangeVisibleWhenSignalIsPresent() {
         val values = org.json.JSONObject(
             """{"rangeMode":1,"3260":206,"3259":0,"3261":206}"""

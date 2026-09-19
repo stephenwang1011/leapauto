@@ -59,8 +59,9 @@ class BleScanDeviceCache(
         return entry.nearbyDevice()
     }
 
-    fun devices(): List<BleNearbyDevice> = entries.values.mapNotNull(Entry::nearbyDevice)
-        .sortedByDescending { it.rssi }.take(maxDisplayedDevices)
+    fun devices(preferredAddress: String? = null): List<BleNearbyDevice> = entries.values.mapNotNull(Entry::nearbyDevice)
+        .sortedWith(compareByDescending<BleNearbyDevice> { it.address.equals(preferredAddress, ignoreCase = true) }
+            .thenByDescending { it.rssi }).take(maxDisplayedDevices)
 
     companion object {
         private val MAC_ADDRESS = Regex("(?:[0-9A-F]{2}:){5}[0-9A-F]{2}")

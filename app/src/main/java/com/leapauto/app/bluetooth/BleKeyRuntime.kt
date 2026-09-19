@@ -17,6 +17,7 @@ class BleKeyRuntime private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val sessions = SessionStore(appContext)
     private val keys = BleManagedKeyStore(appContext)
+    private val profiles = BleVehicleProfileStore(appContext)
     private val handler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val connectionValue = MutableStateFlow(BleConnectionState())
@@ -45,8 +46,9 @@ class BleKeyRuntime private constructor(context: Context) {
         identity = next
         candidate = null
         keyValue.value = next?.takeIf { blockedGeneration != it.generation }?.let {
-            keys.load(it.accountId, it.vin, it.generation)
+            keys.load(it.accountId, it.vin, it.generation, it.deviceId)
         }
+        controller.setVehicleMetadata(next?.let { BleVehicleProfile.freshMetadata(profiles.load(it).metadata, System.currentTimeMillis()) })
         if (next?.generation != blockedGeneration) blockedGeneration = null
         restoreAttempted = false
     }
@@ -59,17 +61,24 @@ class BleKeyRuntime private constructor(context: Context) {
     fun connectManually(device: BleNearbyDevice, certificate: BleKeyCertificate, session: Session) {
         attachSession(session)
         check(foreground && validSession() && !runningValue.value && keyValue.value?.desired?.enabled != true)
-        val normalized = device.copy(protocolMinor = device.protocolMinor ?: BleKeyProtocol.DEFAULT_PROTOCOL_MINOR)
-        candidate = normalized to certificate
         val current = requireNotNull(identity)
+        val normalized = BleProtocolSelection.forManualConnection(
+            device, controller.state.devices, keyValue.value, current, certificate
+        )
+        val profile = profiles.load(current)
+        recordTarget(normalized, profile)
+        candidate = normalized to certificate
         controller.connect(normalized, certificate, current.accountId, current.deviceId,
-            BlePassiveConfiguration.MANUAL, trustedBinding = false) { identity == current && validSession() }
+            BlePassiveConfiguration.MANUAL.copy(calibration = profile.effectiveCalibration), trustedBinding = false) {
+                identity == current && validSession()
+            }
     }
 
     fun applyConfiguration(configuration: BlePassiveConfiguration) {
         check(foreground && validSession())
         check(!connectionValue.value.isBusy) { "请等待当前蓝牙操作结束" }
         check(!sessions.loadOpPassword().isNullOrBlank())
+        check(controller.hasPermissions()) { "请先开启附近设备权限" }
         val bound = requireNotNull(keyValue.value) { "请先连接并认证车辆" }
         val certificate = sessions.loadBluetoothKeyCertificate(bound.accountId, bound.vin)
         check(BleAccessPolicy.canApplyConfiguration(connectionValue.value, bound, certificate, configuration)) {
@@ -79,7 +88,10 @@ class BleKeyRuntime private constructor(context: Context) {
         check(keys.save(requested)) { "无法保存钥匙设置" }
         keyValue.value = requested
         retryAttempt = 0
-        startBackground()
+        // The saved request remains pending if Android refuses to start the service.
+        runCatching { startBackground() }.onFailure {
+            controller.recordDiagnostic(BleDiagnosticEvent.CONFIGURATION_BACKGROUND_PAUSED)
+        }
     }
 
     fun startBackground() {
@@ -167,6 +179,7 @@ class BleKeyRuntime private constructor(context: Context) {
         controller.disconnect()
         stopping = false
         val current = requireNotNull(identity)
+        recordTarget(bound.device, profiles.load(current))
         controller.connect(bound.device.copy(protocolMinorSource = BleProtocolMinorSource.SAVED), certificate, bound.accountId, current.deviceId,
             bound.desired, trustedBinding = true) { identity == current && validSession() }
     }
@@ -191,11 +204,20 @@ class BleKeyRuntime private constructor(context: Context) {
         val existing = keyValue.value
         val fingerprint = BleKeyProtocol.certificateFingerprint(certificate)
         val bound = when {
-            existing == null -> BleManagedKey(current.accountId, current.vin, device, fingerprint)
+            existing == null -> BleManagedKey(current.accountId, current.vin, device, fingerprint,
+                desired = BlePassiveConfiguration(calibration = profiles.load(current).effectiveCalibration), deviceId = current.deviceId)
             existing.matchesCertificate(certificate) && existing.device.address == device.address -> existing.copy(device = device)
             else -> existing.copy(device = device, certificateFingerprint = fingerprint).suspended()
         }
         if (keys.save(bound)) keyValue.value = bound
+    }
+
+    private fun recordTarget(device: BleNearbyDevice, profile: BleVehicleProfile) {
+        val metadata = BleVehicleProfile.freshMetadata(profile.metadata, System.currentTimeMillis())
+        controller.setVehicleMetadata(metadata)
+        controller.recordDiagnostic(BleDiagnosticEvent.TARGET_MATCH,
+            targetMatchCode(device.address, metadata?.address), targetMatchCode(device.address, keyValue.value?.device?.address))
+        controller.recordDiagnostic(BleDiagnosticEvent.CALIBRATION_SOURCE, if (profile.calibration == null) 0 else 1)
     }
 
     private fun synchronizeConfiguration() {

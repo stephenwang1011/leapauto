@@ -52,7 +52,7 @@ class ControlResultPollingPolicyTest {
     fun `climate telemetry refreshes are bounded and stop after twenty seconds`() {
         assertEquals(4, ClimateControlConfirmationSchedule.telemetryRefreshAttempts)
         assertEquals(
-            listOf(3_000L, 6_000L, 12_000L, 20_000L),
+            listOf(1_000L, 3_000L, 6_000L, 12_000L),
             (0 until ClimateControlConfirmationSchedule.telemetryRefreshAttempts)
                 .mapNotNull(ClimateControlConfirmationSchedule::telemetryRefreshElapsedMs)
         )

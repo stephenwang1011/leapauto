@@ -37,6 +37,14 @@ object CarModel3DManager {
         return isModelReady(getBaseDir(context), key)
     }
 
+    fun cleanModelPackage(context: Context, key: String) {
+        if (key.isBlank()) return
+        val dir = getModelDir(context, key)
+        if (dir.exists()) {
+            dir.deleteRecursively()
+        }
+    }
+
     fun getFirstReadyKey(context: Context): String? {
         val base = getBaseDir(context)
         return base.listFiles()?.firstOrNull {

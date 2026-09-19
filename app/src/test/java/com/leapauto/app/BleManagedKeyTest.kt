@@ -1,6 +1,7 @@
 package com.leapauto.app
 
 import com.leapauto.app.bluetooth.BleKeyCertificate
+import com.leapauto.app.bluetooth.BleCalibration
 import com.leapauto.app.bluetooth.BleKeyProtocol
 import com.leapauto.app.bluetooth.BleManagedKey
 import com.leapauto.app.bluetooth.BleManagedKeyStorage
@@ -205,7 +206,7 @@ class BleManagedKeyTest {
     fun `malformed JSON fields cannot default to enabled or a matching identity`() {
         assertEquals(binding(), BleManagedKey.fromJson(binding().toJson(), "test-account", vin))
         val mutations: List<(JSONObject) -> Unit> = listOf(
-            { it.put("schemaVersion", 2) },
+            { it.put("schemaVersion", 3) },
             { it.put("schemaVersion", "1") },
             { it.put("accountId", "other-account") },
             { it.put("vin", "LTEST000000000002") },
@@ -226,6 +227,14 @@ class BleManagedKeyTest {
             { it.getJSONObject("device").put("rssi", -129) },
             { it.getJSONObject("device").put("name", "bad\nname") },
             { it.getJSONObject("desired").remove("autoLock") },
+            { it.getJSONObject("desired").remove("calibration") },
+            { it.getJSONObject("desired").getJSONObject("calibration").put("distanceCalibration", 256) },
+            { it.getJSONObject("desired").getJSONObject("calibration").put("coefficientHundredths", 65_536) },
+            { it.getJSONObject("desired").getJSONObject("calibration").put("unlockCalibration", -1) },
+            { it.getJSONObject("desired").getJSONObject("calibration").put("lockCalibration", "16") },
+            { it.getJSONObject("desired").getJSONObject("calibration").put("lockCalibration", 16.0) },
+            { it.put("deviceId", "other-device") },
+            { it.remove("deviceId") },
             { it.getJSONObject("desired").put("enabled", 1) }
         )
         mutations.forEach { mutate ->
@@ -342,14 +351,125 @@ class BleManagedKeyTest {
         assertFalse(store.suspendAll())
     }
 
+    @Test
+    fun `schema one migrates only original default calibration without inventing authorization`() {
+        val original = binding().request(enabled, 7).confirmed(1, enabled)
+        val legacy = legacyJson(original)
+        val restored = BleManagedKey.fromJson(legacy, original.accountId, vin)
+        assertEquals(original, restored)
+        assertEquals(BleCalibration.DEFAULT, restored.desired.calibration)
+        assertEquals(BleCalibration.DEFAULT, restored.applied?.calibration)
+        assertEquals(2, restored.toJson().getInt("schemaVersion"))
+        assertThrows(IllegalArgumentException::class.java) {
+            BleManagedKey.fromJson(legacyJson(original).apply {
+                getJSONObject("desired").put("calibration", JSONObject())
+            }, original.accountId, vin)
+        }
+    }
+
+    @Test
+    fun `custom calibration requires device identity and survives suspension with every switch off`() {
+        val calibration = BleCalibration(61, 175, 12, 24)
+        val configuration = enabled.copy(buttonEnabled = true, calibration = calibration)
+        assertThrows(IllegalArgumentException::class.java) { binding().request(configuration, 7) }
+        val original = binding().copy(deviceId = "test-device").request(configuration, 7)
+            .confirmed(1, configuration)
+        val suspended = original.forSession(8)
+        assertEquals(BlePassiveConfiguration(calibration = calibration), suspended.desired)
+        assertEquals(configuration, suspended.applied)
+        assertTrue(suspended.pending)
+        assertEquals(-1L, suspended.authorizationGeneration)
+        assertFalse(suspended.forSession(7).desired.enabled)
+        assertEquals(original, BleManagedKey.decodeStored(original.toJson().toString()))
+        assertEquals(original, BleManagedKey.fromJson(original.toJson(), original.accountId, vin, original.deviceId))
+        assertThrows(IllegalArgumentException::class.java) { original.forSession(7, "another-device") }
+        assertThrows(IllegalArgumentException::class.java) {
+            BleManagedKey.fromJson(original.toJson(), original.accountId, vin, "another-device")
+        }
+    }
+
+    @Test
+    fun `legacy default bindings migrate to an explicit device only with enabled behavior suspended`() {
+        val original = binding().request(enabled, 7).confirmed(1, enabled)
+        val storage = MemoryStorage()
+        storage.values[BleManagedKeyStore.storageKey(original.accountId, vin)] = legacyJson(original).toString()
+        val store = BleManagedKeyStore(storage)
+        val migrated = requireNotNull(store.load(original.accountId, vin, 7, "test-device"))
+        assertEquals("test-device", migrated.deviceId)
+        assertEquals(BlePassiveConfiguration(), migrated.desired)
+        assertEquals(enabled, migrated.applied)
+        assertTrue(migrated.pending)
+        assertEquals(-1L, migrated.authorizationGeneration)
+        assertEquals(original, store.load(original.accountId, vin, 7))
+
+        val unrequested = binding().forSession(7, "test-device")
+        assertFalse(unrequested.requested)
+        assertFalse(unrequested.needsBackground)
+    }
+
+    @Test
+    fun `device scoped calibration cannot leak through swapped data or legacy fallback`() {
+        val storage = MemoryStorage()
+        val store = BleManagedKeyStore(storage)
+        val first = binding().copy(deviceId = "first-device")
+            .request(enabled.copy(calibration = BleCalibration(61, 175, 12, 24)), 7)
+        val second = binding().copy(deviceId = "second-device")
+            .request(enabled.copy(calibration = BleCalibration(63, 150, 10, 22)), 7)
+        assertTrue(store.save(first))
+        assertTrue(store.save(second))
+        assertEquals(first, store.load(first.accountId, vin, 7, first.deviceId))
+        assertEquals(second, store.load(second.accountId, vin, 7, second.deviceId))
+        assertNull(store.load(first.accountId, vin, 7, "third-device"))
+        assertTrue(store.save(binding()))
+        val firstKey = BleManagedKeyStore.storageKey(first.accountId, vin, first.deviceId)
+        storage.values[firstKey] = second.toJson().toString()
+        assertNull(store.load(first.accountId, vin, 7, first.deviceId))
+        storage.values[firstKey] = "not-json"
+        assertNull(store.load(first.accountId, vin, 7, first.deviceId))
+        storage.values[firstKey] = first.toJson().toString()
+        storage.unreadableKeys += firstKey
+        assertNull(store.load(first.accountId, vin, 7, first.deviceId))
+        storage.unreadableKeys.clear()
+        assertTrue(store.clear(first.accountId, vin, first.deviceId))
+        assertEquals(second, store.load(second.accountId, vin, 7, second.deviceId))
+        assertEquals(binding(), store.load(first.accountId, vin, 7))
+    }
+
+    @Test
+    fun `logout keeps each device calibration but only retains a pending disable`() {
+        val storage = MemoryStorage()
+        val store = BleManagedKeyStore(storage)
+        val configuration = enabled.copy(calibration = BleCalibration(61, 175, 12, 24))
+        val original = binding().copy(deviceId = "test-device").request(configuration, 7)
+            .confirmed(1, configuration)
+        assertTrue(store.save(original))
+        assertTrue(store.suspendAll())
+        val restored = requireNotNull(store.load(original.accountId, vin, 7, original.deviceId))
+        assertEquals(BlePassiveConfiguration(calibration = configuration.calibration), restored.desired)
+        assertEquals(configuration, restored.applied)
+        assertTrue(restored.pending)
+        assertEquals(original.deviceId, restored.deviceId)
+        assertFalse(BleManagedKeyStore.storageKey(original.accountId, vin, original.deviceId)
+            .contains(original.deviceId))
+    }
+
+    private fun legacyJson(binding: BleManagedKey): JSONObject = binding.toJson().apply {
+        put("schemaVersion", 1)
+        remove("deviceId")
+        getJSONObject("desired").remove("calibration")
+        optJSONObject("applied")?.remove("calibration")
+    }
+
     private class MemoryStorage : BleManagedKeyStorage {
         val values = linkedMapOf<String, String>()
         var rejectWrites = false
         var failReads = false
+        val unreadableKeys = mutableSetOf<String>()
 
         override fun keys(): Set<String> = values.keys.toSet()
         override fun read(key: String): String? {
             check(!failReads) { "Synthetic storage failure" }
+            if (key in unreadableKeys) return null
             return values[key]
         }
 

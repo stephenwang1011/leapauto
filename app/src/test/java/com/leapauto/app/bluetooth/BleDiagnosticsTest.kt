@@ -7,6 +7,43 @@ import org.junit.Test
 
 class BleDiagnosticsTest {
     @Test
+    fun targetChecksAndCloudConfirmationRemainSeparateFromVehicleAuthentication() {
+        assertEquals(0, targetMatchCode("00:11:22:33:AA:BB", null))
+        assertEquals(1, targetMatchCode("00:11:22:33:AA:BB", "00:11:22:33:aa:bb"))
+        assertEquals(2, targetMatchCode("00:11:22:33:AA:BB", "00:11:22:33:AA:CC"))
+        val entries = listOf(
+            BleDiagnosticEntry(0, BleDiagnosticEvent.TARGET_MATCH, 2, 1),
+            BleDiagnosticEntry(1, BleDiagnosticEvent.AUTH_MODE, 0),
+            BleDiagnosticEntry(2, BleDiagnosticEvent.AUTH_IDENTITY_PLACEHOLDERS, 3),
+            BleDiagnosticEntry(3, BleDiagnosticEvent.CALIBRATION_SOURCE, 1),
+            BleDiagnosticEntry(4, BleDiagnosticEvent.CLOUD_SAVE_RESULT, 1, 1)
+        )
+        val report = BleDiagnostics.formatReport(entries, "test", BleConnectionPhase.FAILED)
+        for (meaning in listOf("云端=不一致", "绑定=一致", "完整认证 AAAE", "空占位不代表身份错误",
+                "本机自定义", "不代表车辆已应用")) assertTrue(report.contains(meaning))
+        assertFalse(report.contains("00:11:22"))
+        assertTrue(entries.none { it.event == BleDiagnosticEvent.AUTHENTICATED })
+    }
+
+    @Test
+    fun authenticationStructureExportsOnlyNumbersWithFieldComparisonMeaning() {
+        val diagnostics = BleDiagnostics { 0L }
+        val structure = BleAuthenticationStructure(8, 3, 120, 64, 188, 192, 9, 15)
+        diagnostics.recordAuthentication(structure)
+        val entries = diagnostics.snapshot()
+        assertEquals(listOf(BleDiagnosticEvent.AUTH_CERTIFICATE_STRUCTURE, BleDiagnosticEvent.AUTH_TEXT_STRUCTURE,
+            BleDiagnosticEvent.AUTH_CIPHER_STRUCTURE, BleDiagnosticEvent.AUTH_CONFIGURATION), entries.map { it.event })
+        assertEquals(listOf(8, 120, 188, 9), entries.map { it.code })
+        assertEquals(listOf(3, 64, 192, 15), entries.map { it.detail })
+        assertTrue(BleAuthenticationStructure::class.java.declaredFields.all { it.type == Int::class.javaPrimitiveType })
+        val report = BleDiagnostics.formatReport(entries, "3.3.52", BleConnectionPhase.AUTHENTICATING)
+        for (meaning in listOf("原字段数=8", "身份匹配位=3", "1=原账号相同", "2=原设备相同", "不代表证书有效性",
+            "UTF8文本字节=120", "签名字节=64", "加密前字节=188", "密文字节=192", "协议版本=9", "发送标志位=15")) {
+            assertTrue(report.contains(meaning))
+        }
+    }
+
+    @Test
     fun protocolSourceAndRejectionStageDisambiguateDefaultMinorAndVehicleCode() {
         val explicit = BleDiagnosticEntry(0L, BleDiagnosticEvent.PROTOCOL_SELECTED, 8,
             BleProtocolMinorSource.ADVERTISED.diagnosticCode)

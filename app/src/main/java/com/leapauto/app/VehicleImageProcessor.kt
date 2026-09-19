@@ -123,6 +123,26 @@ object VehicleImageProcessor {
         return sampleSize
     }
 
+    fun decodeBitmapFromBytes(
+        bytes: ByteArray,
+        reqWidth: Int = 1920,
+        reqHeight: Int = 1920
+    ): Bitmap? {
+        val boundsOptions = android.graphics.BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, boundsOptions)
+        if (boundsOptions.outWidth > 0 && boundsOptions.outHeight > 0) {
+            val sampleSize = calculateInSampleSize(boundsOptions.outWidth, boundsOptions.outHeight, reqWidth, reqHeight)
+            val decodeOptions = android.graphics.BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            return android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions)
+        }
+        return null
+    }
+
     /**
      * 安全高效地从 Uri 解码用户选取的图片，包含三重降级策略：
      * 1. Android 9+ (API 28+) 优先使用系统原生 ImageDecoder（支持各种格式，自动处理 EXIF 旋转与色彩空间）；
@@ -158,20 +178,9 @@ object VehicleImageProcessor {
         try {
             val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
             if (bytes != null && bytes.isNotEmpty()) {
-                val boundsOptions = android.graphics.BitmapFactory.Options().apply {
-                    inJustDecodeBounds = true
-                }
-                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, boundsOptions)
-                if (boundsOptions.outWidth > 0 && boundsOptions.outHeight > 0) {
-                    val sampleSize = calculateInSampleSize(boundsOptions.outWidth, boundsOptions.outHeight, reqWidth, reqHeight)
-                    val decodeOptions = android.graphics.BitmapFactory.Options().apply {
-                        inSampleSize = sampleSize
-                        inPreferredConfig = Bitmap.Config.ARGB_8888
-                    }
-                    val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions)
-                    if (bitmap != null) {
-                        return bitmap
-                    }
+                val bitmap = decodeBitmapFromBytes(bytes, reqWidth, reqHeight)
+                if (bitmap != null) {
+                    return bitmap
                 }
             }
         } catch (e: Throwable) {

@@ -50,6 +50,14 @@ class CommandsTest {
     }
 
     @Test
+    fun sentryModeRejectsSubAccountEnableOperation() {
+        assertFalse(SentryModeControlPolicy.canOperateSentry(isSharedAccount = true, targetOn = true))
+        assertTrue(SentryModeControlPolicy.canOperateSentry(isSharedAccount = false, targetOn = true))
+        assertTrue(SentryModeControlPolicy.canOperateSentry(isSharedAccount = true, targetOn = false))
+        assertEquals("当前子账号不支持开启哨兵操作", SentryModeControlPolicy.SUB_ACCOUNT_UNSUPPORTED_MESSAGE)
+    }
+
+    @Test
     fun trunkOpenUsesTheTrunkCommandAndTrueState() {
         val command = Commands.build("trunkOpen")
 
@@ -305,6 +313,7 @@ class CommandsTest {
         assertEquals("降温中", ClimateControlFeedbackText.sending("极速降温"))
         assertEquals("除雾已开启", ClimateControlFeedbackText.confirmed("开启除雾"))
         assertEquals("除味失败", ClimateControlFeedbackText.failed("快速除味"))
+        assertEquals("空调设置已下发，车辆状态暂未确认", ClimateControlFeedbackText.notConfirmed("空调设置"))
     }
 
     @Test
@@ -321,6 +330,15 @@ class CommandsTest {
         assertEquals(25, staleRefresh.value)
         assertTrue(staleRefresh.isPending)
         assertFalse(staleRefresh.clearPending)
+
+        val accepted = ClimateTemperatureSync.resolve(
+            AcTemperatureTarget(24, confirmed = true),
+            pending,
+            ClimateControlRequestState(7L, ClimateControlRequestPhase.ACCEPTED)
+        )
+        assertEquals(25, accepted.value)
+        assertTrue(accepted.isPending)
+        assertFalse(accepted.clearPending)
 
         val completed = ClimateTemperatureSync.resolve(
             AcTemperatureTarget(25, confirmed = true),
@@ -353,7 +371,9 @@ class CommandsTest {
         val acOn = ClimateOptimisticUpdates.acOn()
         assertEquals(true, acOn.acSwitch)
         assertEquals("24 °C", acOn.acSetting)
-        assertNull(acOn.windshieldDefrost)
+        assertEquals(3, acOn.windLevel)
+        assertEquals(AirCircle.INNER, acOn.circle)
+        assertEquals(false, acOn.windshieldDefrost)
 
         val acOff = ClimateOptimisticUpdates.acOff()
         assertEquals(false, acOff.acSwitch)
@@ -362,10 +382,14 @@ class CommandsTest {
         val target = ClimateOptimisticUpdates.temperature(18)
         assertEquals(true, target.acSwitch)
         assertEquals("18 °C", target.acSetting)
+        assertEquals(7, target.windLevel)
+        assertEquals(AirCircle.INNER, target.circle)
 
         val defrost = ClimateOptimisticUpdates.windshieldDefrost()
-        assertNull(defrost.acSwitch)
+        assertEquals(true, defrost.acSwitch)
         assertEquals("24 °C", defrost.acSetting)
+        assertEquals(5, defrost.windLevel)
+        assertEquals(AirCircle.OUTER, defrost.circle)
         assertEquals(true, defrost.windshieldDefrost)
     }
 
@@ -498,7 +522,7 @@ class CommandsTest {
             ClimateTelemetryConfirmationPolicy.matches(
                 optimisticUpdate = target,
                 telemetryExpectation = null,
-                readback = ClimateTelemetryReadback(true, 22, null, null, null)
+                readback = ClimateTelemetryReadback(true, 22, 7, AirCircle.INNER, false)
             )
         )
         assertFalse(
@@ -508,6 +532,69 @@ class CommandsTest {
                 readback = ClimateTelemetryReadback(true, 21, null, null, null)
             )
         )
+    }
+
+    @Test
+    fun detailedClimateUpdateCarriesVerifiedFieldsForImmediatePresentation() {
+        val command = AirConditioningCommand(
+            operation = HvacOperation.ON,
+            temperatureC = 26,
+            capability = HvacCapability(temperatureMinC = 19, temperatureMaxC = 32),
+            windLevel = 5,
+            circle = AirCircle.OUTER,
+            windshieldDefogging = true,
+            outlet = AirOutlet.ALL
+        )
+
+        val update = ClimateOptimisticUpdates.detailed(command)
+
+        assertEquals(true, update.acSwitch)
+        assertEquals("26 °C", update.acSetting)
+        assertEquals(5, update.windLevel)
+        assertEquals(AirCircle.OUTER, update.circle)
+        assertEquals(true, update.windshieldDefrost)
+        assertTrue(
+            ClimateTelemetryConfirmationPolicy.matches(
+                optimisticUpdate = update,
+                telemetryExpectation = null,
+                readback = ClimateTelemetryReadback(true, 26, 5, AirCircle.OUTER, true)
+            )
+        )
+    }
+
+    @Test
+    fun detailedClimateUpdateDoesNotConfirmStaleFanOrCirculationTelemetry() {
+        val command = AirConditioningCommand(
+            operation = HvacOperation.ON,
+            temperatureC = 26,
+            capability = HvacCapability(temperatureMinC = 19, temperatureMaxC = 32),
+            windLevel = 5,
+            circle = AirCircle.OUTER,
+            windshieldDefogging = false,
+            outlet = AirOutlet.ALL
+        )
+
+        assertFalse(
+            ClimateTelemetryConfirmationPolicy.matches(
+                optimisticUpdate = ClimateOptimisticUpdates.detailed(command),
+                telemetryExpectation = null,
+                readback = ClimateTelemetryReadback(true, 26, 4, AirCircle.INNER, false)
+            )
+        )
+    }
+
+    @Test
+    fun climateSliderMappingMatchesVisibleTrackEndpoints() {
+        assertEquals(0f, ClimateSliderMapping.fractionAt(10f, 300f, 10f), 0.0001f)
+        assertEquals(1f, ClimateSliderMapping.fractionAt(290f, 300f, 10f), 0.0001f)
+        assertEquals(0.5f, ClimateSliderMapping.fractionAt(150f, 300f, 10f), 0.0001f)
+    }
+
+    @Test
+    fun climateSliderMappingClampsNarrowAndOutOfBoundsPointers() {
+        assertEquals(0f, ClimateSliderMapping.fractionAt(-20f, 12f, 10f), 0.0001f)
+        assertEquals(1f, ClimateSliderMapping.fractionAt(100f, 12f, 10f), 0.0001f)
+        assertEquals(0f, ClimateSliderMapping.fractionAt(20f, 0f, 10f), 0.0001f)
     }
 
     @Test

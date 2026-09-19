@@ -16,8 +16,27 @@ object VehicleImageCache {
     private const val PREFS_NAME = "leap_vehicle_image_cache"
     private const val KEY_PREFIX_URL = "pic_url_"
     private const val KEY_PREFIX_META = "pic_meta_"
+    private const val KEY_PREFIX_3D_MODEL = "pic_3d_model_"
 
     private val memoryCache = object : LruCache<String, Bitmap>(10) {}
+
+    internal enum class WidgetImageSource {
+        CUSTOM,
+        THREE_D_SNAPSHOT,
+        OFFICIAL_2D,
+        NONE
+    }
+
+    internal fun resolveWidgetImageSource(
+        hasCustomImage: Boolean,
+        has3DSnapshot: Boolean,
+        hasOfficial2DImage: Boolean
+    ): WidgetImageSource = when {
+        hasCustomImage -> WidgetImageSource.CUSTOM
+        has3DSnapshot -> WidgetImageSource.THREE_D_SNAPSHOT
+        hasOfficial2DImage -> WidgetImageSource.OFFICIAL_2D
+        else -> WidgetImageSource.NONE
+    }
 
     fun getCachedMeta(context: Context, vin: String): VehiclePictureMeta? {
         if (vin.isBlank()) return null
@@ -50,6 +69,98 @@ object VehicleImageCache {
         return File(getCacheDir(context), "${vin}_custom.png")
     }
 
+    fun get3DSnapshotFile(context: Context, vin: String): File {
+        return File(getCacheDir(context), "${vin}_3d.png")
+    }
+
+    fun has3DSnapshot(context: Context, vin: String): Boolean {
+        if (vin.isBlank()) return false
+        val file = get3DSnapshotFile(context, vin)
+        return file.exists() && file.length() > 0
+    }
+
+    fun save3DSnapshot(context: Context, vin: String, bitmap: Bitmap, modelKey: String? = null) {
+        if (vin.isBlank()) return
+        val file = get3DSnapshotFile(context, vin)
+        val tmpFile = File(getCacheDir(context), "${vin}_3d.tmp")
+        FileOutputStream(tmpFile).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        if (file.exists()) file.delete()
+        if (!tmpFile.renameTo(file)) {
+            tmpFile.copyTo(file, overwrite = true)
+            tmpFile.delete()
+        }
+        // 3D 快照独立保存，绝不覆盖 official 2D 或 custom 缓存，防止污染桌面小组件
+        synchronized(memoryCache) {
+            memoryCache.put("3d_$vin", bitmap)
+        }
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString("$KEY_PREFIX_3D_MODEL$vin", modelKey.orEmpty())
+            .apply()
+    }
+
+    fun has3DSnapshotForModel(context: Context, vin: String, modelKey: String): Boolean {
+        if (modelKey.isBlank() || !has3DSnapshot(context, vin)) return false
+        val snapshotModelKey = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString("$KEY_PREFIX_3D_MODEL$vin", null)
+        // Older snapshots have no sidecar key; keep them usable until a new frame is generated.
+        return snapshotModelKey.isNullOrBlank() || snapshotModelKey == modelKey
+    }
+
+    fun remove3DSnapshot(context: Context, vin: String) {
+        if (vin.isBlank()) return
+        val file = get3DSnapshotFile(context, vin)
+        if (file.exists()) file.delete()
+        synchronized(memoryCache) {
+            memoryCache.remove("3d_$vin")
+        }
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .remove("$KEY_PREFIX_3D_MODEL$vin")
+            .apply()
+    }
+
+    fun cropTransparentPixels(src: Bitmap): Bitmap {
+        val width = src.width
+        val height = src.height
+        var minX = width
+        var minY = height
+        var maxX = -1
+        var maxY = -1
+
+        val pixels = IntArray(width * height)
+        src.getPixels(pixels, 0, width, 0, 0, width, height)
+
+        for (y in 0 until height) {
+            val rowOffset = y * width
+            for (x in 0 until width) {
+                val alpha = (pixels[rowOffset + x] ushr 24) and 0xff
+                if (alpha > 15) {
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
+                }
+            }
+        }
+
+        if (maxX <= minX || maxY <= minY) return src
+
+        val padX = ((maxX - minX) * 0.04f).toInt()
+        val padY = ((maxY - minY) * 0.04f).toInt()
+        val finalMinX = maxOf(0, minX - padX)
+        val finalMinY = maxOf(0, minY - padY)
+        val finalMaxX = minOf(width - 1, maxX + padX)
+        val finalMaxY = minOf(height - 1, maxY + padY)
+
+        val cropWidth = finalMaxX - finalMinX + 1
+        val cropHeight = finalMaxY - finalMinY + 1
+
+        return Bitmap.createBitmap(src, finalMinX, finalMinY, cropWidth, cropHeight)
+    }
+
     fun hasCustomImage(context: Context, vin: String): Boolean {
         if (vin.isBlank()) return false
         val file = getCustomFile(context, vin)
@@ -69,7 +180,9 @@ object VehicleImageCache {
             tmpFile.delete()
         }
         synchronized(memoryCache) {
-            memoryCache.put(vin, bitmap)
+            memoryCache.remove(vin)
+            memoryCache.remove("official_$vin")
+            memoryCache.put("custom_$vin", bitmap)
         }
     }
 
@@ -79,6 +192,8 @@ object VehicleImageCache {
         if (file.exists()) file.delete()
         synchronized(memoryCache) {
             memoryCache.remove(vin)
+            memoryCache.remove("custom_$vin")
+            memoryCache.remove("official_$vin")
         }
     }
 
@@ -86,20 +201,19 @@ object VehicleImageCache {
         if (vin.isBlank()) return null
         val customFile = getCustomFile(context, vin)
         val hasCustom = customFile.exists() && customFile.length() > 0
+        val cacheKey = if (hasCustom) "custom_$vin" else "official_$vin"
+
         synchronized(memoryCache) {
-            memoryCache.get(vin)?.let { return it }
+            memoryCache.get(cacheKey)?.let { return it }
         }
-        val targetFile = if (hasCustom) {
-            customFile
-        } else {
-            getCacheFile(context, vin)
-        }
+        // 主页等非桌面插件场景保留既有语义：车主自定义图优先，否则使用官方 2D 离线精修图。
+        val targetFile = if (hasCustom) customFile else getCacheFile(context, vin)
         if (!targetFile.exists() || targetFile.length() <= 0) return null
         return try {
             val bitmap = BitmapFactory.decodeFile(targetFile.absolutePath)
             if (bitmap != null) {
                 synchronized(memoryCache) {
-                    memoryCache.put(vin, bitmap)
+                    memoryCache.put(cacheKey, bitmap)
                 }
             }
             bitmap
@@ -107,6 +221,61 @@ object VehicleImageCache {
             null
         }
     }
+
+    fun loadWidgetBitmap(context: Context, vin: String): Bitmap? {
+        if (vin.isBlank()) return null
+
+        val candidates = mapOf(
+            WidgetImageSource.CUSTOM to ("custom_$vin" to getCustomFile(context, vin)),
+            WidgetImageSource.THREE_D_SNAPSHOT to ("3d_$vin" to get3DSnapshotFile(context, vin)),
+            WidgetImageSource.OFFICIAL_2D to ("official_$vin" to getCacheFile(context, vin))
+        )
+        val currentModelKey = getCachedMeta(context, vin)?.h5Key
+        val hasCurrent3DModel = currentModelKey != null &&
+            CarModel3DManager.isModelReady(context, currentModelKey)
+        val hasCurrent3DSnapshot = hasCurrent3DModel &&
+            VehicleImageCache.has3DSnapshotForModel(context, vin, currentModelKey!!)
+        val preferredSource = resolveWidgetImageSource(
+            hasCustomImage = candidates.getValue(WidgetImageSource.CUSTOM).second.isUsableImageFile(),
+            has3DSnapshot = hasCurrent3DSnapshot &&
+                candidates.getValue(WidgetImageSource.THREE_D_SNAPSHOT).second.isUsableImageFile(),
+            hasOfficial2DImage = candidates.getValue(WidgetImageSource.OFFICIAL_2D).second.isUsableImageFile()
+        )
+        val sourceOrder = when (preferredSource) {
+            WidgetImageSource.CUSTOM -> listOf(
+                WidgetImageSource.CUSTOM,
+                if (hasCurrent3DSnapshot) WidgetImageSource.THREE_D_SNAPSHOT else WidgetImageSource.OFFICIAL_2D,
+                WidgetImageSource.OFFICIAL_2D
+            )
+            WidgetImageSource.THREE_D_SNAPSHOT -> listOf(
+                WidgetImageSource.THREE_D_SNAPSHOT,
+                WidgetImageSource.OFFICIAL_2D
+            )
+            WidgetImageSource.OFFICIAL_2D -> listOf(WidgetImageSource.OFFICIAL_2D)
+            WidgetImageSource.NONE -> emptyList()
+        }
+        for (source in sourceOrder) {
+            val (cacheKey, file) = candidates.getValue(source)
+            if (!file.exists() || file.length() <= 0) continue
+            synchronized(memoryCache) {
+                memoryCache.get(cacheKey)?.let { return it }
+            }
+            val bitmap = try {
+                BitmapFactory.decodeFile(file.absolutePath)
+            } catch (_: Exception) {
+                null
+            }
+            if (bitmap != null) {
+                synchronized(memoryCache) {
+                    memoryCache.put(cacheKey, bitmap)
+                }
+                return bitmap
+            }
+        }
+        return null
+    }
+
+    private fun File.isUsableImageFile(): Boolean = exists() && length() > 0
 
     fun loadCachedImageBitmap(context: Context, vin: String): ImageBitmap? {
         return loadCachedBitmap(context, vin)?.asImageBitmap()
@@ -116,11 +285,16 @@ object VehicleImageCache {
         if (vin.isBlank()) return
         synchronized(memoryCache) {
             memoryCache.remove(vin)
+            memoryCache.remove("custom_$vin")
+            memoryCache.remove("official_$vin")
+            memoryCache.remove("3d_$vin")
         }
         val file = getCacheFile(context, vin)
         if (file.exists()) file.delete()
         val customFile = getCustomFile(context, vin)
         if (customFile.exists()) customFile.delete()
+        val snapshotFile = get3DSnapshotFile(context, vin)
+        if (snapshotFile.exists()) snapshotFile.delete()
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .remove("$KEY_PREFIX_URL$vin")

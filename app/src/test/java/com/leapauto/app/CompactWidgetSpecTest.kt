@@ -199,6 +199,36 @@ class CompactWidgetSpecTest {
         }
     }
 
+    @Test
+    fun `widget car bitmap scaling enlarges car by one fourth with 0_84f scale ratio`() {
+        val projectDir = projectDirectory()
+        val controlWidget = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
+
+        assertTrue(controlWidget.contains("scaleRatio: Float = 0.84f"))
+        assertTrue(controlWidget.contains("val carW = (canvasW * scaleRatio).toInt()"))
+        assertTrue(controlWidget.contains("canvas.drawBitmap(scaledCar, left, top, null)"))
+    }
+
+    @Test
+    fun `both widgets load car image through widget priority cache`() {
+        val projectDir = projectDirectory()
+        val wideWidget = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
+        val compactWidget = File(projectDir, "app/src/main/java/com/leapauto/app/CompactControlWidget.kt").readText()
+
+        assertTrue(wideWidget.contains("VehicleImageCache.loadWidgetBitmap(context, vin)"))
+        assertTrue(compactWidget.contains("VehicleImageCache.loadWidgetBitmap(context, vin)"))
+    }
+
+    @Test
+    fun `widget card background supports landscape skybox style option`() {
+        val projectDir = projectDirectory()
+        val controlWidget = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
+
+        assertTrue(controlWidget.contains("WIDGET_BG_STYLE_LANDSCAPE"))
+        assertTrue(controlWidget.contains("widget_card_background_landscape_dark"))
+        assertTrue(controlWidget.contains("widget_card_background_landscape_light"))
+    }
+
     private fun projectDirectory(): File {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         return generateSequence(File(workingDirectory)) { it.parentFile }

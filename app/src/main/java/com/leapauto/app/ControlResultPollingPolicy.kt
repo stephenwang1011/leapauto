@@ -36,10 +36,10 @@ object ClimateControlConfirmationSchedule {
         24_000L
     )
     private val telemetryRefreshScheduleMs = longArrayOf(
+        1_000L,
         3_000L,
         6_000L,
-        12_000L,
-        20_000L
+        12_000L
     )
 
     val resultQueryAttempts: Int = resultQueryElapsedMs.size

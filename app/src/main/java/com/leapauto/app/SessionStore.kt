@@ -325,7 +325,13 @@ class SessionStore(context: Context) {
             "range_extender" -> VehiclePowerType.RANGE_EXTENDER
             else -> null
         }
-        val type = storedType ?: defaultPowerType
+        val type = VehiclePowerTypeResolver.fromVehicleConfig(
+            vin = vin,
+            configuredPowerType = storedType,
+            carType = defaultModel,
+            defaultPowerType = defaultPowerType,
+            vehicles = loadVehicles()
+        )
         val storedModel = appPrefs.getString(prefix + "model", "")?.trim().orEmpty()
         val selectedModel = storedModel.ifBlank { defaultModel.trim() }
         val storedColor = appPrefs.getString(prefix + "color", "")?.trim().orEmpty()
@@ -399,6 +405,14 @@ class SessionStore(context: Context) {
     fun saveWidgetOpacity(opacity: Int) {
         require(opacity in WIDGET_OPACITY_OPTIONS) { "不支持的小组件透明度" }
         prefs.edit().putInt("widget_opacity", opacity).apply()
+    }
+
+    fun loadWidgetBackgroundStyle(): Int =
+        prefs.getInt(WIDGET_BACKGROUND_STYLE, WIDGET_BG_STYLE_DEFAULT)
+
+    fun saveWidgetBackgroundStyle(style: Int) {
+        prefs.edit().putInt(WIDGET_BACKGROUND_STYLE, style).apply()
+        ControlWidget.refreshData(appContext)
     }
 
     /** Shared with 我的: missing preference remains opt-in for verification by default. */
@@ -795,7 +809,9 @@ class SessionStore(context: Context) {
 
     private fun lastChargeStateKey(vin: String): String = "${LAST_CHARGE_STATE}_$vin"
 
-    private companion object {
+    companion object {
+        const val WIDGET_BG_STYLE_DEFAULT = 0
+        const val WIDGET_BG_STYLE_LANDSCAPE = 1
         const val SESSION_GENERATION = "session_generation"
         const val AUTHOR_SUPPORT_LAST_SHOWN_EPOCH_DAY = "author_support_last_shown_epoch_day"
         const val AUTHOR_SUPPORT_PROMPT_DISABLED = "author_support_prompt_disabled"
@@ -806,6 +822,7 @@ class SessionStore(context: Context) {
             "widget_sensitive_action_verification_enabled"
         const val LAST_CHARGE_STATE = "last_charge_state"
         const val WIDGET_OPACITY_OPAQUE = 100
+        const val WIDGET_BACKGROUND_STYLE = "widget_background_style"
 
         fun quickCommandOrderKey(vin: String): String = QUICK_COMMAND_ORDER_PREFIX + vin
         const val WIDGET_SYNC_SUPPRESSED_UNTIL = "widget_sync_suppressed_until"

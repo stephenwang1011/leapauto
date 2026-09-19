@@ -16,6 +16,16 @@ enum class BleDiagnosticEvent(val label: String) {
     SCAN_FAILED("系统扫描失败"),
     CONNECT_STARTED("开始连接车辆"),
     PROTOCOL_SELECTED("认证协议版本"),
+    VEHICLE_METADATA_STARTED("同步车辆蓝牙信息"),
+    VEHICLE_METADATA_RESULT("车辆蓝牙信息结果"),
+    TARGET_MATCH("连接目标核对"),
+    AUTH_MODE("认证方式"),
+    AUTH_IDENTITY_PLACEHOLDERS("证书身份占位"),
+    CALIBRATION_SOURCE("标定参数来源"),
+    CALIBRATION_SAVED("本机标定已保存"),
+    CONFIGURATION_BACKGROUND_PAUSED("配置已保存，后台连接尚未启动"),
+    CLOUD_SAVE_STARTED("开始保存云端偏好"),
+    CLOUD_SAVE_RESULT("云端偏好保存结果"),
     CERTIFICATE_IDENTITY_UPDATED("证书同步更新了设备身份"),
     KEY_DERIVED("会话密钥派生完成"),
     KEY_DERIVATION_FAILED("钥匙解析或派生失败"),
@@ -27,6 +37,10 @@ enum class BleDiagnosticEvent(val label: String) {
     MTU_REQUESTED("协商传输长度"),
     MTU_RESULT("传输长度协商结果"),
     AUTHENTICATION_STARTED("开始钥匙认证"),
+    AUTH_CERTIFICATE_STRUCTURE("认证证书结构"),
+    AUTH_TEXT_STRUCTURE("认证文本结构"),
+    AUTH_CIPHER_STRUCTURE("认证加密结构"),
+    AUTH_CONFIGURATION("认证配置结构"),
     TX_FRAME("开始写入报文"),
     TX_CHUNK("写入报文分片"),
     TX_ACK("系统写入回调"),
@@ -52,6 +66,38 @@ data class BleDiagnosticEntry(
 ) {
     val description: String get() = buildString {
         append(event.label)
+        when (event) {
+            BleDiagnosticEvent.TARGET_MATCH -> {
+                append(" · 云端=").append(targetLabel(code))
+                append(" · 绑定=").append(targetLabel(detail))
+            }
+            BleDiagnosticEvent.AUTH_MODE -> append(if (code == 0) " · 完整认证 AAAE" else " · 方式未知")
+            BleDiagnosticEvent.AUTH_IDENTITY_PLACEHOLDERS -> {
+                append(" · 空字段位=").append(code)
+                append("（1=原账号为空，2=原设备为空；空占位不代表身份错误）")
+            }
+            BleDiagnosticEvent.CALIBRATION_SOURCE ->
+                append(if (code == 1) " · 本机自定义" else " · 应用默认")
+            BleDiagnosticEvent.CLOUD_SAVE_STARTED, BleDiagnosticEvent.CLOUD_SAVE_RESULT -> {
+                append(if (code == 1) " · 标定" else " · 开关")
+                if (event == BleDiagnosticEvent.CLOUD_SAVE_RESULT) {
+                    append(if (detail == 1) " · 云端已保存（不代表车辆已应用）" else " · 未确认保存")
+                }
+            }
+            BleDiagnosticEvent.AUTH_CERTIFICATE_STRUCTURE -> {
+                append(" · 原字段数=").append(code).append(" · 身份匹配位=").append(detail)
+                append("（1=原账号相同，2=原设备相同；仅字段比较，不代表证书有效性）")
+            }
+            BleDiagnosticEvent.AUTH_TEXT_STRUCTURE ->
+                append(" · UTF8文本字节=").append(code).append(" · 签名字节=").append(detail)
+            BleDiagnosticEvent.AUTH_CIPHER_STRUCTURE ->
+                append(" · 加密前字节=").append(code).append(" · 密文字节=").append(detail)
+            BleDiagnosticEvent.AUTH_CONFIGURATION -> {
+                append(" · 协议版本=").append(code).append(" · 发送标志位=").append(detail)
+                append("（按发送顺序，第1项为最低位）")
+            }
+            else -> Unit
+        }
         if (event == BleDiagnosticEvent.PROTOCOL_SELECTED) {
             val source = when (detail) {
                 BleProtocolMinorSource.ADVERTISED.diagnosticCode -> "车辆广播"
@@ -94,6 +140,16 @@ class BleDiagnostics(
         entries.addLast(BleDiagnosticEntry((clockMillis() - startedAt).coerceAtLeast(0), event, code, detail))
     }
 
+    fun recordAuthentication(structure: BleAuthenticationStructure) {
+        record(BleDiagnosticEvent.AUTH_CERTIFICATE_STRUCTURE, structure.certificateFieldCount, structure.identityMatchMask)
+        record(BleDiagnosticEvent.AUTH_TEXT_STRUCTURE, structure.textByteCount, structure.signatureByteCount)
+        record(BleDiagnosticEvent.AUTH_CIPHER_STRUCTURE, structure.plaintextByteCount, structure.ciphertextByteCount)
+        record(BleDiagnosticEvent.AUTH_CONFIGURATION, structure.protocolMinor, structure.flagsMask)
+        if (structure.identityEmptyMask >= 0) {
+            record(BleDiagnosticEvent.AUTH_IDENTITY_PLACEHOLDERS, structure.identityEmptyMask)
+        }
+    }
+
     fun snapshot(): List<BleDiagnosticEntry> = entries.toList()
 
     fun clear() {
@@ -114,4 +170,16 @@ class BleDiagnostics(
                 }
             }
     }
+}
+
+internal fun targetMatchCode(address: String, expected: String?): Int = when {
+    expected == null -> 0
+    address.equals(expected, ignoreCase = true) -> 1
+    else -> 2
+}
+
+private fun targetLabel(code: Int?): String = when (code) {
+    1 -> "一致"
+    2 -> "不一致"
+    else -> "未知"
 }

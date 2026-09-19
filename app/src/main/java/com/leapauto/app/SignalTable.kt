@@ -105,7 +105,17 @@ object SignalTable {
         "3636" to "sentryMode",
         "49" to "leftMirrorHeating",
         "50" to "rightMirrorHeating",
-        "1724" to "roofOpening"
+        "1724" to "roofOpening",
+        // 车载冰箱（C16 实车核验）
+        "10707" to "fridgeTargetTemp",
+        "10708" to "fridgeMode",
+        "10709" to "fridgeSwitch",
+        "10711" to "fridgeStyle",
+        "10712" to "fridgeFault",
+        "11189" to "fridgeParkDurationHours",
+        "11190" to "fridgeParkSwitch",
+        "11191" to "fridgeParkCycles",
+        "11260" to "fridgeParkEndTime"
     )
 
     /**

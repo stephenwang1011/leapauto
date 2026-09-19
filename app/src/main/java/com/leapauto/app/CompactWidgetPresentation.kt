@@ -41,7 +41,11 @@ object CompactWidgetRangePresentationMapper {
         val normalizedElectricRange = cleanRange(electricRange)
         val normalizedFuelRange = cleanRange(fuelRange)
         val hasFuelTelemetry = normalizedFuelRange != null || fuelSoc != null
-        val rangeExtender = powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER || hasFuelTelemetry
+        val rangeExtender = when (powerType) {
+            SessionStore.VehiclePowerType.PURE_ELECTRIC -> false
+            SessionStore.VehiclePowerType.RANGE_EXTENDER -> true
+            null -> hasFuelTelemetry
+        }
         val electricProgress = electricSoc?.coerceIn(0, 100)
             ?: ratioProgress(normalizedElectricRange, cleanRange(electricTotalRange))
         val fuelProgress = fuelSoc?.coerceIn(0, 100)

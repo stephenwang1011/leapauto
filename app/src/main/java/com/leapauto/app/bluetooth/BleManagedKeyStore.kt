@@ -8,22 +8,36 @@ import java.security.MessageDigest
 class BleManagedKeyStore internal constructor(private val storage: BleManagedKeyStorage) {
     constructor(context: Context) : this(EncryptedManagedKeyStorage(context.applicationContext))
 
-    fun load(accountId: String, vin: String, sessionGeneration: Long): BleManagedKey? = synchronized(STORE_LOCK) {
+    fun load(
+        accountId: String,
+        vin: String,
+        sessionGeneration: Long,
+        deviceId: String = ""
+    ): BleManagedKey? = synchronized(STORE_LOCK) {
         runCatching {
-            val key = storageKey(accountId, vin)
-            val binding = storage.read(key)?.let(BleManagedKey::decodeStored) ?: return@runCatching null
-            binding.takeIf { it.accountId == accountId && it.vin == vin }?.forSession(sessionGeneration)
+            val key = storageKey(accountId, vin, deviceId)
+            val value = storage.read(key)
+            val binding = if (value != null) {
+                BleManagedKey.decodeStored(value).takeIf { it.deviceId == deviceId }
+            } else if (key in storage.keys()) {
+                null
+            } else if (deviceId.isNotEmpty()) {
+                storage.read(storageKey(accountId, vin))?.let(BleManagedKey::decodeStored)
+                    ?.takeIf { it.deviceId.isEmpty() }
+            } else null
+            binding?.takeIf { it.accountId == accountId && it.vin == vin }
+                ?.forSession(sessionGeneration, deviceId)
         }.getOrNull()
     }
 
     fun save(binding: BleManagedKey): Boolean = synchronized(STORE_LOCK) {
         runCatching {
-            storage.write(mapOf(storageKey(binding.accountId, binding.vin) to binding.toJson().toString()))
+            storage.write(mapOf(storageKey(binding.accountId, binding.vin, binding.deviceId) to binding.toJson().toString()))
         }.getOrDefault(false)
     }
 
-    fun clear(accountId: String, vin: String): Boolean = synchronized(STORE_LOCK) {
-        runCatching { storage.remove(storageKey(accountId, vin)) }.getOrDefault(false)
+    fun clear(accountId: String, vin: String, deviceId: String = ""): Boolean = synchronized(STORE_LOCK) {
+        runCatching { storage.remove(storageKey(accountId, vin, deviceId)) }.getOrDefault(false)
     }
 
     /** Local suspension remains pending until the vehicle acknowledges the disabled configuration. */
@@ -34,7 +48,7 @@ class BleManagedKeyStore internal constructor(private val storage: BleManagedKey
             storage.keys().filter { it.startsWith(KEY_PREFIX) }.forEach { key ->
                 val binding = runCatching decode@{
                     val value = storage.read(key) ?: return@decode null
-                    BleManagedKey.decodeStored(value).takeIf { storageKey(it.accountId, it.vin) == key }
+                    BleManagedKey.decodeStored(value).takeIf { storageKey(it.accountId, it.vin, it.deviceId) == key }
                 }.getOrNull()
                 if (binding == null) {
                     complete = false
@@ -50,12 +64,14 @@ class BleManagedKeyStore internal constructor(private val storage: BleManagedKey
         private val STORE_LOCK = Any()
         private const val KEY_PREFIX = "ble_managed_"
 
-        internal fun storageKey(accountId: String, vin: String): String {
-            require(BleManagedKey.validAccount(accountId) && BleManagedKey.validVin(vin)) {
+        internal fun storageKey(accountId: String, vin: String, deviceId: String = ""): String {
+            require(BleManagedKey.validAccount(accountId) && BleManagedKey.validVin(vin) &&
+                (deviceId.isEmpty() || BleManagedKey.validAccount(deviceId))) {
                 "Invalid Bluetooth binding scope"
             }
             val digest = MessageDigest.getInstance("SHA-256")
-                .digest("$accountId\u0000$vin".toByteArray(Charsets.UTF_8))
+                .digest(("$accountId\u0000$vin" + if (deviceId.isEmpty()) "" else "\u0000$deviceId")
+                    .toByteArray(Charsets.UTF_8))
             return KEY_PREFIX + digest.joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
         }
     }

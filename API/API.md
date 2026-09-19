@@ -24,6 +24,8 @@
 - 证书同步使用运行时 `appCenter`：`POST /carownerservice/v3/api/bluetoothkey/combine/syncBluetoothKeys`，
   签名表单为 `vin/timespan/nonce/deviceID/signStr`。证书请求不经过网络诊断拦截器；证书按账号及 VIN 在 Android Keystore 加密存储中隔离。
   `APPVersion` 使用会话 App 版本；证书缓存绑定请求设备 ID，续期后的凭据与证书一起校验并提交，设备身份变化时旧连接失效。
+- 蓝牙管理页会按当前账号、VIN 和请求设备 ID 获取并加密保存 `commonConfig["4"]` 的车辆蓝牙元数据；扫描候选按地址匹配优先展示，未匹配只标记“身份待核对”，不会阻断用户选择，也不会把 `version="2.0"` 转换为协议 minor。
+- 蓝牙云端偏好使用官方已核实的两个上传接口：`POST /app/app-global-service/v3/api/commoninfo/transparent/conf/upload` 保存 `bleKeySwitch/bleKeyUnlock/bleKeyLock/bleKeyBtn`，`POST /app/app-global-service/v3/api/bluetoothkey/uploadAutonomyCalibrateParams` 保存或删除标定参数。云端状态与车辆 GATT `cmdId=3` 应用状态分开显示；云端 HTTP 成功不表示车辆已应用。
 - 支持 `keyType=0` 的 P-256 / AES 与 `keyType=1` 的 SM2 / SM3 / SM4 会话，使用 FFFE 服务与 FFF2 特征、完整认证和手动上锁/解锁。
   SM2 公钥从 X.509 证书提取，按已解包源码的协商和派生流程实现；两类协议均待实车互通验证。
   未实现原版快速重连凭据或 EEED 座舱通道。后台断线恢复每次都重新完整认证，不复用会话密钥。
@@ -33,6 +35,7 @@
 - 设置页新增四个开关：后台蓝牙钥匙 `enabled`、靠近自动解锁 `autoUnlock`、远离自动锁车 `autoLock`、微动开关控锁 `buttonEnabled`，本应用默认全部为 `false`。
   三个子选项只有总开关打开后可编辑；微动选项要求协议 minor 至少为 9，未知或旧协议不假定支持。
   开关只修改本地草稿，点击“保存设置”后仍须操作密码前置检查和明确确认；关闭总开关同时关闭三个子选项。蓝牙忙碌时暂不提交新配置。
+- 设置页高级标定允许保存协议字段 `uint8 / uint16 little-endian / uint8 / uint8`，系数按百分之一编码；当前不把这些字段解释为米，也不把抓包中的单车参数改成全局默认。完整认证和 `cmdId=3` 使用同一份按账号、VIN、设备 ID 隔离的标定配置。
 - 首次扫描连接只建立手动会话，自动解锁、自动锁车、微动选项保持关闭；完整认证成功后才保存设备绑定。
   绑定含账号、VIN、设备地址、协议 minor 和证书指纹，按账号及 VIN 隔离加密存储；证书变化时不得直接复用旧绑定启动后台。
 - 配置同步复用加密命令 `cmdId=3`。仅当前认证会话的待同步配置收到可解密的 `2;3;0` 或 `2;3;00` 结果，并完成该帧全部写入，才进入本地确认流程。
@@ -217,6 +220,7 @@ SDK 资产由 `scripts/rebuild-shumei-dex.ps1` 离线重建，使用本地 Andro
 | 空调 | `1938 → acSwitch`、`2183/2184 → acSetting/acSettingRight`、`1349 → interiorTemp`、`1943 → recirculationMode`、`1945 → windshieldDefrost`、`1946 → rearWindowHeating`、`1941 → acAirVolume` | 空调开关、左右温度、车内温度、循环（`0=外循环`、`1=内循环`）、前后除雾、风量；旧 T03 在 `1943` 缺失时兼容命名字段 `acCircleMode`（`false=外循环`、`true=内循环`） |
 | 车窗与天幕 | `3727/3728/1879/1880 → 四窗开度`、`1693/1694/1695/1696 → 四窗状态`、`1724 → roofOpening` | 车窗百分比、开关状态、天幕开度 |
 | 轮胎 | `2646 → 左前`、`2653 → 右前`、`2660 → 左后`、`2667 → 右后`；`2641/2648/2662/2655 → 对应胎压状态` | 四轮胎压及异常状态（数值映射按最新实车核验修正；告警状态映射保持原验证结果） |
+| 车载冰箱 | `10709 → fridgeSwitch`、`10708 → fridgeMode`、`10707 → fridgeTargetTemp`、`10711 → fridgeStyle`、`10712 → fridgeFault`、`11190 → fridgeParkSwitch`、`11189 → fridgeParkDurationHours`、`11191 → fridgeParkCycles`、`11260 → fridgeParkEndTime` | 冰箱开关（0=关，1=开）、模式（0=制冷，1=制热）、设定温度（制冷设定 ℃，制热为 50℃）、风格（0=标准，1=急速）、故障码、离车运行开关（0=关，1=开）、离车时长（小时）、离车频次（0=单次，1=每次离车）、离车结束时间戳（秒级） |
 | 安防与位置 | `1255 → vehicleSecurityActive`、`3636 → sentryMode`、`3725/3724 → latitude/longitude` | 安防、哨兵模式、车辆坐标 |
 
 **当前已知限制**：C16 胎温和综合电耗尚无已验证的数字信号 ID。服务端若直接返回命名字段，可兼容读取；否则必须先采集原始 `signalMap` 再补充映射。
@@ -286,6 +290,9 @@ SDK 资产由 `scripts/rebuild-shumei-dex.ps1` 离线重建，使用本地 Andro
 | `seatVentilation` | 370 | `{"position":"left_front","level":"3"}` | 座椅通风（position: left_front/right_front，level: 0..3） |
 | `steeringWheelHeat` | 320 | `{"level":"2"}` | 方向盘加热（level: 0=关, 1=弱, 2=强） |
 | `rearviewMirrorHeat` | 440 | `{"value":"2"}` | 后视镜加热（value: 1=关, 2=开） |
+| `fridgeOn` | 500 | `{"cycles":"1","duration":3600,"enable":1,"mode":"cold","parkEnable":0,"style":"normal","temp":4,"value":"false"}` | 车载冰箱开机（默认制冷 4°C） |
+| `fridgeOff` | 500 | `{"cycles":"1","duration":3600,"enable":0,"mode":"cold","parkEnable":0,"style":"normal","temp":4,"value":"false"}` | 车载冰箱关机 |
+| `fridgeControl` | 500 | `{"cycles":"...","duration":...,"enable":...,"mode":"...","parkEnable":...,"style":"...","temp":...,"value":"false"}` | 车载冰箱全功能控制（温控/模式/风格/离车运行） |
 | `sentryOn` | 400 | `{"operation":"on"}` | 开启哨兵模式 |
 | `sentryOff` | 400 | `{"operation":"off"}` | 关闭哨兵模式 |
 

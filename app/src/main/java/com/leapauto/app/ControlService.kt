@@ -19,6 +19,9 @@ class ControlService : Service() {
         // 1s initial delay + ten 500ms intervals gives the vehicle telemetry
         // endpoint a six-second bounded window to reflect a trunk command.
         private const val TRUNK_TELEMETRY_MAX_ATTEMPTS = 11
+
+        @Volatile private var lastSensitiveCommand: String? = null
+        @Volatile private var lastSensitiveEpochMs: Long = 0L
     }
 
     private val commandInFlight = AtomicBoolean(false)
@@ -34,18 +37,54 @@ class ControlService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startForeground(FGS_NOTIF_ID, notification("控车中..."))
         val command = intent?.getStringExtra(EXTRA_COMMAND)
         if (command == null) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelfResult(startId)
             return START_NOT_STICKY
         }
+
+        // 方案 A：桌面小组件高敏感操作 3 秒双击确认防误触机制
+        val store = SessionStore(this)
+        val verificationEnabled = store.loadWidgetSensitiveActionVerificationEnabled()
+        if (WidgetControlSecurity.requiresVerification(command, verificationEnabled)) {
+            val now = System.currentTimeMillis()
+            val confirmed = WidgetControlSecurity.isDoubleClickConfirmed(
+                lastCommand = lastSensitiveCommand,
+                lastEpochMs = lastSensitiveEpochMs,
+                currentCommand = command,
+                currentEpochMs = now
+            )
+            if (!confirmed) {
+                lastSensitiveCommand = command
+                lastSensitiveEpochMs = now
+                val commandLabel = when (command) {
+                    "trunkOpen" -> "开启后备箱"
+                    else -> "控车"
+                }
+                val hint = "${WidgetControlSecurity.HINT_DOUBLE_CLICK_PREFIX}$commandLabel"
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    android.widget.Toast.makeText(this@ControlService, hint, android.widget.Toast.LENGTH_SHORT).show()
+                }
+                ControlWidget.showControlStatus(this, hint)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelfResult(startId)
+                return START_NOT_STICKY
+            } else {
+                lastSensitiveCommand = null
+                lastSensitiveEpochMs = 0L
+            }
+        }
+
         if (!commandInFlight.compareAndSet(false, true)) {
             ControlWidget.showControlStatus(this, "已有控车指令执行中")
             notifyResult("已有控车指令执行中")
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelfResult(startId)
             return START_NOT_STICKY
         }
         ControlWidget.showControlStatus(this, "控车中…")
-        startForeground(FGS_NOTIF_ID, notification("控车中..."))
         Thread {
             val store = SessionStore(this)
             try {
@@ -163,23 +202,10 @@ class ControlService : Service() {
     ): TrunkState {
         val config = store.loadVehicleConfig(session.selectedVin, session.selectedCarType)
         val displayStatus = status
-        val hasFuel = VehicleStatusMapper.fuelRemainingRange(displayStatus) != null ||
-            VehicleStatusMapper.fuelSocPercent(displayStatus) != null ||
-            session.selectedCarType.contains("增程") ||
-            session.selectedCarType.contains("REEV", ignoreCase = true) ||
-            config.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER
-        val resolvedPowerType = if (hasFuel) {
-            SessionStore.VehiclePowerType.RANGE_EXTENDER
-        } else {
-            config.powerType
-        }
-        val powerType = resolvedPowerType?.let {
-            if (it == SessionStore.VehiclePowerType.PURE_ELECTRIC) {
-                VehicleStatusMapper.PowerType.PURE_ELECTRIC
-            } else {
-                VehicleStatusMapper.PowerType.RANGE_EXTENDER
-            }
-        }
+        val resolvedPowerType = VehiclePowerTypeResolver.fromStatus(
+            displayStatus, config.powerType, session.selectedCarType
+        )
+        val powerType = resolvedPowerType.toStatusPowerType()
         val trunkState = TrunkStateMapper.fromSignal(displayStatus.opt("bbcmBackDoorStatus"))
         val sentryEnabled = WidgetSentryMapper.state(displayStatus)
         val now = System.currentTimeMillis()

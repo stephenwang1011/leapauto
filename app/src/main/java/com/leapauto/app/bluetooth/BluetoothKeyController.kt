@@ -55,6 +55,7 @@ class BluetoothKeyController(
     private var configurationTracker = BleConfigurationTracker()
     private var configurationCallback: (() -> Unit)? = null
     private var sessionIsCurrent: () -> Boolean = { true }
+    private var preferredAddress: String? = null
 
     val canConfigure: Boolean get() = state.canControl && configurationTracker.canBegin
 
@@ -69,6 +70,13 @@ class BluetoothKeyController(
     fun clearDiagnostics() {
         diagnostics.clear()
         update(state)
+    }
+
+    fun setVehicleMetadata(metadata: BleVehicleMetadata?) {
+        preferredAddress = metadata?.address
+        if (state.phase == BleConnectionPhase.SCANNING || state.devices.isNotEmpty()) {
+            update(state.copy(devices = scanDevices.devices(preferredAddress)))
+        }
     }
 
     fun hasPermissions(): Boolean = BlePermissionPolicy.requiredPermissions(Build.VERSION.SDK_INT).all {
@@ -113,9 +121,6 @@ class BluetoothKeyController(
         }
     }
 
-    fun connect(device: BleNearbyDevice, certificate: BleKeyCertificate, accountId: String, deviceId: String) =
-        connect(device, certificate, accountId, deviceId, BlePassiveConfiguration.MANUAL, trustedBinding = false)
-
     internal fun connect(
         device: BleNearbyDevice,
         certificate: BleKeyCertificate,
@@ -123,7 +128,7 @@ class BluetoothKeyController(
         deviceId: String,
         configuration: BlePassiveConfiguration,
         trustedBinding: Boolean,
-        isSessionCurrent: () -> Boolean = { true }
+        isSessionCurrent: () -> Boolean
     ) {
         if (state.isBusy) return
         if (!trustedBinding && state.devices.none { it.address == device.address }) return fail("设备已失效，请重新扫描")
@@ -135,6 +140,7 @@ class BluetoothKeyController(
         diagnostics.record(BleDiagnosticEvent.CONNECT_STARTED, certificate.keyType, device.protocolMinor)
         diagnostics.record(BleDiagnosticEvent.PROTOCOL_SELECTED,
             device.protocolMinor ?: BleKeyProtocol.DEFAULT_PROTOCOL_MINOR, device.protocolMinorSource.diagnosticCode)
+        diagnostics.record(BleDiagnosticEvent.AUTH_MODE, 0)
         update(state.copy(phase = BleConnectionPhase.CONNECTING, deviceName = device.name, message = "正在建立蓝牙连接"))
         armTimeout(if (trustedBinding) 60_000L else 15_000L) { fail("蓝牙连接超时，请靠近车辆后重试") }
         lifecycleScope.launch {
@@ -163,7 +169,7 @@ class BluetoothKeyController(
                 check(sessionIsCurrent()) { "BLE authentication identity changed during the connection" }
                 created.buildAuthentication(certificate, accountId, deviceId,
                     device.protocolMinor ?: BleKeyProtocol.DEFAULT_PROTOCOL_MINOR, System.currentTimeMillis() / 1_000L,
-                    configuration)
+                    configuration, onPrepared = diagnostics::recordAuthentication)
             }
             connectGatt(device, current, autoConnect = trustedBinding)
         }
@@ -249,7 +255,7 @@ class BluetoothKeyController(
                 if (device != null && state.devices.none { it.address == device.address }) {
                     diagnostics.record(BleDiagnosticEvent.SCAN_DEVICE_FOUND, device.protocolMinor, result.rssi)
                 }
-                val devices = scanDevices.devices()
+                val devices = scanDevices.devices(preferredAddress)
                 if (devices != state.devices) update(state.copy(devices = devices))
             } catch (_: SecurityException) {
                 fail("蓝牙权限已撤销")

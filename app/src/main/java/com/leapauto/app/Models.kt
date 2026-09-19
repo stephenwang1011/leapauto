@@ -123,7 +123,8 @@ data class Vehicle(
     val nickname: String = "",
     val year: String = "",
     val color: String = "",
-    val powerType: SessionStore.VehiclePowerType = SessionStore.VehiclePowerType.PURE_ELECTRIC
+    val powerType: SessionStore.VehiclePowerType = SessionStore.VehiclePowerType.PURE_ELECTRIC,
+    val isSharedAccount: Boolean = false
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("vin", vin)
@@ -133,6 +134,7 @@ data class Vehicle(
         put("year", year)
         put("color", color)
         put("powerType", powerType.name)
+        put("isSharedAccount", isSharedAccount)
     }
 
     companion object {
@@ -147,7 +149,8 @@ data class Vehicle(
             powerType = json.optString("powerType").let {
                 runCatching { SessionStore.VehiclePowerType.valueOf(it) }
                     .getOrDefault(SessionStore.VehiclePowerType.PURE_ELECTRIC)
-            }
+            },
+            isSharedAccount = json.optBoolean("isSharedAccount", false)
         )
     }
 }
@@ -390,6 +393,7 @@ data class PendingClimateTemperature(
 enum class ClimateControlRequestPhase {
     IDLE,
     SENDING,
+    ACCEPTED,
     COMPLETED,
     NOT_CONFIRMED,
     FAILED
@@ -411,13 +415,17 @@ data class ClimateControlRequestState(
 data class ClimateOptimisticUpdate(
     val acSwitch: Boolean? = null,
     val acSetting: String? = null,
+    val windLevel: Int? = null,
+    val circle: AirCircle? = null,
     val windshieldDefrost: Boolean? = null
 )
 
 data class ClimateTelemetrySnapshot(
     val acSwitch: Boolean?,
     val acSetting: String?,
-    val windshieldDefrost: Boolean?
+    val windLevel: Int? = null,
+    val circle: AirCircle? = null,
+    val windshieldDefrost: Boolean? = null
 )
 
 /**
@@ -427,27 +435,73 @@ data class ClimateTelemetrySnapshot(
 object ClimateOptimisticUpdates {
     fun acOn() = ClimateOptimisticUpdate(
         acSwitch = true,
-        acSetting = "${Commands.DEFAULT_AC_TEMPERATURE} °C"
+        acSetting = "${Commands.DEFAULT_AC_TEMPERATURE} °C",
+        windLevel = 3,
+        circle = AirCircle.INNER,
+        windshieldDefrost = false
     )
 
     fun acOff() = ClimateOptimisticUpdate(acSwitch = false)
 
     fun temperature(value: Int): ClimateOptimisticUpdate {
         require(Commands.isSupportedAcTemperature(value))
-        return ClimateOptimisticUpdate(acSwitch = true, acSetting = "$value °C")
+        return ClimateOptimisticUpdate(
+            acSwitch = true,
+            acSetting = "$value °C",
+            windLevel = 7,
+            circle = AirCircle.INNER,
+            windshieldDefrost = false
+        )
     }
 
     fun windshieldDefrost() = ClimateOptimisticUpdate(
+        acSwitch = true,
         acSetting = "${Commands.DEFAULT_AC_TEMPERATURE} °C",
+        windLevel = 5,
+        circle = AirCircle.OUTER,
         windshieldDefrost = true
     )
+
+    fun deodorize() = ClimateOptimisticUpdate(
+        acSwitch = true,
+        acSetting = "${Commands.DEFAULT_AC_TEMPERATURE} °C",
+        windLevel = 7,
+        circle = AirCircle.OUTER,
+        windshieldDefrost = false
+    )
+
+    fun detailed(command: AirConditioningCommand): ClimateOptimisticUpdate =
+        if (command.operation == HvacOperation.OFF) {
+            ClimateOptimisticUpdate(acSwitch = false)
+        } else {
+            ClimateOptimisticUpdate(
+                acSwitch = true,
+                acSetting = "${command.temperatureC} °C",
+                windLevel = command.windLevel,
+                circle = command.circle,
+                windshieldDefrost = command.windshieldDefogging
+            )
+        }
 
     fun mergeOver(update: ClimateOptimisticUpdate, telemetry: ClimateTelemetrySnapshot): ClimateTelemetrySnapshot =
         telemetry.copy(
             acSwitch = update.acSwitch ?: telemetry.acSwitch,
             acSetting = update.acSetting ?: telemetry.acSetting,
+            windLevel = update.windLevel ?: telemetry.windLevel,
+            circle = update.circle ?: telemetry.circle,
             windshieldDefrost = update.windshieldDefrost ?: telemetry.windshieldDefrost
         )
+}
+
+/** Maps pointer coordinates to the visible slider track, including the thumb radius. */
+object ClimateSliderMapping {
+    fun fractionAt(pointerX: Float, widthPx: Float, thumbRadiusPx: Float): Float {
+        if (!widthPx.isFinite() || widthPx <= 0f) return 0f
+        val radius = thumbRadiusPx.coerceAtLeast(0f)
+        val trackStart = radius
+        val trackEnd = (widthPx - radius).coerceAtLeast(trackStart + 1f)
+        return ((pointerX - trackStart) / (trackEnd - trackStart)).coerceIn(0f, 1f)
+    }
 }
 
 /**
@@ -472,6 +526,8 @@ object ClimateTelemetryConfirmationPolicy {
         val expectedTemperature = Commands.normalizedAcTemperature(optimisticUpdate.acSetting)
         return (optimisticUpdate.acSwitch == null || optimisticUpdate.acSwitch == readback.acSwitch) &&
             (expectedTemperature == null || expectedTemperature == readback.temperatureC) &&
+            (optimisticUpdate.windLevel == null || optimisticUpdate.windLevel == readback.windLevel) &&
+            (optimisticUpdate.circle == null || optimisticUpdate.circle == readback.circle) &&
             (optimisticUpdate.windshieldDefrost == null ||
                 optimisticUpdate.windshieldDefrost == readback.windshieldDefogging)
     }
@@ -554,6 +610,8 @@ object ClimateControlFeedbackText {
     fun confirmedAvailableFields(label: String): String = copyFor(label).confirmed
 
     fun responsePending(label: String): String = "空调响应较慢"
+
+    fun notConfirmed(label: String): String = "${label}已下发，车辆状态暂未确认"
 
     fun failed(label: String): String = copyFor(label).failed
 
@@ -740,6 +798,8 @@ object Commands {
         "startCharging" -> ControlCommand("193", """{"value":"start"}""", "开始充电")
         "stopCharging" -> ControlCommand("193", """{"value":"stop"}""", "停止充电")
         "unlockCharger" -> ControlCommand("192", """{"operation":"unlock"}""", "解锁充电枪")
+        "fridgeOn" -> buildFridgeControl(FridgeControlCommand(enable = true, mode = FridgeMode.COLD, temp = FRIDGE_DEFAULT_TEMP, style = FridgeStyle.NORMAL))
+        "fridgeOff" -> buildFridgeControl(FridgeControlCommand(enable = false, mode = FridgeMode.COLD, temp = FRIDGE_DEFAULT_TEMP, style = FridgeStyle.NORMAL))
         else -> {
             when {
                 name.startsWith("driverSeatHeating_") -> {
@@ -815,6 +875,39 @@ object Commands {
             "440",
             """{"value":"$value"}""",
             if (enabled) "开启后视镜加热" else "关闭后视镜加热"
+        )
+    }
+
+    const val FRIDGE_DEFAULT_TEMP = 4
+    const val FRIDGE_HOT_TEMP = 50
+
+    /** 车载冰箱控制（cmdid=500）：开关/模式/温度/风格/离车运行 */
+    fun buildFridgeControl(command: FridgeControlCommand): ControlCommand {
+        val temp = if (command.mode == FridgeMode.HOT) FRIDGE_HOT_TEMP else command.temp.coerceIn(-6, 15)
+        val enableInt = if (command.enable) 1 else 0
+        val parkEnableInt = if (command.parkEnable) 1 else 0
+        val duration = command.durationSeconds.coerceAtLeast(1800)
+        val stateJson = org.json.JSONObject().apply {
+            put("cycles", if (command.cycles == "2") "2" else "1")
+            put("duration", duration)
+            put("enable", enableInt)
+            put("mode", command.mode.raw)
+            put("parkEnable", parkEnableInt)
+            put("style", command.style.raw)
+            put("temp", temp)
+            put("value", command.value)
+        }
+        val actionLabel = if (!command.enable) {
+            "关闭车载冰箱"
+        } else {
+            val modeText = if (command.mode == FridgeMode.HOT) "制热 50°C" else "制冷 ${temp}°C"
+            val styleText = if (command.style == FridgeStyle.TURBO) "急速" else "标准"
+            "开启车载冰箱（$modeText $styleText）"
+        }
+        return ControlCommand(
+            "500",
+            stateJson.toString(),
+            actionLabel
         )
     }
 
@@ -944,7 +1037,69 @@ object Commands {
         hasVehicleStatus && !commandInProgress
 }
 
+enum class FridgeMode(val raw: String, val label: String) {
+    COLD("cold", "制冷"),
+    HOT("hot", "制热");
+
+    companion object {
+        fun fromRaw(raw: String?): FridgeMode = when (raw?.lowercase()) {
+            "hot", "1" -> HOT
+            else -> COLD
+        }
+        fun fromSignal(signalValue: Int?): FridgeMode = if (signalValue == 1) HOT else COLD
+    }
+}
+
+enum class FridgeStyle(val raw: String, val label: String) {
+    NORMAL("normal", "标准"),
+    TURBO("turbo", "急速");
+
+    companion object {
+        fun fromRaw(raw: String?): FridgeStyle = when (raw?.lowercase()) {
+            "turbo", "1" -> TURBO
+            else -> NORMAL
+        }
+        fun fromSignal(signalValue: Int?): FridgeStyle = if (signalValue == 1) TURBO else NORMAL
+    }
+}
+
+data class FridgeControlCommand(
+    val enable: Boolean = true,
+    val mode: FridgeMode = FridgeMode.COLD,
+    val temp: Int = 4,
+    val style: FridgeStyle = FridgeStyle.NORMAL,
+    val parkEnable: Boolean = false,
+    val durationSeconds: Int = 3600,
+    val cycles: String = "1",
+    val value: String = "false"
+)
+
+data class FridgeStatus(
+    val enabled: Boolean,
+    val mode: FridgeMode,
+    val targetTemp: Int,
+    val style: FridgeStyle,
+    val fault: Int = 0,
+    val parkEnable: Boolean = false,
+    val parkDurationHours: Int = 1,
+    val parkCycles: Int = 0,
+    val parkEndTimeEpochSeconds: Long = 0L
+) {
+    val isCooling: Boolean get() = enabled && mode == FridgeMode.COLD
+    val isHeating: Boolean get() = enabled && mode == FridgeMode.HOT
+    val isParkRunning: Boolean get() = enabled && parkEnable
+}
+
 object SentryModeControlPolicy {
+    const val SUB_ACCOUNT_UNSUPPORTED_MESSAGE = "当前子账号不支持开启哨兵操作"
+
+    fun canOperateSentry(isSharedAccount: Boolean, targetOn: Boolean): Boolean {
+        if (isSharedAccount && targetOn) {
+            return false
+        }
+        return true
+    }
+
     fun activeLabel(currentEnabled: Boolean?): String? =
         if (currentEnabled == true) "哨兵已开" else null
 
@@ -967,6 +1122,18 @@ object SentryModeControlPolicy {
             else -> return false
         }
         return value == "0"
+    }
+}
+
+object SensitiveControlPolicy {
+    const val LONG_PRESS_HOLD_DURATION_MS = 1200L
+    const val SENSITIVE_ACTION_HINT = "高敏感操作请长按1.2秒开启"
+
+    fun isSensitiveCommand(commandName: String, isClosed: Boolean = true): Boolean = when (commandName) {
+        "trunk" -> isClosed
+        "trunkOpen" -> true
+        "frunkOpen" -> true
+        else -> false
     }
 }
 
@@ -1034,6 +1201,7 @@ object QuickCommandExecutionPolicy {
             "windowGroup" -> activeCmd.startsWith("window")
             "sunshadeGroup" -> activeCmd.startsWith("sunshade")
             "sentry" -> activeCmd.startsWith("sentry")
+            "fridge" -> activeCmd.startsWith("fridge")
             else -> activeCmd == commandName
         }
     }

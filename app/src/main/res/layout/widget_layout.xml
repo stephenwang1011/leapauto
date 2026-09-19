@@ -413,8 +413,8 @@
         android:id="@+id/widgetActionRow"
         android:layout_width="match_parent"
         android:layout_height="28dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="8dp"
+        android:layout_marginTop="0dp"
+        android:layout_marginBottom="4dp"
         android:clipChildren="false"
         android:gravity="center"
         android:orientation="horizontal">

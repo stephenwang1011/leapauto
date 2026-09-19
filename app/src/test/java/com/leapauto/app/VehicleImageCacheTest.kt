@@ -60,4 +60,59 @@ class VehicleImageCacheTest {
         assertEquals("3D-d3e0fbce-0755-441e-8381-7512fd49bc70", meta.pictureKey)
         assertEquals(3, meta.rawData?.optInt("modelType"))
     }
+
+    @Test
+    fun `vehicle image file names are isolated between custom and official`() {
+        val tempDir = java.io.File(System.getProperty("java.io.tmpdir"), "test_vehicle_images")
+        val context = object : android.content.ContextWrapper(null) {
+            override fun getFilesDir(): java.io.File = tempDir
+        }
+
+        val vin = "TEST_VIN_123"
+        val officialFile = VehicleImageCache.getCacheFile(context, vin)
+        val customFile = VehicleImageCache.getCustomFile(context, vin)
+        val snapshot3DFile = VehicleImageCache.get3DSnapshotFile(context, vin)
+
+        assertEquals("TEST_VIN_123.png", officialFile.name)
+        assertEquals("TEST_VIN_123_custom.png", customFile.name)
+        assertEquals("TEST_VIN_123_3d.png", snapshot3DFile.name)
+        org.junit.Assert.assertNotEquals(officialFile.name, customFile.name)
+        org.junit.Assert.assertNotEquals(officialFile.name, snapshot3DFile.name)
+    }
+
+    @Test
+    fun `widget image source prefers custom then 3d snapshot then official 2d`() {
+        assertEquals(
+            VehicleImageCache.WidgetImageSource.CUSTOM,
+            VehicleImageCache.resolveWidgetImageSource(
+                hasCustomImage = true,
+                has3DSnapshot = true,
+                hasOfficial2DImage = true
+            )
+        )
+        assertEquals(
+            VehicleImageCache.WidgetImageSource.THREE_D_SNAPSHOT,
+            VehicleImageCache.resolveWidgetImageSource(
+                hasCustomImage = false,
+                has3DSnapshot = true,
+                hasOfficial2DImage = true
+            )
+        )
+        assertEquals(
+            VehicleImageCache.WidgetImageSource.OFFICIAL_2D,
+            VehicleImageCache.resolveWidgetImageSource(
+                hasCustomImage = false,
+                has3DSnapshot = false,
+                hasOfficial2DImage = true
+            )
+        )
+        assertEquals(
+            VehicleImageCache.WidgetImageSource.NONE,
+            VehicleImageCache.resolveWidgetImageSource(
+                hasCustomImage = false,
+                has3DSnapshot = false,
+                hasOfficial2DImage = false
+            )
+        )
+    }
 }

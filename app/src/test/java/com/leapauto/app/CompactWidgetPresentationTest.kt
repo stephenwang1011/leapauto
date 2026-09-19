@@ -88,6 +88,38 @@ class CompactWidgetPresentationTest {
     }
 
     @Test
+    fun `explicit pure electric configuration wins over placeholder and stale fuel telemetry`() {
+        listOf("0" to 0, "900km" to 100).forEach { (fuelRange, fuelSoc) ->
+            val presentation = CompactWidgetRangePresentationMapper.fromValues(
+                range = "316km",
+                soc = 58,
+                powerType = SessionStore.VehiclePowerType.PURE_ELECTRIC,
+                electricRange = "316km",
+                fuelRange = fuelRange,
+                fuelSoc = fuelSoc
+            )
+
+            assertFalse(presentation.rangeExtender)
+            assertEquals("316 km", presentation.rangeLabel)
+            assertEquals("58", presentation.socLabel)
+        }
+    }
+
+    @Test
+    fun `fuel telemetry still selects range extender when power type is unknown`() {
+        val presentation = CompactWidgetRangePresentationMapper.fromValues(
+            range = "445km",
+            soc = 58,
+            fuelRange = "129km",
+            fuelSoc = 29
+        )
+
+        assertTrue(presentation.rangeExtender)
+        assertEquals("129km", presentation.fuelRangeLabel)
+        assertEquals("29%", presentation.fuelSocLabel)
+    }
+
+    @Test
     fun `compact lock button toggles only from confirmed telemetry`() {
         val locked = CompactWidgetLockPresentationMapper.fromState(true)
         val unlocked = CompactWidgetLockPresentationMapper.fromState(false)

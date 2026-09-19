@@ -14,6 +14,26 @@ class BleScanDeviceCacheTest {
     private val minor9 = UUID.fromString("00000109-0000-1000-8000-00805f9b34fb")
 
     @Test
+    fun metadataTargetSurvivesDisplayLimitWithoutChangingProtocolOrFilteringOtherDevices() {
+        val cache = BleScanDeviceCache(maxTrackedDevices = 8, maxDisplayedDevices = 1)
+        cache.update(address, "same name", -95, true, listOf(keyService, minor9))
+        cache.update(otherAddress, "same name", -30, true, listOf(keyService, minor8))
+        assertEquals(otherAddress, cache.devices().single().address)
+        val preferred = cache.devices(address.lowercase()).single()
+        assertEquals(address, preferred.address)
+        assertEquals(9, preferred.protocolMinor)
+        assertEquals(otherAddress, cache.devices("00:22:33:44:55:66").single().address)
+    }
+
+    @Test
+    fun metadataCannotInventAConnectableDeviceOrItsService() {
+        val cache = BleScanDeviceCache()
+        cache.update(address, "same name", -20, true, listOf(minor9))
+        cache.update(otherAddress, "same name", -60, true, listOf(keyService))
+        assertEquals(listOf(otherAddress), cache.devices(address).map { it.address })
+    }
+
+    @Test
     fun minorArrivingBeforeKeyServiceSurvivesSplitAdvertisements() {
         val cache = BleScanDeviceCache()
         assertNull(cache.update(address, "vehicle", -80, true, listOf(minor9)))

@@ -170,14 +170,26 @@ visible list to 30 devices; a new scan clears it. Authentication diagnostics rep
 the selected minor and source (`1` advertised, `2` default, `3` saved binding,
 `0` unknown) without recording device addresses or UUID lists.
 
+Manual connection resolves the latest scan record for the selected address before
+deriving keys. An explicit advertised minor wins; otherwise a saved binding can
+supply its minor only when account, VIN, address and certificate fingerprint
+match. With neither source, the fallback remains 8. The resolved device is shared
+by authentication, diagnostics and successful binding persistence, preventing an
+old UI snapshot or default scan value from downgrading a known binding. A current
+scan record also supersedes an explicit value from an earlier UI snapshot. The
+controller accepts connection calls only from the internal managed runtime path
+and requires its current-session predicate.
+
 ## Authentication Rejection Investigation (2026-09-14)
 
 User-supplied diagnostics from version 3.3.33 show successful SM2 derivation,
 GATT connection, FFF2 notification subscription, MTU 247 and both writes of a
 311-byte AA AE frame. A 26-byte AA AC event then reports result code 9 during
 authentication. No authenticated state or lock command appears in that trace.
-The user reports that the original app succeeds on the same phone and vehicle;
-this is user-provided field evidence, not an agent-run interoperability test.
+The user reports that the official Leapmotor app succeeds on the same phone and
+vehicle. On 2026-09-15 the user additionally confirmed that the reference
+`D:/young/work/hackapp/base.apk` (`com.qian.leapcontrol`) succeeds on their C16.
+These are user-provided field results, not agent-run interoperability tests.
 
 Original `xj.c()` reads the last event payload byte as the rejection code. Code 9
 has no named meaning there; only 3/4/7 have special reconnect-cache handling.
@@ -191,6 +203,135 @@ None is individually established as the cause of this field rejection. Offline
 SM2, ZA/ZB, SM3 KDF, card slicing, SM4 padding, auth fields, trailer, write type and
 chunk-size comparisons found no corresponding discrepancy. The different MTU vs.
 service discovery order has not been shown to cause rejection and is unchanged.
+
+### 3.3.34 Field Result And Reference Audit (2026-09-15)
+
+The user's 3.3.34 retest still fails. Certificate synchronization and SM2
+derivation succeed, RSSI is -39 dBm, and diagnostics explicitly select minor 8
+from the default fallback. GATT connection, notification subscription, MTU 247,
+and both acknowledged writes of the 311-byte AA AE frame complete. A 26-byte
+AA AC frame then reports rejection code 9 during authentication. Therefore the
+3.3.34 fixes have not resolved this vehicle's authentication failure. No
+authenticated state or lock command is present in the supplied trace.
+
+The original `D:/young/work/hackapp/base.apk` remains the primary readable
+reference. Further source and smali checks establish:
+
+| Boundary | Reference evidence | Result |
+| --- | --- | --- |
+| Certificate request | `fb1.h()`, `ib.java:188`, `fb1.x()` | Signed VIN request to `appCenter`; Android platform, session app version and device ID |
+| Certificate response | `fb1.smali:12469`, field extraction from `12844` | Direct parsing of the six certificate fields, without extra decryption or identity replacement |
+| Authentication identity | `s33.O()` at `s33.java:1100` | Uses old-auth account ID, current session device ID and selected VIN |
+| Certificate text | `j91.f()` at `j91.java:76` | Replaces fields 1 and 2 during authentication, then appends calibration and flags |
+| SM2 output length | `xn0.t()` at `xn0.java:255` | Explicitly derives 32 bytes, matching the current implementation |
+| Local fingerprint | `z91.a()` at `z91.java:29` | `ios-1.22.66` is only a local fingerprint prefix; it does not select an iOS request or appear on the wire |
+| Missing advertised version | `xj.z()` at `xj.java:1875` | Advertised minor, then same-address saved binding, then 8 for an unbound device |
+| Result-code parsing | `xj.c()` at `xj.java:642` | Type-1 AA AC event uses its last payload byte, matching the current parser |
+
+The reference retries an expired old token on result 39, whereas the current
+certificate path only performs its pre-request refresh. That difference does
+not explain a trace with successful certificate synchronization followed by a
+vehicle authentication rejection. Similarly, a missing advertised minor alone
+does not prove that 8 is wrong; forcing 9 has no verified basis in this trace.
+
+The old-account parsing order also matches: `data.appLoginVO`, then
+`data.appOneLoginVO`, then a recursive object containing `accountId` and `token`.
+There is one unconfirmed input-representation difference: the reference converts
+all JSON numbers to Double and formats integral values below 1e15 as decimal
+integers, while `SmsLoginProtocol.scalarValue()` uses `Number.toString()`.
+Synthetic `Double(100.0)` therefore becomes `100` in the reference and `100.0`
+in the current parser; string IDs are unchanged in both. Conversely, the
+reference conversion loses precision for sufficiently large integers. No real
+account input was examined, so this is not an established cause of code 9 and
+does not justify copying the reference's lossy numeric conversion.
+
+For an independent comparison, the installed official APK was pulled read-only:
+`com.dahua.leapmotor` version 1.22.96 (434), SHA-256
+`B8427878ABD4AE75DDDBBA0C6CF850BBD8B181BC685ACA88B7ECF263E3C3714E`.
+It is saved separately at
+`D:/young/work/hackapp/analysis/official_1_22_96/base.apk`.
+Its ARM64 `libleapsec_appble.so` and `libleapcrypto.so` confirm matching SM2
+point encoding, local/peer role reuse, ID `1234567812345678`, xBar formula,
+Z(local)-then-Z(peer) ordering and SM3 KDF counter construction. The SM4 wrapper
+uses CBC with the default block padding. These are static native comparisons;
+no real key or vehicle operation was executed.
+
+The official Java business caller remains protected by its loader. The native
+SM2 wrapper accepts an output length from that caller, so the official caller's
+actual requested length and its complete certificate/authentication flow have
+not been recovered. Agreement with the readable reference plus the native
+formulas does not establish complete official wire equivalence. Full native
+evidence is in
+`D:/young/work/hackapp/analysis/official_1_22_96/OFFICIAL_SM2_NATIVE_AUDIT.md`.
+
+The current logs do not expose authentication field values or cryptographic
+intermediates, and cannot distinguish an identity, proof, protocol-layout or
+other vehicle-side validation failure. The user's confirmed successful C16
+reference result narrows the comparison to the reference implementation and
+its runtime inputs. Its successful authentication mode is not yet known:
+`s33.O()` loads a saved reconnect credential into `xj.H`; even a manual scan
+and connect eventually calls `xj.e(false)`, which selects AA EE if that
+credential exists and AA AE otherwise. The current client always uses AA AE.
+Thus a successful reference connection is not yet evidence of a successful
+fresh AA AE exchange. Retain the no-raw-credentials diagnostic boundary;
+do not import another app's reconnect credential or infer a named meaning
+for code 9.
+
+### Current Source Diagnostics (Not A Field Fix Claim)
+
+Each complete authentication now reports four numeric-only structure events from
+the same frame construction and encryption used for transmission:
+
+| Event | code | detail |
+| --- | --- | --- |
+| `AUTH_CERTIFICATE_STRUCTURE` | Original certificate text field count, including trailing empty fields | Match mask: bit 0 original account equals current account; bit 1 original device equals current device |
+| `AUTH_TEXT_STRUCTURE` | UTF-8 authentication text byte count | Decoded signature byte count |
+| `AUTH_CIPHER_STRUCTURE` | Plaintext byte count including UInt32 length and signature | Ciphertext byte count before Base64 |
+| `AUTH_CONFIGURATION` | Actual protocol minor | Encoded Boolean flags; first transmitted flag is bit 0 |
+
+The identity mask is only a comparison with the certificate's original fields,
+not a certificate-validity judgment; the reference intentionally replaces those
+fields. No identity, timestamp, certificate, key, fingerprint or raw frame is
+included in this summary. Authentication vectors must remain byte-identical when
+the observer is enabled. These additions and the version-selection fix describe
+current source; no new real-vehicle success or delivery package is claimed.
+
+### Executed Original DEX Differential (2026-09-15)
+
+An isolated Android 31 x86_64 ART instance executed the recovered original
+`j91.f()` and `xn0.t()` methods, without rewriting their bytecode or algorithms.
+The original DEX files used a separate `DexClassLoader` with the boot loader as
+parent. The current compiled Bluetooth classes used the production Bouncy Castle
+1.86 dependency; the harness asserted that the two SM3 classes came from distinct
+loaders. Wi-Fi, data and Bluetooth were disabled, and only synthetic inputs were
+used. The emulator ran read-only without installing either application.
+
+- 2,016 complete authentication frames matched byte-for-byte: key types 0 and 1;
+  minors 0, 6, 8, 9, 10 and 255; valid Boolean configuration combinations; three
+  certificate-text layouts including empty and trailing fields; signature lengths
+  1, 16, 64 and 71; randomized synthetic IDs, public-key bytes, keys and IVs.
+  Original calls crossing a clock-second boundary were retried so both builders
+  received the same timestamp.
+- 64 SM2 derivations matched the ephemeral public key, final encryption key and
+  IV byte-for-byte. A temporary synthetic `SecureRandom` supplied the same scalar
+  to the original method, and the current implementation used that scalar and
+  the original method's generated session ID. The original random provider was
+  restored in `finally`. Vehicle points came from synthetic X.509 fixtures.
+
+Verified original DEX SHA-256 values:
+
+```text
+classes1.dex: 7AF1A0B28D684CAD807EF435242C490C6A131117FAAF8D3F8F0E772FCB7F4FEE
+classes2.dex: D4C5E98F89E8C7A247B667C75AE18133E7A572FA6C3FF16BD7AF581E268F402E
+```
+
+Harness, reproduction script and output are in
+`D:/young/work/hackapp/analysis/ble_differential/`:
+`BleDexDifferential.java`, `run-differential.ps1`, and `result.txt`.
+This is execution evidence for the tested algorithm/serialization inputs, not
+a comparison of live server credentials, GATT timing, AA EE reconnect, or a
+vehicle's acceptance of a proof. The current classes were re-dexed for the
+harness; this is not an execution test of the installed minified Release APK.
 
 ## Manual Commands (AA AB)
 

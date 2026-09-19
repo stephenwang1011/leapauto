@@ -1,6 +1,10 @@
 package com.leapauto.app
 
 import com.leapauto.app.bluetooth.BleKeyCertificate
+import com.leapauto.app.bluetooth.BleCloudApiModels
+import com.leapauto.app.bluetooth.BleCloudRequestScope
+import com.leapauto.app.bluetooth.BlePassiveConfiguration
+import com.leapauto.app.bluetooth.BleVehicleMetadata
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -50,8 +54,14 @@ class LeapmotorApi internal constructor(
         const val LAST_WEEK_EC_PATH = "/carownerservice/v3/api/drivingrecord/getLastweekEC"
         const val BLUETOOTH_CERTIFICATE_PATH =
             "/carownerservice/v3/api/bluetoothkey/combine/syncBluetoothKeys"
+        const val BLUETOOTH_VEHICLE_METADATA_PATH = "/carownerservice/v3/api/vehicleinfo/commonConfig"
+        const val BLUETOOTH_CONFIGURATION_PATH = "/app/app-global-service/v3/api/commoninfo/transparent/conf/upload"
+        const val BLUETOOTH_CALIBRATION_PATH = "/app/app-global-service/v3/api/bluetoothkey/uploadAutonomyCalibrateParams"
+        private const val BLUETOOTH_METADATA_STAGE = "ble_vehicle_metadata"
+        private const val BLUETOOTH_CONFIGURATION_STAGE = "ble_cloud_configuration"
+        private const val BLUETOOTH_CALIBRATION_STAGE = "ble_cloud_calibration"
 
-        // Key material must never enter the opt-in HTTP inspector or a redirect target.
+        // Bluetooth identity and key material must not enter the HTTP inspector or a redirect target.
         internal val bluetoothCertificateHttpClient: OkHttpClient by lazy {
             OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
@@ -159,6 +169,9 @@ class LeapmotorApi internal constructor(
 
     // ------------------------------------------------------------------ HTTP
 
+    // Blocking Bluetooth preflight stays on one worker thread; other callers keep their own client.
+    private val bluetoothPreflightHttpClient = ThreadLocal<OkHttpClient>()
+
     private fun http(
         url: String,
         method: String = "GET",
@@ -214,7 +227,8 @@ class LeapmotorApi internal constructor(
         val request = Request.Builder().url(target.toString()).method(method, requestBody)
             .apply { headers.forEach { (k, v) -> header(k, v) } }
             .build()
-        return NetworkDebugController.httpClient().newCall(request).execute().use { response ->
+        val client = bluetoothPreflightHttpClient.get() ?: NetworkDebugController.httpClient()
+        return client.newCall(request).execute().use { response ->
             VehicleListRawResponse(response.code, response.body?.string().orEmpty())
         }
     }
@@ -270,7 +284,8 @@ class LeapmotorApi internal constructor(
 
     private fun newGatewayHeaders(
         params: Map<String, String?> = emptyMap(),
-        needLogin: Boolean = true
+        needLogin: Boolean = true,
+        signingKeyOverride: ByteArray? = null
     ): Map<String, String> {
         val old = session.oldAuth
         val new = session.newAuth
@@ -308,7 +323,8 @@ class LeapmotorApi internal constructor(
             val auth = session.newAuth ?: throw ApiException("未完成网关登录")
             headers["token"] = auth.accessToken
             headers["userId"] = auth.accountId
-            headers["sign"] = Crypto.hmacSha256Hex(auth.signKey(), signBase)
+            val signingKey = signingKeyOverride ?: auth.signKey()
+            headers["sign"] = Crypto.hmacSha256Hex(signingKey, signBase)
         } else {
             headers["sign"] = Crypto.sha256Hex(signBase)
         }
@@ -607,6 +623,18 @@ class LeapmotorApi internal constructor(
                     .ifEmpty { it.optString("modelYear") }
                     .ifEmpty { it.optString("modelyear") }
                     .ifEmpty { it.optString("carYear") }
+                val isShared = it.optBoolean("isShare", false) ||
+                    it.optBoolean("isShared", false) ||
+                    it.optBoolean("share", false) ||
+                    it.optString("bindType") == "2" ||
+                    it.optInt("bindType", 0) == 2 ||
+                    it.optString("userType") == "2" ||
+                    it.optInt("userType", 0) == 2 ||
+                    it.optString("shareType") == "1" ||
+                    it.optInt("shareType", 0) == 1 ||
+                    it.optInt("isMaster", 1) == 0 ||
+                    (it.has("isOwner") && !it.optBoolean("isOwner", true)) ||
+                    (it.has("owner") && !it.optBoolean("owner", true))
                 Vehicle(
                     vin = it.optString("vin"),
                     carType = carType,
@@ -614,7 +642,8 @@ class LeapmotorApi internal constructor(
                     nickname = nickname,
                     year = year,
                     color = it.optString("outColor").ifEmpty { it.optString("color") },
-                    powerType = inferredPowerType
+                    powerType = inferredPowerType,
+                    isSharedAccount = isShared
                 )
             }
         if (vehicles.isNotEmpty()) {
@@ -1332,6 +1361,210 @@ class LeapmotorApi internal constructor(
         }
         if (session.deviceId.isBlank() || session.selectedVin.isBlank()) {
             throw ApiException("请先选择车辆并确认设备信息", stage = "ble_certificate")
+        }
+    }
+
+    /** Read advisory metadata only when the Bluetooth management flow requests it. */
+    fun getBluetoothVehicleMetadata(): BleVehicleMetadata? = getBluetoothVehicleMetadata(
+        execute = ::executeBluetoothCloudRequest,
+        refreshSession = { refreshBluetoothCloudTokens(needsOldToken = false) }
+    )
+
+    internal fun getBluetoothVehicleMetadata(
+        execute: (Request) -> VehicleListRawResponse,
+        fetchedAtMillis: Long? = null,
+        refreshSession: () -> Unit = {}
+    ): BleVehicleMetadata? {
+        val scope = prepareBluetoothCloudRequest(BLUETOOTH_METADATA_STAGE, needsOldToken = false, refreshSession = refreshSession)
+        val response = bluetoothCloudResponse(buildBluetoothVehicleMetadataRequest(), BLUETOOTH_METADATA_STAGE, scope, execute)
+        return try {
+            BleVehicleMetadata.fromResponse(response, scope.vin, fetchedAtMillis ?: System.currentTimeMillis())
+                .also { requireBluetoothCloudScope(scope, BLUETOOTH_METADATA_STAGE) }
+        } catch (_: IllegalArgumentException) {
+            throw ApiException("车辆蓝牙配置响应无效", stage = BLUETOOTH_METADATA_STAGE)
+        }
+    }
+
+    /** Cloud acceptance does not mean the vehicle has applied these preferences. */
+    fun uploadBluetoothConfiguration(configuration: BlePassiveConfiguration) {
+        uploadBluetoothConfiguration(configuration,
+            refreshSession = { refreshBluetoothCloudTokens(needsOldToken = true) },
+            execute = ::executeBluetoothCloudRequest)
+    }
+
+    internal fun uploadBluetoothConfiguration(
+        configuration: BlePassiveConfiguration,
+        execute: (Request) -> VehicleListRawResponse
+    ) = uploadBluetoothConfiguration(configuration, refreshSession = {}, execute = execute)
+
+    internal fun uploadBluetoothConfiguration(
+        configuration: BlePassiveConfiguration,
+        refreshSession: () -> Unit,
+        execute: (Request) -> VehicleListRawResponse
+    ) {
+        val scope = prepareBluetoothCloudRequest(BLUETOOTH_CONFIGURATION_STAGE, needsOldToken = true, refreshSession = refreshSession)
+        bluetoothCloudResponse(buildBluetoothConfigurationRequest(configuration), BLUETOOTH_CONFIGURATION_STAGE, scope, execute)
+    }
+
+    /** A null value deletes the cloud calibration; it does not reset the vehicle configuration. */
+    fun uploadBluetoothCalibration(params: String?, model: String) {
+        uploadBluetoothCalibration(params, model,
+            refreshSession = { refreshBluetoothCloudTokens(needsOldToken = true) },
+            execute = ::executeBluetoothCloudRequest)
+    }
+
+    internal fun uploadBluetoothCalibration(
+        params: String?,
+        model: String,
+        execute: (Request) -> VehicleListRawResponse
+    ) = uploadBluetoothCalibration(params, model, refreshSession = {}, execute = execute)
+
+    internal fun uploadBluetoothCalibration(
+        params: String?,
+        model: String,
+        refreshSession: () -> Unit,
+        execute: (Request) -> VehicleListRawResponse
+    ) {
+        bluetoothCalibrationParameters(params, model)
+        val scope = prepareBluetoothCloudRequest(BLUETOOTH_CALIBRATION_STAGE, needsOldToken = true, refreshSession = refreshSession)
+        bluetoothCloudResponse(buildBluetoothCalibrationRequest(params, model), BLUETOOTH_CALIBRATION_STAGE, scope, execute)
+    }
+
+    internal fun buildBluetoothVehicleMetadataRequest(): Request {
+        val params = linkedMapOf("appVersion" to session.appVersion, "osType" to "Android", "vin" to session.selectedVin)
+        return buildBluetoothCloudRequest(BLUETOOTH_VEHICLE_METADATA_PATH, params, BLUETOOTH_METADATA_STAGE, upload = false)
+    }
+
+    internal fun buildBluetoothConfigurationRequest(configuration: BlePassiveConfiguration): Request {
+        requireBluetoothCloudSession(BLUETOOTH_CONFIGURATION_STAGE, needsOldToken = true)
+        return buildBluetoothCloudRequest(
+            BLUETOOTH_CONFIGURATION_PATH,
+            BleCloudApiModels.configurationParameters(session.selectedVin, configuration),
+            BLUETOOTH_CONFIGURATION_STAGE,
+            upload = true
+        )
+    }
+
+    internal fun buildBluetoothCalibrationRequest(params: String?, model: String): Request =
+        buildBluetoothCloudRequest(
+            BLUETOOTH_CALIBRATION_PATH, bluetoothCalibrationParameters(params, model),
+            BLUETOOTH_CALIBRATION_STAGE, upload = true
+        )
+
+    private fun bluetoothCalibrationParameters(params: String?, model: String): Map<String, String> = try {
+        BleCloudApiModels.calibrationParameters(session.selectedVin, params, model)
+    } catch (_: IllegalArgumentException) {
+        throw ApiException("蓝牙标定参数无效", stage = BLUETOOTH_CALIBRATION_STAGE)
+    }
+
+    private fun buildBluetoothCloudRequest(
+        path: String,
+        params: Map<String, String>,
+        stage: String,
+        upload: Boolean
+    ): Request = try {
+        requireBluetoothCloudSession(stage, needsOldToken = upload)
+        val fields = if (upload) oldSignedParams(params) else params
+        val host = if (upload) GLOBAL_HOST else DRIVING_RECORD_HOST
+        val url = requireNotNull("$host$path".toHttpUrlOrNull()).newBuilder().apply {
+            if (!upload) fields.forEach { (key, value) -> addQueryParameter(key, value) }
+        }.build()
+        Request.Builder().url(url).apply {
+            if (upload) post(FormBody.Builder().apply {
+                fields.forEach { (key, value) -> add(key, value) }
+            }.build()) else get()
+            newGatewayHeaders(fields, needLogin = true, signingKeyOverride = bluetoothSigningKey(stage)).forEach {
+                (key, value) -> header(key, value)
+            }
+        }.build()
+    } catch (_: Exception) {
+        throw ApiException("无法构造蓝牙云端请求，请检查登录状态与车辆信息", stage = stage)
+    }
+
+    private fun bluetoothSigningKey(stage: String): ByteArray {
+        val raw = session.newAuth?.signKeyBase64 ?: throw ApiException("缺少蓝牙云端签名密钥", stage = stage)
+        return try {
+            java.util.Base64.getDecoder().decode(raw.filterNot { it == ' ' || it in '\t'..'\r' })
+        } catch (_: IllegalArgumentException) {
+            throw ApiException("蓝牙云端签名密钥格式无效", stage = stage)
+        }
+    }
+
+    private fun requireBluetoothCloudSession(stage: String, needsOldToken: Boolean) {
+        val gateway = session.newAuth
+        val oldAccountId = session.oldAuth?.accountId
+        if (!oldAccountId.isNullOrBlank() && gateway != null && gateway.accountId.isNotBlank() &&
+            oldAccountId != gateway.accountId
+        ) throw ApiException("蓝牙登录身份不一致，请重新登录后重试", stage = stage)
+        if (session.deviceId.isBlank() || session.selectedVin.isBlank() || session.appVersion.isBlank() ||
+            gateway == null || gateway.accountId.isBlank() || gateway.accessToken.isBlank() || gateway.signKeyBase64.isBlank() ||
+            (needsOldToken && (session.oldAuth?.accountId.isNullOrBlank() || session.oldAuth?.token.isNullOrBlank()))
+        ) throw ApiException("请先登录并选择车辆后管理蓝牙钥匙", stage = stage)
+    }
+
+    private fun prepareBluetoothCloudRequest(
+        stage: String,
+        needsOldToken: Boolean,
+        refreshSession: () -> Unit
+    ): BleCloudRequestScope {
+        requireBluetoothCloudSession(stage, needsOldToken)
+        val scope = BleCloudRequestScope.capture(session)
+        try {
+            withBluetoothPreflightTransport(refreshSession)
+            requireBluetoothCloudSession(stage, needsOldToken)
+        } catch (_: Exception) {
+            requireBluetoothCloudScope(scope, stage)
+            throw ApiException("蓝牙云端登录状态更新失败，请稍后重试", stage = stage)
+        }
+        requireBluetoothCloudScope(scope, stage)
+        return scope
+    }
+
+    private fun <T> withBluetoothPreflightTransport(block: () -> T): T {
+        val previous = bluetoothPreflightHttpClient.get()
+        bluetoothPreflightHttpClient.set(bluetoothCertificateHttpClient)
+        return try {
+            block()
+        } finally {
+            if (previous == null) bluetoothPreflightHttpClient.remove() else bluetoothPreflightHttpClient.set(previous)
+        }
+    }
+
+    private fun refreshBluetoothCloudTokens(needsOldToken: Boolean) {
+        if (needsOldToken) ensureFreshOldToken()
+        ensureFreshAccessToken()
+    }
+
+    private fun requireBluetoothCloudScope(scope: BleCloudRequestScope, stage: String) {
+        if (!scope.matches(session)) throw ApiException("蓝牙身份信息已变化，请重新同步钥匙后重试", stage = stage)
+    }
+
+    private fun executeBluetoothCloudRequest(request: Request): VehicleListRawResponse =
+        bluetoothCertificateHttpClient.newCall(request).execute().use { response ->
+            VehicleListRawResponse(response.code, response.body?.string().orEmpty())
+        }
+
+    private fun bluetoothCloudResponse(
+        request: Request,
+        stage: String,
+        scope: BleCloudRequestScope,
+        execute: (Request) -> VehicleListRawResponse
+    ): JSONObject {
+        requireBluetoothCloudScope(scope, stage)
+        val response = try { execute(request) } catch (_: Exception) {
+            throw ApiException("蓝牙云端请求连接失败，请稍后重试", stage = stage)
+        } finally {
+            requireBluetoothCloudScope(scope, stage)
+        }
+        if (!response.isHttpSuccessful) throw ApiException(
+            "蓝牙云端请求失败（HTTP ${response.statusCode}）", httpStatus = response.statusCode, stage = stage
+        )
+        return try {
+            JSONObject(response.rawBody).also(BleCloudApiModels::requireSuccess)
+        } catch (_: Exception) {
+            throw ApiException("蓝牙云端未确认请求成功，请稍后重试", stage = stage)
+        } finally {
+            requireBluetoothCloudScope(scope, stage)
         }
     }
 

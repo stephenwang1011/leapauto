@@ -16,6 +16,23 @@ class BlePassiveConfigurationTest {
         .bufferedReader().use { it.readText() })
 
     @Test
+    fun customCalibrationIsSharedByAuthenticationAndConfigurationWithoutChangingFlags() {
+        val calibration = BleCalibration(61, 175, 12, 24)
+        val configuration = BlePassiveConfiguration(
+            enabled = true, autoUnlock = true, autoLock = true, calibration = calibration
+        )
+        for (minor in listOf(0, 8, 9, 10, 255)) {
+            val flags = if (minor < 9) byteArrayOf(1, 1) else byteArrayOf(1, 1, 1, 0)
+            assertArrayEquals(byteArrayOf(61, 175.toByte(), 0, 12, 24) + flags, configuration.encoded(minor))
+            assertEquals("61;1.75;12;24;${flags.joinToString(";")};", configuration.authenticationFields(minor))
+            val disabled = configuration.copy(enabled = false)
+            assertArrayEquals(calibration.encoded() + ByteArray(flags.size), disabled.encoded(minor))
+            assertEquals(calibration, disabled.calibration)
+            assertFalse(disabled.needsBackground)
+        }
+    }
+
+    @Test
     fun newSettingsAreOffAndBackgroundFollowsOnlyTheMasterSwitch() {
         assertEquals(BlePassiveConfiguration(false, false, false, false), BlePassiveConfiguration())
         assertFalse(BlePassiveConfiguration().needsBackground)

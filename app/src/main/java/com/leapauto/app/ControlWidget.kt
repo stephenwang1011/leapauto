@@ -177,16 +177,12 @@ class ControlWidget : AppWidgetProvider() {
             setVehicleImage(this, appearance, session.selectedVin, context)
             setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
             snapshot?.let { snapshot ->
-                val isHybridCarType = (snapshot.carType.ifBlank { session.selectedCarType }).let {
-                    it.contains("增程") || it.contains("REEV", ignoreCase = true)
-                }
-                val widgetPowerType = when {
-                    config.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER -> SessionStore.VehiclePowerType.RANGE_EXTENDER
-                    snapshot.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER -> SessionStore.VehiclePowerType.RANGE_EXTENDER
-                    isHybridCarType -> SessionStore.VehiclePowerType.RANGE_EXTENDER
-                    snapshot.fuelRange != null || snapshot.fuelSoc != null -> SessionStore.VehiclePowerType.RANGE_EXTENDER
-                    else -> snapshot.powerType ?: config.powerType
-                }
+                val widgetPowerType = VehiclePowerTypeResolver.resolve(
+                    configuredPowerType = config.powerType,
+                    carType = snapshot.carType.ifBlank { session.selectedCarType },
+                    cachedPowerType = snapshot.powerType,
+                    hasFuelTelemetry = snapshot.fuelRange != null || snapshot.fuelSoc != null
+                )
                 setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
                 setTextViewText(R.id.txtWRange, snapshot.range)
                 applyRangePresentation(
@@ -256,17 +252,12 @@ class ControlWidget : AppWidgetProvider() {
             val appearance = resolveWidgetAppearance(config, carType)
             setVehicleImage(views, appearance, session.selectedVin, context)
             views.setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
-            val isHybridCarType = (carType.ifBlank { session.selectedCarType }).let {
-                it.contains("增程") || it.contains("REEV", ignoreCase = true)
-            }
-            val hasFuel = VehicleStatusMapper.fuelRemainingRange(displayStatus) != null ||
-                VehicleStatusMapper.fuelSocPercent(displayStatus) != null
-            val effectivePowerType = when {
-                config.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER -> SessionStore.VehiclePowerType.RANGE_EXTENDER
-                isHybridCarType || hasFuel -> SessionStore.VehiclePowerType.RANGE_EXTENDER
-                else -> config.powerType
-            }
-            val powerType = effectivePowerType?.let { if (it == SessionStore.VehiclePowerType.PURE_ELECTRIC) VehicleStatusMapper.PowerType.PURE_ELECTRIC else VehicleStatusMapper.PowerType.RANGE_EXTENDER }
+            val effectivePowerType = VehiclePowerTypeResolver.fromStatus(
+                status = displayStatus,
+                configuredPowerType = config.powerType,
+                carType = carType.ifBlank { session.selectedCarType }
+            )
+            val powerType = effectivePowerType.toStatusPowerType()
             val soc = VehicleStatusMapper.electricSocPercent(displayStatus)
             val preciseSocText = VehicleStatusMapper.displayPreciseSoc(
                 displayStatus.opt("preciseSoc") ?: displayStatus.opt("soc")
@@ -324,16 +315,12 @@ class ControlWidget : AppWidgetProvider() {
             )
             setVehicleImage(views, appearance, configVin, context)
             views.setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
-            val isHybridCarType = (snapshot.carType.ifBlank { session.selectedCarType }).let {
-                it.contains("增程") || it.contains("REEV", ignoreCase = true)
-            }
-            val hasFuel = snapshot.fuelRange != null || snapshot.fuelSoc != null
-            val widgetPowerType = when {
-                config.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER -> SessionStore.VehiclePowerType.RANGE_EXTENDER
-                snapshot.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER -> SessionStore.VehiclePowerType.RANGE_EXTENDER
-                isHybridCarType || hasFuel -> SessionStore.VehiclePowerType.RANGE_EXTENDER
-                else -> snapshot.powerType ?: config.powerType
-            }
+            val widgetPowerType = VehiclePowerTypeResolver.resolve(
+                configuredPowerType = config.powerType,
+                carType = snapshot.carType.ifBlank { session.selectedCarType },
+                cachedPowerType = snapshot.powerType,
+                hasFuelTelemetry = snapshot.fuelRange != null || snapshot.fuelSoc != null
+            )
             views.setTextViewText(R.id.txtWRange, snapshot.range)
             applyRangePresentation(
                 themeContext,
@@ -786,10 +773,27 @@ class ControlWidget : AppWidgetProvider() {
             return VehicleAppearanceCatalog.resolveAppearance(displayModel, config.color)
         }
 
-        internal fun scaleBitmapForWidget(bitmap: android.graphics.Bitmap, targetWidth: Int = 400): android.graphics.Bitmap {
-            if (bitmap.width <= targetWidth) return bitmap
-            val targetHeight = (bitmap.height * (targetWidth.toFloat() / bitmap.width)).toInt().coerceAtLeast(1)
-            return android.graphics.Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
+        internal fun scaleBitmapForWidget(
+            bitmap: android.graphics.Bitmap,
+            targetWidth: Int = 400,
+            scaleRatio: Float = 0.84f
+        ): android.graphics.Bitmap {
+            val canvasW = targetWidth
+            val canvasH = (bitmap.height * (targetWidth.toFloat() / bitmap.width)).toInt().coerceAtLeast(1)
+
+            val carW = (canvasW * scaleRatio).toInt().coerceAtLeast(1)
+            val carH = (canvasH * scaleRatio).toInt().coerceAtLeast(1)
+
+            val scaledCar = android.graphics.Bitmap.createScaledBitmap(bitmap, carW, carH, true)
+            val outBitmap = android.graphics.Bitmap.createBitmap(canvasW, canvasH, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(outBitmap)
+            val left = (canvasW - carW) / 2f
+            val top = (canvasH - carH) / 2f
+            canvas.drawBitmap(scaledCar, left, top, null)
+            if (scaledCar != bitmap) {
+                scaledCar.recycle()
+            }
+            return outBitmap
         }
 
         private fun setVehicleImage(
@@ -799,7 +803,7 @@ class ControlWidget : AppWidgetProvider() {
             context: Context? = null
         ) {
             val remoteBitmap = if (vin.isNotBlank() && context != null) {
-                VehicleImageCache.loadCachedBitmap(context, vin)
+                VehicleImageCache.loadWidgetBitmap(context, vin)
             } else {
                 null
             }
@@ -826,18 +830,9 @@ class ControlWidget : AppWidgetProvider() {
 
         internal fun click(context: Context, command: String): PendingIntent {
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            val verificationEnabled =
-                SessionStore(context).loadWidgetSensitiveActionVerificationEnabled()
-            return if (WidgetControlSecurity.requiresVerification(command, verificationEnabled)) {
-                val intent = Intent(context, ControlConfirmActivity::class.java)
-                    .putExtra(ControlConfirmActivity.EXTRA_COMMAND, command)
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                PendingIntent.getActivity(context, command.hashCode(), intent, flags)
-            } else {
-                val intent = Intent(context, ControlService::class.java)
-                    .putExtra(ControlService.EXTRA_COMMAND, command)
-                PendingIntent.getForegroundService(context, command.hashCode(), intent, flags)
-            }
+            val intent = Intent(context, ControlService::class.java)
+                .putExtra(ControlService.EXTRA_COMMAND, command)
+            return PendingIntent.getForegroundService(context, command.hashCode(), intent, flags)
         }
 
         internal fun widgetBackgroundResource(opacity: Int): Int = when (opacity) {
@@ -879,8 +874,14 @@ class ControlWidget : AppWidgetProvider() {
         internal fun resolveWidgetActionBackground(context: Context, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int =
             widgetActionBackgroundResource(darkTheme)
 
-        internal fun resolveWidgetCardBackground(context: Context, opacity: Int, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int =
-            widgetBackgroundResource(opacity, darkTheme)
+        internal fun resolveWidgetCardBackground(context: Context, opacity: Int, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int {
+            val bgStyle = SessionStore(context).loadWidgetBackgroundStyle()
+            if (bgStyle == SessionStore.WIDGET_BG_STYLE_LANDSCAPE) {
+                return if (darkTheme) R.drawable.widget_card_background_landscape_dark
+                else R.drawable.widget_card_background_landscape_light
+            }
+            return widgetBackgroundResource(opacity, darkTheme)
+        }
 
         /** Uses the standard RemoteViews tint operation where supported, with a legacy fallback. */
         internal fun setImageTint(views: RemoteViews, viewId: Int, color: Int) {

@@ -13,7 +13,8 @@ data class BleManagedKey(
     val requested: Boolean = false,
     val revision: Long = 0,
     val confirmedRevision: Long? = null,
-    val authorizationGeneration: Long = -1
+    val authorizationGeneration: Long = -1,
+    val deviceId: String = ""
 ) {
     init {
         require(validAccount(accountId) && validVin(vin)) { "Invalid Bluetooth binding scope" }
@@ -31,10 +32,16 @@ data class BleManagedKey(
         }
         require(confirmedRevision != revision || applied == desired) { "Invalid Bluetooth acknowledged configuration" }
         require(authorizationGeneration >= -1) { "Invalid Bluetooth authorization generation" }
+        require(deviceId.isEmpty() || validAccount(deviceId)) { "Invalid Bluetooth device scope" }
+        require(deviceId.isNotEmpty() || hasDefaultCalibration) {
+            "Custom Bluetooth calibration requires a device scope"
+        }
     }
 
     val pending: Boolean get() = requested && confirmedRevision != revision
     val needsBackground: Boolean get() = requested && (desired.enabled || pending)
+    private val hasDefaultCalibration: Boolean get() = desired.calibration == BleCalibration.DEFAULT &&
+        (applied == null || applied.calibration == BleCalibration.DEFAULT)
 
     fun request(configuration: BlePassiveConfiguration, sessionGeneration: Long): BleManagedKey {
         require(sessionGeneration >= 0) { "Invalid Bluetooth authorization generation" }
@@ -52,14 +59,23 @@ data class BleManagedKey(
         } else this
 
     fun suspended(): BleManagedKey = copy(
-        desired = BlePassiveConfiguration(),
+        desired = BlePassiveConfiguration(calibration = desired.calibration),
         requested = true,
         revision = Math.addExact(revision, 1),
         authorizationGeneration = -1
     )
 
-    fun forSession(sessionGeneration: Long): BleManagedKey {
+    fun forSession(sessionGeneration: Long, expectedDeviceId: String = deviceId): BleManagedKey {
         require(sessionGeneration >= 0) { "Invalid Bluetooth authorization generation" }
+        require(expectedDeviceId.isEmpty() || validAccount(expectedDeviceId)) { "Invalid Bluetooth device scope" }
+        if (deviceId != expectedDeviceId) {
+            require(deviceId.isEmpty() && expectedDeviceId.isNotEmpty() && hasDefaultCalibration) {
+                "Bluetooth device scope mismatch"
+            }
+            val migrated = copy(deviceId = expectedDeviceId)
+            // Legacy records cannot authorize enabled behavior on an unidentified device.
+            return if (desired.enabled || applied?.enabled == true) migrated.suspended() else migrated
+        }
         return if (desired.enabled && authorizationGeneration != sessionGeneration) suspended() else this
     }
 
@@ -71,9 +87,10 @@ data class BleManagedKey(
 
     // This representation contains vehicle identity and belongs only in encrypted storage.
     fun toJson(): JSONObject = JSONObject().apply {
-        put("schemaVersion", 1)
+        put("schemaVersion", 2)
         put("accountId", accountId)
         put("vin", vin)
+        put("deviceId", deviceId)
         put("device", JSONObject().apply {
             put("address", device.address)
             put("name", device.name)
@@ -99,16 +116,29 @@ data class BleManagedKey(
         internal fun validVin(value: String): Boolean =
             value.length == 17 && value.all { it in 'A'..'Z' || it in '0'..'9' }
 
-        fun fromJson(json: JSONObject, expectedAccountId: String, expectedVin: String): BleManagedKey {
+        fun fromJson(
+            json: JSONObject,
+            expectedAccountId: String,
+            expectedVin: String,
+            expectedDeviceId: String = ""
+        ): BleManagedKey {
             require(validAccount(expectedAccountId) && validVin(expectedVin)) { "Invalid Bluetooth binding scope" }
-            require(integer(json, "schemaVersion") == 1L) { "Unsupported Bluetooth binding schema" }
+            require(expectedDeviceId.isEmpty() || validAccount(expectedDeviceId)) { "Invalid Bluetooth device scope" }
+            val schema = integer(json, "schemaVersion")
+            require(schema == 1L || schema == 2L) { "Unsupported Bluetooth binding schema" }
             require(string(json, "accountId") == expectedAccountId && string(json, "vin") == expectedVin) {
                 "Bluetooth binding scope mismatch"
+            }
+            val deviceId = if (schema == 1L) {
+                require(!json.has("deviceId")) { "Invalid legacy Bluetooth device scope" }
+                ""
+            } else string(json, "deviceId").also {
+                require(it == expectedDeviceId) { "Bluetooth device scope mismatch" }
             }
             val device = json.opt("device") as? JSONObject ?: invalid()
             val applied = when (val value = json.opt("applied")) {
                 JSONObject.NULL -> null
-                is JSONObject -> configuration(value)
+                is JSONObject -> configuration(value, schema)
                 else -> invalid()
             }
             return BleManagedKey(
@@ -120,7 +150,7 @@ data class BleManagedKey(
                     boundedInteger(device, "protocolMinor", 0..255)
                 ),
                 certificateFingerprint = string(json, "certificateFingerprint"),
-                desired = configuration(json.opt("desired") as? JSONObject ?: invalid()),
+                desired = configuration(json.opt("desired") as? JSONObject ?: invalid(), schema),
                 applied = applied,
                 requested = boolean(json, "requested"),
                 revision = integer(json, "revision"),
@@ -131,7 +161,8 @@ data class BleManagedKey(
                 authorizationGeneration = when (json.opt("authorizationGeneration")) {
                     null -> -1
                     else -> integer(json, "authorizationGeneration")
-                }
+                },
+                deviceId = deviceId
             )
         }
 
@@ -140,7 +171,10 @@ data class BleManagedKey(
             val tokens = JSONTokener(value)
             val json = tokens.nextValue() as? JSONObject ?: invalid()
             require(tokens.nextClean() == '\u0000') { "Invalid Bluetooth binding data" }
-            return fromJson(json, string(json, "accountId"), string(json, "vin"))
+            return fromJson(
+                json, string(json, "accountId"), string(json, "vin"),
+                if (integer(json, "schemaVersion") == 1L) "" else string(json, "deviceId")
+            )
         }
 
         private fun configurationJson(configuration: BlePassiveConfiguration): JSONObject = JSONObject().apply {
@@ -148,13 +182,31 @@ data class BleManagedKey(
             put("autoUnlock", configuration.autoUnlock)
             put("autoLock", configuration.autoLock)
             put("buttonEnabled", configuration.buttonEnabled)
+            put("calibration", JSONObject().apply {
+                put("distanceCalibration", configuration.calibration.distanceCalibration)
+                put("coefficientHundredths", configuration.calibration.coefficientHundredths)
+                put("unlockCalibration", configuration.calibration.unlockCalibration)
+                put("lockCalibration", configuration.calibration.lockCalibration)
+            })
         }
 
-        private fun configuration(json: JSONObject): BlePassiveConfiguration = BlePassiveConfiguration(
+        private fun configuration(json: JSONObject, schema: Long): BlePassiveConfiguration = BlePassiveConfiguration(
             enabled = boolean(json, "enabled"),
             autoUnlock = boolean(json, "autoUnlock"),
             autoLock = boolean(json, "autoLock"),
-            buttonEnabled = boolean(json, "buttonEnabled")
+            buttonEnabled = boolean(json, "buttonEnabled"),
+            calibration = if (schema == 1L) {
+                require(!json.has("calibration")) { "Invalid legacy Bluetooth calibration" }
+                BleCalibration.DEFAULT
+            } else {
+                val calibration = json.opt("calibration") as? JSONObject ?: invalid()
+                BleCalibration(
+                    boundedInteger(calibration, "distanceCalibration", BleCalibration.BYTE_PROTOCOL_RANGE),
+                    boundedInteger(calibration, "coefficientHundredths", BleCalibration.COEFFICIENT_PROTOCOL_RANGE),
+                    boundedInteger(calibration, "unlockCalibration", BleCalibration.BYTE_PROTOCOL_RANGE),
+                    boundedInteger(calibration, "lockCalibration", BleCalibration.BYTE_PROTOCOL_RANGE)
+                )
+            }
         )
 
         private fun string(json: JSONObject, key: String): String = json.opt(key) as? String ?: invalid()

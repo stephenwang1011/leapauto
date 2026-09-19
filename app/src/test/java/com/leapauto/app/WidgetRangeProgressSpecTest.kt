@@ -1,8 +1,10 @@
 package com.leapauto.app
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 
 class WidgetRangeProgressSpecTest {
 
@@ -12,6 +14,11 @@ class WidgetRangeProgressSpecTest {
         val projectDir = generateSequence(File(workingDirectory)) { it.parentFile ?: return@generateSequence null }
             .first { File(it, "app").isDirectory }
         val layout = File(projectDir, "app/src/main/res/layout/widget_layout.xml").readText()
+        val layoutDocument = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+            .parse(File(projectDir, "app/src/main/res/layout/widget_layout.xml"))
+        val rows = layoutDocument.getElementsByTagName("LinearLayout")
+        val actionRow = (0 until rows.length).map { rows.item(it) as org.w3c.dom.Element }
+            .single { it.getAttribute("android:id") == "@+id/widgetActionRow" }
         val drawable = File(projectDir, "app/src/main/res/drawable/widget_charge_progress.xml").readText()
         val pureGoodDrawable = File(projectDir, "app/src/main/res/drawable/widget_pure_range_progress.xml").readText()
         val pureWarningDrawable = File(projectDir, "app/src/main/res/drawable/widget_pure_range_warning_progress.xml").readText()
@@ -35,9 +42,9 @@ class WidgetRangeProgressSpecTest {
         assertTrue(!layout.contains("android:layout_height=\"4dp\""))
         assertTrue(layout.contains("android:paddingTop=\"4dp\""))
         assertTrue(layout.contains("android:paddingBottom=\"4dp\""))
-        assertTrue(layout.contains("android:layout_height=\"28dp\""))
-        assertTrue(layout.contains("android:layout_marginTop=\"8dp\""))
-        assertTrue(layout.contains("android:layout_marginBottom=\"8dp\""))
+        assertEquals("28dp", actionRow.getAttribute("android:layout_height"))
+        assertEquals("0dp", actionRow.getAttribute("android:layout_marginTop"))
+        assertEquals("4dp", actionRow.getAttribute("android:layout_marginBottom"))
         assertTrue(layout.contains("android:id=\"@+id/widgetStatusContainer\""))
         assertTrue(layout.contains("android:id=\"@+id/imgWChargingStatus\""))
         assertTrue(layout.contains("android:src=\"@drawable/ic_widget_charging_bolt\""))

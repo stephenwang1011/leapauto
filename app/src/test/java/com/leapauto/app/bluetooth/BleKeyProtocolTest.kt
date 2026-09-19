@@ -53,6 +53,109 @@ class BleKeyProtocolTest {
     }
 
     @Test
+    fun authenticationDiagnosticsPreserveFrameForEveryIdentityMatchCombination() {
+        for (mask in 0..3) {
+            val accountId = if (mask and 1 != 0) "old-account" else "new-account"
+            val deviceId = if (mask and 2 != 0) "old-device" else "new-device"
+            session().use { session ->
+                val expected = session.buildAuthentication(certificate, accountId, deviceId, 9, timestamp)
+                val summaries = mutableListOf<BleAuthenticationStructure>()
+                val actual = session.buildAuthentication(certificate, accountId, deviceId, 9, timestamp,
+                    onPrepared = { summaries += it })
+                assertArrayEquals(expected, actual)
+                assertEquals(1, summaries.size)
+                assertEquals(mask, summaries.single().identityMatchMask)
+                assertEquals(6, summaries.single().certificateFieldCount)
+            }
+        }
+    }
+
+    @Test
+    fun authenticationDiagnosticsCountUtf8BytesSignatureAndTrailingEmptyFields() {
+        val certificate = certificate.copy(
+            plainText = "v1;old-account;old-device;$vin;1700000000;1900000000;;",
+            signResult = Base64.getEncoder().encodeToString(ByteArray(37) { (it + 1).toByte() })
+        )
+        val accountId = "new-account-\u8f66"
+        val deviceId = "new-device-\u5319"
+        val expectedText = "$timestamp;v1;$accountId;$deviceId;$vin;1700000000;1900000000;;;56;2.00;08;16;1;0;0;0;"
+        val diagnostics = BleDiagnostics { 0L }
+        session(certificate).use { session ->
+            val summaries = mutableListOf<BleAuthenticationStructure>()
+            val frame = session.buildAuthentication(certificate, accountId, deviceId, 9, timestamp, onPrepared = {
+                summaries += it
+                diagnostics.recordAuthentication(it)
+            })
+            val summary = summaries.single()
+            val ciphertext = Base64.getDecoder().decode(frame.copyOfRange(73, frame.size - 2))
+            assertEquals(8, summary.certificateFieldCount)
+            assertEquals(0, summary.identityMatchMask)
+            assertEquals(expectedText.toByteArray(Charsets.UTF_8).size, summary.textByteCount)
+            assertTrue(summary.textByteCount > expectedText.length)
+            assertEquals(37, summary.signatureByteCount)
+            assertEquals(summary.textByteCount + 4 + 37, summary.plaintextByteCount)
+            assertEquals((summary.plaintextByteCount / 16 + 1) * 16, summary.ciphertextByteCount)
+            assertEquals(ciphertext.size, summary.ciphertextByteCount)
+            assertEquals(9, summary.protocolMinor)
+            assertEquals(1, summary.flagsMask)
+            assertArrayEquals(session.buildAuthentication(certificate, accountId, deviceId, 9, timestamp), frame)
+            val report = BleDiagnostics.formatReport(diagnostics.snapshot(), "3.3.52", BleConnectionPhase.AUTHENTICATING)
+            for (secret in listOf(certificate.ecdhPublicKey, certificate.passwordCard, certificate.plainText,
+                certificate.signResult, certificate.vin, accountId, deviceId, "old-account", "old-device",
+                BleKeyProtocol.certificateFingerprint(certificate), Base64.getEncoder().encodeToString(frame))) {
+                assertFalse(report.contains(secret))
+                assertFalse(summary.toString().contains(secret))
+            }
+        }
+    }
+
+    @Test
+    fun authenticationDiagnosticsDescribeFlagsInTheirActualWireOrder() {
+        for (minor in listOf(8, 9)) {
+            for (configuration in listOf(BlePassiveConfiguration(), BlePassiveConfiguration.MANUAL,
+                BlePassiveConfiguration(enabled = true, autoUnlock = true, autoLock = true),
+                BlePassiveConfiguration(enabled = true, autoLock = true))) {
+                session().use { session ->
+                    val summaries = mutableListOf<BleAuthenticationStructure>()
+                    val frame = session.buildAuthentication(certificate, "test-account", "test-device", minor,
+                        timestamp, configuration, onPrepared = { summaries += it })
+                    val expectedMask = when {
+                        !configuration.enabled -> 0
+                        minor == 8 -> (if (configuration.autoUnlock) 1 else 0) or
+                            (if (configuration.autoLock) 2 else 0)
+                        else -> 1 or (if (configuration.autoLock) 2 else 0) or
+                            (if (configuration.autoUnlock) 4 else 0)
+                    }
+                    assertEquals(expectedMask, summaries.single().flagsMask)
+                    assertEquals(minor, summaries.single().protocolMinor)
+                    assertArrayEquals(session.buildAuthentication(certificate, "test-account", "test-device", minor,
+                        timestamp, configuration), frame)
+                }
+            }
+        }
+        session().use { session ->
+            val summaries = mutableListOf<BleAuthenticationStructure>()
+            session.buildAuthentication(certificate, "test-account", "test-device", 9, timestamp,
+                BlePassiveConfiguration(true, true, true, true), onPrepared = { summaries += it })
+            assertEquals(15, summaries.single().flagsMask)
+        }
+    }
+
+    @Test
+    fun rejectedAuthenticationDoesNotEmitPreparedDiagnostics() {
+        for (invalid in listOf(certificate.copy(plainText = "a;b;c"), certificate.copy(signResult = "not%base64"))) {
+            val summaries = mutableListOf<BleAuthenticationStructure>()
+            session(invalid).use { session ->
+                assertThrows(IllegalArgumentException::class.java) {
+                    session.buildAuthentication(invalid, "account", "device", 9, timestamp,
+                        onPrepared = { summaries += it })
+                }
+                assertTrue(summaries.isEmpty())
+            }
+        }
+    }
+
+    @Test
     fun lockAndUnlockCommandsMatchIndependentCrcAndEncryptionVectors() {
         session().use { session ->
             assertArrayEquals(hex("aaab180000005578394f32343073464c6f41496e704d3172506e5a413d3d"),

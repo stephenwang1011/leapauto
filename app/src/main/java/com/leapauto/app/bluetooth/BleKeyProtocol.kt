@@ -207,6 +207,18 @@ object BleKeyProtocol {
     }
 }
 
+data class BleAuthenticationStructure(
+    val certificateFieldCount: Int,
+    val identityMatchMask: Int,
+    val textByteCount: Int,
+    val signatureByteCount: Int,
+    val plaintextByteCount: Int,
+    val ciphertextByteCount: Int,
+    val protocolMinor: Int,
+    val flagsMask: Int,
+    val identityEmptyMask: Int = -1
+)
+
 class BleKeySession internal constructor(
     private val sessionId: Long,
     publicKey: ByteArray,
@@ -227,7 +239,8 @@ class BleKeySession internal constructor(
         deviceId: String,
         protocolMinor: Int,
         epochSeconds: Long,
-        configuration: BlePassiveConfiguration = BlePassiveConfiguration.MANUAL
+        configuration: BlePassiveConfiguration = BlePassiveConfiguration.MANUAL,
+        onPrepared: ((BleAuthenticationStructure) -> Unit)? = null
     ): ByteArray {
         check(!closed) { "BLE session is closed" }
         require(MessageDigest.isEqual(certificateFingerprint, certificateDigest(certificate))) {
@@ -239,6 +252,10 @@ class BleKeySession internal constructor(
         }
         val fields = certificate.plainText.split(';').toMutableList()
         require(fields.size >= 6) { "Incomplete BLE certificate text" }
+        val identityMatchMask = (if (fields[1] == accountId) 1 else 0) or
+            (if (fields[2] == deviceId) 2 else 0)
+        val identityEmptyMask = (if (fields[1].isEmpty()) 1 else 0) or
+            (if (fields[2].isEmpty()) 2 else 0)
         fields[1] = accountId
         fields[2] = deviceId
         val settings = configuration.authenticationFields(protocolMinor)
@@ -246,11 +263,22 @@ class BleKeySession internal constructor(
         val signature = decodeBase64(certificate.signResult, "Invalid BLE certificate signature")
         require(signature.isNotEmpty()) { "Invalid BLE certificate signature" }
         val plain = littleEndian(text.size.toLong(), 4) + text + signature
-        val encrypted = Base64.getEncoder().encode(crypt(plain, Cipher.ENCRYPT_MODE))
+        val ciphertext = crypt(plain, Cipher.ENCRYPT_MODE)
+        val encrypted = Base64.getEncoder().encode(ciphertext)
+        ciphertext.fill(0)
         plain.fill(0)
         val payload = littleEndian(sessionId, 4) + publicKey + encrypted + byteArrayOf(1, 9)
         require(payload.size <= 0xFFFF) { "BLE authentication payload is too large" }
-        return byteArrayOf(0xAA.toByte(), 0xAE.toByte()) + littleEndian(payload.size.toLong(), 2) + payload
+        val frame = byteArrayOf(0xAA.toByte(), 0xAE.toByte()) + littleEndian(payload.size.toLong(), 2) + payload
+        onPrepared?.let { prepared ->
+            // Bit zero describes the first flag actually encoded after the four calibration fields.
+            val flagsMask = settings.split(';').drop(4).dropLast(1).foldIndexed(0) { index, mask, value ->
+                mask or (value.toInt() shl index)
+            }
+            prepared(BleAuthenticationStructure(fields.size, identityMatchMask, text.size, signature.size,
+                plain.size, ciphertext.size, protocolMinor, flagsMask, identityEmptyMask))
+        }
+        return frame
     }
 
     fun buildCommand(action: BleLockAction, epochSeconds: Long): ByteArray =

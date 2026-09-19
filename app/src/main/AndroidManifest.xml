@@ -21,6 +21,14 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="geo" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.PICK" />
+            <data android:mimeType="image/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+            <data android:mimeType="image/*" />
+        </intent>
     </queries>
 
     <application
@@ -40,12 +48,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".ControlConfirmActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:screenOrientation="portrait" />
 
         <receiver
             android:name=".ControlWidget"

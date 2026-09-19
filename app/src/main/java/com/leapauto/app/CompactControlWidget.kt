@@ -39,16 +39,12 @@ class CompactControlWidget : AppWidgetProvider() {
                 setVehicleImage(this, appearance, session.selectedVin, context)
                 applyStaticAppearance(themeContext, this, opacity)
                 setTextViewText(R.id.txtWCTitle, ControlWidget.widgetTitle(config, appearance))
-                val isHybridCarType = (snapshot?.carType ?: session.selectedCarType).let {
-                    it.contains("增程") || it.contains("REEV", ignoreCase = true)
-                }
-                val resolvedPowerType = when {
-                    config.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER -> SessionStore.VehiclePowerType.RANGE_EXTENDER
-                    snapshot?.powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER -> SessionStore.VehiclePowerType.RANGE_EXTENDER
-                    isHybridCarType -> SessionStore.VehiclePowerType.RANGE_EXTENDER
-                    snapshot?.fuelRange != null || snapshot?.fuelSoc != null -> SessionStore.VehiclePowerType.RANGE_EXTENDER
-                    else -> snapshot?.powerType ?: config.powerType
-                }
+                val resolvedPowerType = VehiclePowerTypeResolver.resolve(
+                    configuredPowerType = config.powerType,
+                    carType = snapshot?.carType?.ifBlank { session.selectedCarType } ?: session.selectedCarType,
+                    cachedPowerType = snapshot?.powerType,
+                    hasFuelTelemetry = snapshot?.fuelRange != null || snapshot?.fuelSoc != null
+                )
                 applyRangePresentation(
                     themeContext,
                     this,
@@ -108,7 +104,7 @@ class CompactControlWidget : AppWidgetProvider() {
             context: Context? = null
         ) {
             val remoteBitmap = if (vin.isNotBlank() && context != null) {
-                VehicleImageCache.loadCachedBitmap(context, vin)
+                VehicleImageCache.loadWidgetBitmap(context, vin)
             } else {
                 null
             }
