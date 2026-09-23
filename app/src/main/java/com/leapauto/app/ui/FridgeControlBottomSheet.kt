@@ -92,9 +92,14 @@ fun FridgeOverviewCard(
 
     val activeThemeColor = if (isHot) MaterialTheme.statusWarn else MaterialTheme.colorScheme.primary
     val displayColor = if (isEnabled) activeThemeColor else MaterialTheme.colorScheme.onSurfaceVariant
+    val fridgeAuraColor = if (isEnabled) {
+        activeThemeColor.copy(alpha = 0.14f)
+    } else {
+        MaterialTheme.statusGood.copy(alpha = 0.08f)
+    }
 
     val statusText = when {
-        !isEnabled -> "车载冰箱 · 已关闭"
+        !isEnabled -> "冰箱 · 已关闭"
         isHot -> "制热中 · 50 °C"
         fridgeStatus.style == FridgeStyle.TURBO -> "急速制冷 · ${fridgeStatus.targetTemp} °C"
         else -> "制冷中 · ${fridgeStatus.targetTemp} °C"
@@ -120,12 +125,12 @@ fun FridgeOverviewCard(
         } else null,
         shadowElevation = 0.dp,
         modifier = modifier
-            .height(if (compact) 60.dp else 56.dp)
+            .height(if (compact) 48.dp else 46.dp)
             .then(
                 if (!seamless) Modifier.frostedGlassCard(
                     shape = RoundedCornerShape(16.dp),
-                    auraColor = if (isEnabled) activeThemeColor.copy(alpha = 0.16f) else null,
-                    auraCenter = Offset(0.06f, 0.5f),
+                    auraColor = fridgeAuraColor,
+                    auraCenter = Offset(0.85f, 0.25f),
                     auraRadiusRatio = 0.5f
                 ) else Modifier
             )
@@ -136,11 +141,11 @@ fun FridgeOverviewCard(
                 .then(if (ambientBrush != null) Modifier.background(ambientBrush) else Modifier)
         ) {
             if (compact) {
-                // 并排紧凑双子舱布局：带触控热区物理微晶隔断
+                // 并排紧凑双子舱布局
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(start = 6.dp, end = 12.dp),
+                        .padding(start = 12.dp, end = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
@@ -162,7 +167,7 @@ fun FridgeOverviewCard(
                             Text(
                                 if (isEnabled) {
                                     if (isHot) "冰箱 · 50°C" else "冰箱 · ${fridgeStatus.targetTemp}°C"
-                                } else "车载冰箱",
+                                } else "冰箱",
                                 style = MaterialTheme.typography.labelMedium.energyStyle(),
                                 fontWeight = FontWeight.Bold,
                                 color = if (isEnabled) activeThemeColor else MaterialTheme.colorScheme.onSurface,
@@ -187,28 +192,19 @@ fun FridgeOverviewCard(
 
                     Spacer(Modifier.width(4.dp))
 
-                    // 右侧开关微晶安全热区
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (controlBusy) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = activeThemeColor
-                            )
-                        } else {
-                            ClimateToggle(
-                                checked = isEnabled,
-                                onCheckedChange = { onToggleFridge(!isEnabled) },
-                                contentDescription = "车载冰箱开关",
-                                stateDescription = if (isEnabled) "已开启" else "已关闭"
-                            )
-                        }
+                    if (controlBusy) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = activeThemeColor
+                        )
+                    } else {
+                        ClimateToggle(
+                            checked = isEnabled,
+                            onCheckedChange = { onToggleFridge(!isEnabled) },
+                            contentDescription = "车载冰箱开关",
+                            stateDescription = if (isEnabled) "已开启" else "已关闭"
+                        )
                     }
                 }
             } else {
@@ -636,7 +632,7 @@ fun FridgeControlBottomSheet(
             ) {
                 FridgeSegmentButton(
                     selected = currentStyle == FridgeStyle.NORMAL,
-                    iconRes = R.drawable.ic_phosphor_wind,
+                    iconRes = R.drawable.ic_fridge_eco_recycle,
                     label = "标准节能",
                     activeColor = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),

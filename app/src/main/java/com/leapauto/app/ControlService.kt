@@ -3,6 +3,7 @@ package com.leapauto.app
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
@@ -101,11 +102,13 @@ class ControlService : Service() {
                 if (pin.isNullOrBlank()) {
                     throw ApiException("未设置操作密码，请先打开 App 保存")
                 }
+                val isWinOpen = snapshot?.windowOpen == true
+                val effectiveCommand = WidgetWindowTogglePolicy.resolveCommand(command, isWinOpen)
                 val api = LeapmotorApi(session)
-                val cmd = Commands.build(command)
+                val cmd = Commands.build(effectiveCommand)
                 val result = api.sendControl(cmd, pin)
                 store.save(session)
-                var text = WidgetControlResultText.accepted(command)
+                var text = WidgetControlResultText.accepted(effectiveCommand)
                 // A successful POST without a result message ID is not vehicle-side confirmation.
                 var executionConfirmed = false
                 if (result.msgID.isNotBlank()) {
@@ -116,7 +119,7 @@ class ControlService : Service() {
                         if (resp.opt("result")?.toString() == "0") {
                             executionConfirmed = true
                             val state = resp.optString("state", resp.optString("status", ""))
-                            text = WidgetControlResultText.completed(command, state)
+                            text = WidgetControlResultText.completed(effectiveCommand, state)
                             break
                         }
                     }
@@ -175,9 +178,14 @@ class ControlService : Service() {
                     }
                 }
                 val confirmedAcState =
-                    WidgetAcMapper.confirmedStateForCommand(command, executionConfirmed)
+                    WidgetAcMapper.confirmedStateForCommand(effectiveCommand, executionConfirmed)
                 if (confirmedAcState != null) {
                     store.updateWidgetAcState(session.selectedVin, confirmedAcState)
+                }
+                if (effectiveCommand == "windowClose") {
+                    store.updateWidgetWindowState(session.selectedVin, windowOpen = false)
+                } else if (effectiveCommand == "windowOpen" || effectiveCommand == "windowVent") {
+                    store.updateWidgetWindowState(session.selectedVin, windowOpen = true)
                 }
                 ControlWidget.showControlStatus(this, text, confirmedAcState)
                 notifyResult(text)
@@ -208,6 +216,8 @@ class ControlService : Service() {
         val powerType = resolvedPowerType.toStatusPowerType()
         val trunkState = TrunkStateMapper.fromSignal(displayStatus.opt("bbcmBackDoorStatus"))
         val sentryEnabled = WidgetSentryMapper.state(displayStatus)
+        val openWindows = WidgetStatusMapper.openWindowLabels(displayStatus, session.selectedCarType)
+        val windowOpen = openWindows.isNotEmpty()
         val now = System.currentTimeMillis()
         store.saveWidgetSnapshot(
             vin = session.selectedVin,
@@ -233,7 +243,8 @@ class ControlService : Service() {
             sessionGeneration = session.generation,
             driving = WidgetStatusMapper.isDriving(displayStatus),
             trunkState = trunkState,
-            sentryEnabled = sentryEnabled
+            sentryEnabled = sentryEnabled,
+            windowOpen = windowOpen
         )
         store.save(session)
         return trunkState
@@ -311,12 +322,24 @@ class ControlService : Service() {
         return lastKnownEnabled
     }
 
-    private fun notification(text: String): Notification =
-        Notification.Builder(this, CHANNEL_ID)
+    private fun notification(text: String): Notification {
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            RESULT_NOTIF_ID,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("零跑遥控")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_myplaces)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
             .build()
+    }
 
     private fun notifyResult(text: String) {
         val nm = getSystemService(NotificationManager::class.java)

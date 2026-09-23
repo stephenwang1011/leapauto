@@ -715,6 +715,22 @@ class CommandsTest {
         assertEquals("301", passengerHeat2.cmdid)
         assertEquals("{\"position\":\"right_front\",\"level\":\"2\"}", passengerHeat2.stateJson)
         assertEquals("副驾加热2档", passengerHeat2.label)
+
+        val leftRearHeat3 = Commands.buildSeatHeating("left_rear", 3)
+        assertEquals("301", leftRearHeat3.cmdid)
+        assertEquals("{\"position\":\"left_rear\",\"level\":\"3\"}", leftRearHeat3.stateJson)
+
+        val leftRearVent2 = Commands.buildSeatVentilation("left_rear", 2)
+        assertEquals("370", leftRearVent2.cmdid)
+        assertEquals("{\"position\":\"left_rear\",\"level\":\"2\"}", leftRearVent2.stateJson)
+
+        val rightRearHeat1 = Commands.buildSeatHeating("right_rear", 1)
+        assertEquals("301", rightRearHeat1.cmdid)
+        assertEquals("{\"position\":\"right_rear\",\"level\":\"1\"}", rightRearHeat1.stateJson)
+
+        val rightRearVent3 = Commands.buildSeatVentilation("right_rear", 3)
+        assertEquals("370", rightRearVent3.cmdid)
+        assertEquals("{\"position\":\"right_rear\",\"level\":\"3\"}", rightRearVent3.stateJson)
     }
 
     @Test
@@ -749,6 +765,10 @@ class CommandsTest {
     fun commandsBuildDispatchesSeatAndComfortNames() {
         assertEquals("301", Commands.build("driverSeatHeating_1").cmdid)
         assertEquals("370", Commands.build("driverSeatVentilation_2").cmdid)
+        assertEquals("301", Commands.build("leftRearSeatHeating_3").cmdid)
+        assertEquals("370", Commands.build("leftRearSeatVentilation_2").cmdid)
+        assertEquals("301", Commands.build("rightRearSeatHeating_3").cmdid)
+        assertEquals("370", Commands.build("rightRearSeatVentilation_2").cmdid)
         assertEquals("320", Commands.build("steeringWheelHeating_2").cmdid)
         assertEquals("440", Commands.build("rearviewMirrorHeating_on").cmdid)
         assertEquals("440", Commands.build("rearviewMirrorHeating_off").cmdid)

@@ -81,4 +81,9 @@ class VehicleLocationGeocoderTest {
 
         assertEquals("火车站", VehicleLocationGeocoder.formatShortAddress(json))
     }
+
+    @Test
+    fun `clears cache safely without throwing`() {
+        VehicleLocationGeocoder.clearCache()
+    }
 }

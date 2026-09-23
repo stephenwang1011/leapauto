@@ -122,7 +122,7 @@ object VehicleImageCache {
             .apply()
     }
 
-    fun cropTransparentPixels(src: Bitmap): Bitmap {
+    fun cropTransparentPixels(src: Bitmap): Bitmap? {
         val width = src.width
         val height = src.height
         var minX = width
@@ -133,11 +133,13 @@ object VehicleImageCache {
         val pixels = IntArray(width * height)
         src.getPixels(pixels, 0, width, 0, 0, width, height)
 
+        var visiblePixelCount = 0
         for (y in 0 until height) {
             val rowOffset = y * width
             for (x in 0 until width) {
                 val alpha = (pixels[rowOffset + x] ushr 24) and 0xff
                 if (alpha > 15) {
+                    visiblePixelCount++
                     if (x < minX) minX = x
                     if (x > maxX) maxX = x
                     if (y < minY) minY = y
@@ -146,19 +148,24 @@ object VehicleImageCache {
             }
         }
 
-        if (maxX <= minX || maxY <= minY) return src
+        // 必须含有足够的非透明有效像素且非空，否则判定为纯透明/无效截帧，保护桌面小组件回退官方2D图
+        if (visiblePixelCount < 100 || maxX <= minX || maxY <= minY) return null
 
-        val padX = ((maxX - minX) * 0.04f).toInt()
-        val padY = ((maxY - minY) * 0.04f).toInt()
+        val cropWidth = maxX - minX + 1
+        val cropHeight = maxY - minY + 1
+        if (cropWidth < 30 || cropHeight < 20) return null
+
+        val padX = (cropWidth * 0.04f).toInt()
+        val padY = (cropHeight * 0.04f).toInt()
         val finalMinX = maxOf(0, minX - padX)
         val finalMinY = maxOf(0, minY - padY)
         val finalMaxX = minOf(width - 1, maxX + padX)
         val finalMaxY = minOf(height - 1, maxY + padY)
 
-        val cropWidth = finalMaxX - finalMinX + 1
-        val cropHeight = finalMaxY - finalMinY + 1
+        val finalCropWidth = finalMaxX - finalMinX + 1
+        val finalCropHeight = finalMaxY - finalMinY + 1
 
-        return Bitmap.createBitmap(src, finalMinX, finalMinY, cropWidth, cropHeight)
+        return Bitmap.createBitmap(src, finalMinX, finalMinY, finalCropWidth, finalCropHeight)
     }
 
     fun hasCustomImage(context: Context, vin: String): Boolean {
@@ -230,15 +237,16 @@ object VehicleImageCache {
             WidgetImageSource.THREE_D_SNAPSHOT to ("3d_$vin" to get3DSnapshotFile(context, vin)),
             WidgetImageSource.OFFICIAL_2D to ("official_$vin" to getCacheFile(context, vin))
         )
-        val currentModelKey = getCachedMeta(context, vin)?.h5Key
+        val meta = getCachedMeta(context, vin)
+        val currentModelKey = meta?.h5Key
         val hasCurrent3DModel = currentModelKey != null &&
-            CarModel3DManager.isModelReady(context, currentModelKey)
+            CarModel3DManager.isModelReady(context, currentModelKey, meta.srcKey)
         val hasCurrent3DSnapshot = hasCurrent3DModel &&
             VehicleImageCache.has3DSnapshotForModel(context, vin, currentModelKey!!)
         val preferredSource = resolveWidgetImageSource(
             hasCustomImage = candidates.getValue(WidgetImageSource.CUSTOM).second.isUsableImageFile(),
             has3DSnapshot = hasCurrent3DSnapshot &&
-                candidates.getValue(WidgetImageSource.THREE_D_SNAPSHOT).second.isUsableImageFile(),
+                candidates.getValue(WidgetImageSource.THREE_D_SNAPSHOT).second.isUsable3DSnapshotFile(),
             hasOfficial2DImage = candidates.getValue(WidgetImageSource.OFFICIAL_2D).second.isUsableImageFile()
         )
         val sourceOrder = when (preferredSource) {
@@ -257,6 +265,7 @@ object VehicleImageCache {
         for (source in sourceOrder) {
             val (cacheKey, file) = candidates.getValue(source)
             if (!file.exists() || file.length() <= 0) continue
+            if (source == WidgetImageSource.THREE_D_SNAPSHOT && file.length() < 4096) continue
             synchronized(memoryCache) {
                 memoryCache.get(cacheKey)?.let { return it }
             }
@@ -276,6 +285,7 @@ object VehicleImageCache {
     }
 
     private fun File.isUsableImageFile(): Boolean = exists() && length() > 0
+    private fun File.isUsable3DSnapshotFile(): Boolean = exists() && length() >= 4096
 
     fun loadCachedImageBitmap(context: Context, vin: String): ImageBitmap? {
         return loadCachedBitmap(context, vin)?.asImageBitmap()
@@ -345,7 +355,7 @@ object VehicleImageCache {
         var modelPackageUpdated = false
         meta.h5Key?.let { h5Key ->
             try {
-                if (!CarModel3DManager.isModelReady(context, h5Key)) {
+                if (!CarModel3DManager.isModelReady(context, h5Key, meta.srcKey)) {
                     modelPackageUpdated = CarModel3DManager.syncModelPackage(context, api, h5Key, meta.srcKey)
                 }
             } catch (e: Exception) {

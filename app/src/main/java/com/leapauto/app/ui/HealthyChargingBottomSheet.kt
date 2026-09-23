@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -529,7 +530,7 @@ fun HealthyChargingBottomSheet(
                                         val now = System.currentTimeMillis()
                                         if (now - lastToastTime > 1800L) {
                                             lastToastTime = now
-                                            Toast.makeText(context, "健康充电最高限值为 90%", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "健康充电最高限值为 95%", Toast.LENGTH_SHORT).show()
                                         }
                                     } else {
                                         selectedSoc = snapped
@@ -604,42 +605,73 @@ fun HealthyChargingBottomSheet(
                             )
                         }
 
-                        // 90% 最佳限值提示标记（向上偏移 16dp 抵消 Slider 触控盒空白，让箭头紧贴圆钮正下方 2~3dp）
-                        BoxWithConstraints(
+                        // 90% 最佳限值提示标记（水平位置与 Slider 内部 90% 刻度 100% 绝对对齐）
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 38.dp)
-                                .offset(y = (-16).dp)
+                                .offset(y = (-16).dp),
+                            verticalAlignment = Alignment.Top
                         ) {
-                            val xPos = maxWidth * 0.80f
-                            val triangleColor = if (isDark) Color(0xFF8E8E93) else Color(0xFFA0A0A5)
-                            val labelColor = if (isDark) Color(0xFF8E8E93) else Color(0xFF7A7A80)
+                            // 左侧占位：宽度精确对齐 Slider 左侧 "50%" 文字及外边距
+                            Text(
+                                text = "50%",
+                                fontSize = 13.sp,
+                                color = Color.Transparent,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
 
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.offset(x = xPos - 30.dp)
+                            // 中间容器：宽度与位置精确与 Slider 本身 100% 一致
+                            Box(
+                                modifier = Modifier.weight(1f)
                             ) {
-                                // 纯几何三角形绘制，消除中文字符字体自带的虚高下边距
-                                Canvas(modifier = Modifier.size(width = 8.dp, height = 5.dp)) {
-                                    val path = Path().apply {
-                                        moveTo(size.width / 2f, 0f)
-                                        lineTo(size.width, size.height)
-                                        lineTo(0f, size.height)
-                                        close()
+                                val triangleColor = if (isDark) Color(0xFF8E8E93) else Color(0xFFA0A0A5)
+                                val labelColor = if (isDark) Color(0xFF8E8E93) else Color(0xFF7A7A80)
+
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.layout { measurable, constraints ->
+                                        val placeable = measurable.measure(constraints)
+                                        // Slider 内部滑轨两端向内缩进 thumbRadius(10dp)，实际滑轨宽度为 maxWidth - 20dp
+                                        val thumbRadiusPx = 10.dp.roundToPx()
+                                        val trackWidthPx = (constraints.maxWidth - thumbRadiusPx * 2).coerceAtLeast(0)
+                                        // 90% 刻度位于有效滑轨区间的 80% 处：(90 - 50) / (100 - 50) = 40 / 50 = 0.80
+                                        val targetXPx = thumbRadiusPx + (trackWidthPx * 0.80f).roundToInt()
+                                        val xOffset = targetXPx - placeable.width / 2
+                                        layout(constraints.maxWidth, placeable.height) {
+                                            placeable.placeRelative(xOffset, 0)
+                                        }
                                     }
-                                    drawPath(path, color = triangleColor)
+                                ) {
+                                    // 纯几何三角形绘制，消除中文字符字体自带的虚高下边距，顶点精准对齐中心
+                                    Canvas(modifier = Modifier.size(width = 8.dp, height = 5.dp)) {
+                                        val path = Path().apply {
+                                            moveTo(size.width / 2f, 0f)
+                                            lineTo(size.width, size.height)
+                                            lineTo(0f, size.height)
+                                            close()
+                                        }
+                                        drawPath(path, color = triangleColor)
+                                    }
+
+                                    Spacer(Modifier.height(2.dp))
+
+                                    Text(
+                                        text = "最佳限值90%",
+                                        fontSize = 11.sp,
+                                        lineHeight = 12.sp,
+                                        fontWeight = FontWeight.Normal,
+                                        color = labelColor
+                                    )
                                 }
-
-                                Spacer(Modifier.height(2.dp))
-
-                                Text(
-                                    text = "最佳限值90%",
-                                    fontSize = 11.sp,
-                                    lineHeight = 12.sp,
-                                    fontWeight = FontWeight.Normal,
-                                    color = labelColor
-                                )
                             }
+
+                            // 右侧占位：宽度精确对齐 Slider 右侧 "100%" 文字及外边距
+                            Text(
+                                text = "100%",
+                                fontSize = 13.sp,
+                                color = Color.Transparent,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
                         }
                     }
                 }

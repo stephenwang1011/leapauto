@@ -7,7 +7,7 @@ plugins {
 }
 
 val apkDisplayName = "零跑智控"
-val apkVersionName = "3.4.65"
+val apkVersionName = "3.6.8"
 
 val localProperties = Properties().apply {
     val localPropertiesFile = rootProject.file("local.properties")
@@ -18,6 +18,22 @@ val localProperties = Properties().apply {
 
 fun localProperty(name: String): String? =
     localProperties.getProperty(name)?.trim()?.takeIf { it.isNotEmpty() }
+
+fun obfuscateSecret(plain: String?): String {
+    if (plain.isNullOrEmpty()) return ""
+    val bytes = plain.toByteArray(Charsets.UTF_8)
+    val out = StringBuilder()
+    for (i in bytes.indices) {
+        val b = bytes[i].toInt() and 0xFF
+        val salt = (0x7B + (i * 37) + (i ushr 2)) and 0xFF
+        val encoded = b xor salt
+        out.append(String.format("%02x", encoded))
+    }
+    return out.toString()
+}
+
+val rawAmapWebKey = localProperty("AMAP_WEB_KEY") ?: "468e462adad376c2aa08d252ae20fcba"
+val rawPgyerApiKey = localProperty("PGYER_API_KEY") ?: ""
 
 val releaseStorePath = localProperty("RELEASE_STORE_FILE")
 val releaseStorePassword = localProperty("RELEASE_STORE_PASSWORD")
@@ -39,9 +55,10 @@ android {
         applicationId = "com.leapauto.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3004065
+        versionCode = 3006008
         versionName = apkVersionName
-        buildConfigField("String", "AMAP_WEB_KEY", "\"${localProperty("AMAP_WEB_KEY") ?: "468e462adad376c2aa08d252ae20fcba"}\"")
+        buildConfigField("String", "AMAP_WEB_KEY_ENCRYPTED", "\"${obfuscateSecret(rawAmapWebKey)}\"")
+        buildConfigField("String", "PGYER_API_KEY_ENCRYPTED", "\"${obfuscateSecret(rawPgyerApiKey)}\"")
         resourceConfigurations += setOf("zh", "zh-rCN")
         ndk {
             abiFilters += setOf("arm64-v8a", "armeabi-v7a")

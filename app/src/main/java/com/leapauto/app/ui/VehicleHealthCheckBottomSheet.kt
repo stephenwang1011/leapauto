@@ -66,6 +66,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -80,6 +81,7 @@ import com.leapauto.app.HealthSystemReport
 import com.leapauto.app.R
 import com.leapauto.app.VehicleAppearance
 import com.leapauto.app.VehicleHealthDiagnostics
+import com.leapauto.app.VehicleImageCache
 import com.leapauto.app.VehicleStatus
 import com.leapauto.app.ui.theme.LeapBlue
 import com.leapauto.app.ui.theme.LocalAppDarkTheme
@@ -97,14 +99,21 @@ fun VehicleHealthCheckBottomSheet(
     vehicleAppearance: VehicleAppearance,
     vehicleNickname: String,
     remoteBitmap: Bitmap? = null,
+    vehicleVin: String = "",
+    vehicleImageVersion: Int = 0,
     onControl: (String) -> Unit,
     onRefreshStatus: () -> Unit,
     onDismissRequest: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val isDark = LocalAppDarkTheme.current
     val pageBgColor = if (isDark) Color(0xFF131822) else Color(0xFFF3F5F9)
+
+    val carBitmap = remoteBitmap ?: remember(vehicleVin, vehicleImageVersion) {
+        if (vehicleVin.isNotBlank()) VehicleImageCache.loadWidgetBitmap(context, vehicleVin) else null
+    }
 
     var isScanning by remember { mutableStateOf(true) }
     var scanKey by remember { mutableStateOf(0) }
@@ -206,22 +215,21 @@ fun VehicleHealthCheckBottomSheet(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // 车模 + 激光光束覆盖层
+                    // 车模 + 激光光束覆盖层 (等比缩小 1/4，留出通透视界)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(130.dp),
+                            .height(100.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (remoteBitmap != null) {
+                        if (carBitmap != null) {
                             Image(
-                                bitmap = remoteBitmap.asImageBitmap(),
+                                bitmap = carBitmap.asImageBitmap(),
                                 contentDescription = "体检车模",
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(130.dp)
-                                    .padding(horizontal = 12.dp)
+                                    .fillMaxWidth(0.75f)
+                                    .height(100.dp)
                             )
                         }
 

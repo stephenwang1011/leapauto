@@ -53,7 +53,8 @@ class ControlWidget : AppWidgetProvider() {
                         trunkState = snapshot?.trunkState ?: TrunkState.UNKNOWN,
                         sentryEnabled = snapshot?.sentryEnabled,
                         acEnabled = acEnabled,
-                        acTone = acTone
+                        acTone = acTone,
+                        windowOpen = snapshot?.windowOpen
                     )
                 }
             }
@@ -235,7 +236,8 @@ class ControlWidget : AppWidgetProvider() {
                 trunkState = snapshot?.trunkState ?: TrunkState.UNKNOWN,
                 sentryEnabled = snapshot?.sentryEnabled,
                 acEnabled = snapshot?.acEnabled,
-                acTone = snapshot?.acTone ?: ClimateTemperatureTone.DEFAULT
+                acTone = snapshot?.acTone ?: ClimateTemperatureTone.DEFAULT,
+                windowOpen = snapshot?.windowOpen
             )
         }
 
@@ -286,6 +288,7 @@ class ControlWidget : AppWidgetProvider() {
                 climateMode = displayStatus.optInt("climateMode", -1).takeIf { it != -1 },
                 targetTemperature = displayStatus.opt("acSetting")?.toString()?.toIntOrNull()
             )
+            val openWin = WidgetStatusMapper.openWindowLabels(displayStatus, carType).isNotEmpty()
             applyActionSlots(
                 context = themeContext,
                 views = views,
@@ -295,7 +298,8 @@ class ControlWidget : AppWidgetProvider() {
                 sentryEnabled = WidgetSentryMapper.state(displayStatus),
                 acEnabled = acEnabled,
                 acTone = acTone,
-                preheatEnabled = BatteryPreheatState.fromRaw(displayStatus.opt("batteryThermalRequest"))
+                preheatEnabled = BatteryPreheatState.fromRaw(displayStatus.opt("batteryThermalRequest")),
+                windowOpen = openWin
             )
         }
 
@@ -357,7 +361,8 @@ class ControlWidget : AppWidgetProvider() {
                 trunkState = snapshot.trunkState,
                 sentryEnabled = snapshot.sentryEnabled,
                 acEnabled = snapshot.acEnabled,
-                acTone = snapshot.acTone
+                acTone = snapshot.acTone,
+                windowOpen = snapshot.windowOpen
             )
         }
 
@@ -370,13 +375,15 @@ class ControlWidget : AppWidgetProvider() {
             sentryEnabled: Boolean?,
             acEnabled: Boolean?,
             acTone: ClimateTemperatureTone,
-            preheatEnabled: Boolean? = null
+            preheatEnabled: Boolean? = null,
+            windowOpen: Boolean? = null
         ) {
             val themeContext = widgetThemeContext(context)
             val iconColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
             val background = resolveWidgetActionBackground(context)
 
             val slotIds = listOf(R.id.slotW1, R.id.slotW2, R.id.slotW3, R.id.slotW4, R.id.slotW5)
+            val btnBgIds = listOf(R.id.btnBgSlot1, R.id.btnBgSlot2, R.id.btnBgSlot3, R.id.btnBgSlot4, R.id.btnBgSlot5)
             val imgIds = listOf(R.id.imgWSlot1, R.id.imgWSlot2, R.id.imgWSlot3, R.id.imgWSlot4, R.id.imgWSlot5)
             val coolingIds = listOf(R.id.progressWSlot1AcCooling, R.id.progressWSlot2AcCooling, R.id.progressWSlot3AcCooling, R.id.progressWSlot4AcCooling, R.id.progressWSlot5AcCooling)
             val heatingIds = listOf(R.id.progressWSlot1AcHeating, R.id.progressWSlot2AcHeating, R.id.progressWSlot3AcHeating, R.id.progressWSlot4AcHeating, R.id.progressWSlot5AcHeating)
@@ -388,6 +395,7 @@ class ControlWidget : AppWidgetProvider() {
 
             for (i in 0 until 5) {
                 val slotId = slotIds[i]
+                val btnBgId = btnBgIds[i]
                 val imgId = imgIds[i]
                 val coolingId = coolingIds[i]
                 val heatingId = heatingIds[i]
@@ -399,7 +407,7 @@ class ControlWidget : AppWidgetProvider() {
                 }
 
                 views.setViewVisibility(slotId, View.VISIBLE)
-                views.setInt(slotId, "setBackgroundResource", background)
+                views.setInt(btnBgId, "setBackgroundResource", background)
 
                 val action = actions[i]
                 when (action) {
@@ -489,22 +497,26 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(coolingId, View.GONE)
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
-                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_wind)
+                        views.setImageViewResource(imgId, R.drawable.ic_window_half)
                         setImageTint(views, imgId, iconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
-                        views.setContentDescription(slotId, "车窗半开")
-                        views.setOnClickPendingIntent(slotId, click(context, "windowOpen"))
+                        val isWinOpen = windowOpen == true
+                        val targetCmd = WidgetWindowTogglePolicy.resolveCommand("windowOpen", isWinOpen)
+                        views.setContentDescription(slotId, WidgetWindowTogglePolicy.contentDescription("windowOpen", isWinOpen))
+                        views.setOnClickPendingIntent(slotId, click(context, targetCmd))
                     }
                     "windowVent" -> {
                         views.setViewVisibility(imgId, View.VISIBLE)
                         views.setViewVisibility(coolingId, View.GONE)
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
-                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_wind)
+                        views.setImageViewResource(imgId, R.drawable.ic_window_vent)
                         setImageTint(views, imgId, iconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
-                        views.setContentDescription(slotId, "车窗通风")
-                        views.setOnClickPendingIntent(slotId, click(context, "windowVent"))
+                        val isWinOpen = windowOpen == true
+                        val targetCmd = WidgetWindowTogglePolicy.resolveCommand("windowVent", isWinOpen)
+                        views.setContentDescription(slotId, WidgetWindowTogglePolicy.contentDescription("windowVent", isWinOpen))
+                        views.setOnClickPendingIntent(slotId, click(context, targetCmd))
                     }
                     "windowClose" -> {
                         views.setViewVisibility(imgId, View.VISIBLE)
@@ -709,15 +721,19 @@ class ControlWidget : AppWidgetProvider() {
                     WidgetPureRangeTone.CRITICAL -> R.color.widget_range_critical
                 }
             }
+            val themeCtx = widgetThemeContext(context)
+            val onSurface = ContextCompat.getColor(themeCtx, R.color.widget_on_surface)
+            val onSurfaceVariant = ContextCompat.getColor(themeCtx, R.color.widget_on_surface_variant)
             val color = ContextCompat.getColor(
-                widgetThemeContext(context),
+                themeCtx,
                 highContrastRangeColorResource(
                     colorResource,
                     SessionStore(context).loadWidgetOpacity() == 25
                 )
             )
-            views.setTextColor(R.id.txtWRange, color)
-            views.setTextColor(R.id.txtWRangeUnit, color)
+            // 与主界面严格对齐：公里数大字为沉稳白/炭黑，单位为次级文字灰，仅百分比显示当前状态能量色
+            views.setTextColor(R.id.txtWRange, onSurface)
+            views.setTextColor(R.id.txtWRangeUnit, onSurfaceVariant)
             val cleanSoc = (socText?.takeIf { it.isNotBlank() } ?: if (soc != null) "$progress%" else "")
                 .removePrefix("·")
                 .trim()
@@ -902,10 +918,11 @@ class ControlWidget : AppWidgetProvider() {
             views.setTextColor(R.id.txtWTitle, onSurface)
             views.setTextColor(R.id.txtWUpdated, onSurfaceVariant)
             views.setTextColor(R.id.txtWRange, onSurface)
-            views.setTextColor(R.id.txtWRangeUnit, onSurface)
+            views.setTextColor(R.id.txtWRangeUnit, onSurfaceVariant)
             views.setTextColor(R.id.txtWPureSoc, onSurface)
             views.setTextColor(R.id.txtWGeneralStatus, onSurfaceVariant)
             val slotIds = listOf(R.id.slotW1, R.id.slotW2, R.id.slotW3, R.id.slotW4, R.id.slotW5)
+            val btnBgIds = listOf(R.id.btnBgSlot1, R.id.btnBgSlot2, R.id.btnBgSlot3, R.id.btnBgSlot4, R.id.btnBgSlot5)
             val imgIds = listOf(R.id.imgWSlot1, R.id.imgWSlot2, R.id.imgWSlot3, R.id.imgWSlot4, R.id.imgWSlot5)
             imgIds.forEach { id ->
                 setImageTint(views, id, actionIcon)
@@ -913,7 +930,7 @@ class ControlWidget : AppWidgetProvider() {
             // Use the widget's resolved appearance, including the user's explicit
             // light/dark preference, instead of the device configuration alone.
             val actionBackground = resolveWidgetActionBackground(context)
-            slotIds.forEach { id ->
+            btnBgIds.forEach { id ->
                 views.setInt(id, "setBackgroundResource", actionBackground)
             }
             applyProgressAppearance(context, views, opacity == 25)

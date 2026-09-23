@@ -1,5 +1,6 @@
 package com.leapauto.app
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -130,7 +131,7 @@ class CompactWidgetSpecTest {
     @Test
     fun `app appearance changes immediately rebind both widgets with explicit theme resources`() {
         val projectDir = projectDirectory()
-        val activity = File(projectDir, "app/src/main/java/com/leapauto/app/MainActivity.kt").readText()
+        val activity = File(projectDir, "app/src/main/java/com/leapauto/app/MainActivity.kt").readText().replace("\r\n", "\n")
         val wideWidget = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
         val compactWidget = File(projectDir, "app/src/main/java/com/leapauto/app/CompactControlWidget.kt").readText()
 
@@ -220,6 +221,16 @@ class CompactWidgetSpecTest {
     }
 
     @Test
+    fun `health check bottom sheet loads car image consistent with widget image logic`() {
+        val projectDir = projectDirectory()
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+        val sheetSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/VehicleHealthCheckBottomSheet.kt").readText()
+
+        assertTrue(screenSource.contains("VehicleImageCache.loadWidgetBitmap(context, vehicleVin)"))
+        assertTrue(sheetSource.contains("VehicleImageCache.loadWidgetBitmap(context, vehicleVin)"))
+    }
+
+    @Test
     fun `widget card background supports landscape skybox style option`() {
         val projectDir = projectDirectory()
         val controlWidget = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
@@ -227,6 +238,11 @@ class CompactWidgetSpecTest {
         assertTrue(controlWidget.contains("WIDGET_BG_STYLE_LANDSCAPE"))
         assertTrue(controlWidget.contains("widget_card_background_landscape_dark"))
         assertTrue(controlWidget.contains("widget_card_background_landscape_light"))
+    }
+
+    @Test
+    fun `session store defaults widget background style to landscape`() {
+        assertEquals(SessionStore.WIDGET_BG_STYLE_LANDSCAPE, SessionStore.WIDGET_BG_STYLE_DEFAULT)
     }
 
     private fun projectDirectory(): File {

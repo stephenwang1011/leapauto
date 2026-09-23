@@ -237,4 +237,30 @@ class VehicleHealthDiagnosticsTest {
         assertNotNull("遮阳帘未关应提供关闭快捷修复", sunshadeIssue)
         assertEquals("关闭遮阳帘", sunshadeIssue?.fixLabel)
     }
+
+    @Test
+    fun `locked vehicle with active climate comfort and fridge provides quick fixes`() {
+        val status = createBaseStatus().copy(
+            locked = true,
+            acSwitch = true,
+            windshieldDefrost = true,
+            driverSeatVentilation = 2,
+            driverSeatHeating = 2,
+            passengerSeatVentilation = 1,
+            passengerSeatHeating = 1,
+            steeringWheelHeating = true,
+            rearviewMirrorHeating = true,
+            fridgeStatus = FridgeStatus(enabled = true, parkEnable = false)
+        )
+        val report = VehicleHealthDiagnostics.evaluate(status)
+
+        assertTrue(report.issues.any { it.fixCommand == "acOff" && it.fixLabel == "关闭空调" })
+        assertTrue(report.issues.any { it.fixCommand == "driverSeatVentilation_0" && it.fixLabel == "关主驾通风" })
+        assertTrue(report.issues.any { it.fixCommand == "driverSeatHeating_0" && it.fixLabel == "关主驾加热" })
+        assertTrue(report.issues.any { it.fixCommand == "passengerSeatVentilation_0" && it.fixLabel == "关副驾通风" })
+        assertTrue(report.issues.any { it.fixCommand == "passengerSeatHeating_0" && it.fixLabel == "关副驾加热" })
+        assertTrue(report.issues.any { it.fixCommand == "steeringWheelHeating_0" && it.fixLabel == "关方向盘加热" })
+        assertTrue(report.issues.any { it.fixCommand == "rearviewMirrorHeating_off" && it.fixLabel == "关后视镜加热" })
+        assertTrue(report.issues.any { it.fixCommand == "fridgeOff" && it.fixLabel == "关闭冰箱" })
+    }
 }

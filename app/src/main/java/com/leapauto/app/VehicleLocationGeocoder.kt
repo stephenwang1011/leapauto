@@ -8,24 +8,56 @@ import java.util.Locale
 
 data class GeocodedAddress(
     val shortAddress: String,
-    val fullAddress: String
+    val fullAddress: String,
+    val adcode: String = "",
+    val city: String = ""
 )
 
 object VehicleLocationGeocoder {
     private const val REGEO_URL = "https://restapi.amap.com/v3/geocode/regeo"
+    private const val MAX_CACHE_ENTRIES = 20
+    private const val CACHE_DISTANCE_THRESHOLD_METERS = 80.0 // 80米范围内直接命中缓存
+    private const val CACHE_EXPIRY_MS = 2 * 60 * 60 * 1000L // 2小时有效期
+
+    private data class CachedGeo(
+        val latitude: Double,
+        val longitude: Double,
+        val address: GeocodedAddress,
+        val cachedAtEpochMs: Long
+    )
+
+    private val cache = mutableListOf<CachedGeo>()
+
+    @Synchronized
+    fun clearCache() {
+        cache.clear()
+    }
 
     fun reverseGeocode(
         latitude: Double,
         longitude: Double,
-        apiKey: String = BuildConfig.AMAP_WEB_KEY
+        apiKey: String = ObfuscatedSecrets.getAmapWebKey()
     ): GeocodedAddress? {
+        val now = System.currentTimeMillis()
+
+        // 1. 优先检查高命中率内存距离缓存 (0ms 瞬间响应)
+        synchronized(this) {
+            val cached = cache.firstOrNull { entry ->
+                now - entry.cachedAtEpochMs < CACHE_EXPIRY_MS &&
+                    calculateDistanceMeters(latitude, longitude, entry.latitude, entry.longitude) <= CACHE_DISTANCE_THRESHOLD_METERS
+            }
+            if (cached != null) {
+                return cached.address
+            }
+        }
+
         if (apiKey.isBlank()) return null
         val location = String.format(Locale.US, "%.6f,%.6f", longitude, latitude)
         val urlString = "$REGEO_URL?key=$apiKey&location=$location&extensions=all"
         val connection = (URL(urlString).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            connectTimeout = 6_000
-            readTimeout = 6_000
+            connectTimeout = 3_500
+            readTimeout = 3_500
             setRequestProperty("User-Agent", "LeapAuto/${BuildConfig.VERSION_NAME}")
         }
         return try {
@@ -34,14 +66,42 @@ object VehicleLocationGeocoder {
             val json = JSONObject(responseText)
             if (json.optString("status") != "1") return null
             val regeocode = json.optJSONObject("regeocode") ?: return null
+            val addressComponent = regeocode.optJSONObject("addressComponent") ?: JSONObject()
+            val adcode = addressComponent.optString("adcode").trim()
+            val cityRaw = addressComponent.optString("city").trim().takeUnless { it == "[]" || it.isBlank() }
+                ?: addressComponent.optString("province").trim()
             val shortAddr = formatShortAddress(regeocode)
             val fullAddr = regeocode.optString("formatted_address").trim().ifBlank { shortAddr }
-            GeocodedAddress(shortAddress = shortAddr, fullAddress = fullAddr)
+            val result = GeocodedAddress(
+                shortAddress = shortAddr,
+                fullAddress = fullAddr,
+                adcode = adcode,
+                city = cityRaw
+            )
+
+            // 存入内存缓存
+            synchronized(this) {
+                if (cache.size >= MAX_CACHE_ENTRIES) {
+                    cache.removeAt(0)
+                }
+                cache.add(CachedGeo(latitude, longitude, result, now))
+            }
+            result
         } catch (_: Exception) {
             null
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun calculateDistanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2)
+        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return 6371000.0 * c
     }
 
     internal fun formatShortAddress(regeocode: JSONObject): String {

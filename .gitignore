@@ -7,6 +7,9 @@ local.properties
 keystore/
 .idea/
 *.iml
+.vscode/
+*.ipr
+*.iws
 captures/
 .externalNativeBuild/
 .cxx/
@@ -19,3 +22,16 @@ __pycache__/
 .codex/
 .reasonix/
 leap-api/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+

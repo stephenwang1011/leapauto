@@ -62,11 +62,6 @@ object SignalTable {
         "2681" to "rapidHeating",
         "1939" to "acOperateMode",
         "1941" to "acAirVolume",
-        // 车窗（百分比）
-        "3727" to "leftFrontWindowPercent",
-        "3728" to "rightFrontWindowPercent",
-        "1879" to "leftRearWindowPercent",
-        "1880" to "rightRearWindowPercent",
         // 车窗（开关布尔）
         "1693" to "driverWindowStatus",
         "1694" to "rightFrontWindowStatus",
@@ -93,11 +88,15 @@ object SignalTable {
         "1256" to "bcmKeyPositionOn1",
         "1257" to "bcmKeyPositionOn2",
         "1258" to "bcmKeyPositionOn3",
-        // 座椅舒适
+        // 座椅舒适（实车抓包核验）
         "2100" to "driverSeatHeating",
         "2101" to "driverSeatVentilation",
         "2118" to "passengerSeatHeating",
         "2119" to "passengerSeatVentilation",
+        "1879" to "leftRearSeatHeating",
+        "3727" to "leftRearSeatVentilation",
+        "1880" to "rightRearSeatHeating",
+        "3728" to "rightRearSeatVentilation",
         "1816" to "steeringWheelHeating",
         "1624" to "steeringWheelHeaterMinutes",
         // 安防 / 外设

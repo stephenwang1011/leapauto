@@ -325,7 +325,8 @@ data class AirConditioningCommand(
     val windLevel: Int,
     val circle: AirCircle,
     val windshieldDefogging: Boolean,
-    val outlet: AirOutlet
+    val outlet: AirOutlet,
+    val customLabel: String? = null
 )
 
 data class ClimateTelemetryExpectation(
@@ -366,9 +367,9 @@ data class ControlFeedback(
 
 object ControlFeedbackDisplayPolicy {
     const val SUBMITTED_DURATION_MS = 2_500L
-    const val SUCCESS_DURATION_MS = 3_000L
-    const val WARNING_DURATION_MS = 4_000L
-    const val ERROR_DURATION_MS = 4_000L
+    const val SUCCESS_DURATION_MS = 2_500L
+    const val WARNING_DURATION_MS = 3_500L
+    const val ERROR_DURATION_MS = 3_500L
 
     fun autoDismissDelayMs(kind: ControlFeedbackKind): Long? = when (kind) {
         ControlFeedbackKind.IN_PROGRESS -> null
@@ -376,6 +377,153 @@ object ControlFeedbackDisplayPolicy {
         ControlFeedbackKind.SUCCESS -> SUCCESS_DURATION_MS
         ControlFeedbackKind.WARNING -> WARNING_DURATION_MS
         ControlFeedbackKind.ERROR -> ERROR_DURATION_MS
+    }
+}
+
+object ControlFeedbackFormatter {
+    fun inProgress(commandName: String?, label: String?): String {
+        val key = (commandName ?: label).orEmpty().trim()
+        val lbl = label.orEmpty().trim()
+        return when {
+            key == "unlock" || key == "解锁" -> "解锁中..."
+            key == "lock" || key == "上锁" -> "上锁中..."
+            key == "trunkOpen" || key == "开后备箱" -> "开后备箱中..."
+            key == "trunkClose" || key == "关后备箱" -> "关后备箱中..."
+            key == "trunk" || key == "后备箱" -> "后备箱操作中..."
+            key == "frunkOpen" || key == "开前备箱" -> "开前备箱中..."
+            key == "frunkClose" || key == "关前备箱" -> "关前备箱中..."
+            key == "windowVent" || key == "车窗微开" -> "车窗微开中..."
+            key == "windowOpen" || key == "开窗" -> "开窗中..."
+            key == "windowClose" || key == "关窗" -> "关窗中..."
+            key == "sunshadeOpen" || key == "遮阳帘开启" -> "开启遮阳帘中..."
+            key == "sunshadeClose" || key == "遮阳帘关闭" -> "关闭遮阳帘中..."
+            key == "sunshadeHalf" || key == "遮阳帘半开" -> "调节遮阳帘中..."
+            key == "acOn" || key == "开空调" -> "正在开启制冷..."
+            key == "acOff" || key == "关空调" -> "正在关闭空调..."
+            key == "quickCool" || key == "极速降温" -> "正在开启极速降温..."
+            key == "quickHeat" || key == "一键制热" -> "正在开启制热..."
+            key == "defrost" || key == "前挡除霜" -> "正在开启前挡除霜..."
+            key == "deodorize" || key == "一键除味" || key == "快速除味" -> "正在开启快速除味..."
+            key == "sentryOn" -> "开启哨兵模式中..."
+            key == "sentryOff" -> "关闭哨兵模式中..."
+            key == "sentry" || key == "哨兵模式" -> "切换哨兵模式中..."
+            key == "batteryPreheat" || key == "电池预热" -> "开启电池预热中..."
+            key == "horn" || key == "鸣笛" || key == "鸣笛寻车" -> "鸣笛寻车中..."
+            key == "fridgeOn" || key == "开启冰箱" -> {
+                if (lbl.contains("制热") || lbl.contains("50°C")) "正在开启车载冰箱保温..."
+                else if (lbl.contains("制冷")) "正在开启车载冰箱冷藏..."
+                else "开启冰箱中..."
+            }
+            key == "fridgeOff" || key == "关闭冰箱" -> "关闭冰箱中..."
+            key == "关闭车载冰箱" -> "正在关闭车载冰箱..."
+            key.startsWith("fridge") -> "调节冰箱中..."
+            key == "driverSeatVentilation_0" || lbl == "主驾通风关闭" -> "正在关闭主驾座椅通风..."
+            key.startsWith("driverSeatVentilation") || lbl.contains("主驾通风") -> "正在开启主驾座椅通风..."
+            key == "driverSeatHeating_0" || lbl == "主驾加热关闭" -> "正在关闭主驾座椅加热..."
+            key.startsWith("driverSeatHeating") || lbl.contains("主驾加热") -> "正在开启主驾座椅加热..."
+            key == "passengerSeatVentilation_0" || lbl == "副驾通风关闭" -> "正在关闭副驾座椅通风..."
+            key.startsWith("passengerSeatVentilation") || lbl.contains("副驾通风") -> "正在开启副驾座椅通风..."
+            key == "passengerSeatHeating_0" || lbl == "副驾加热关闭" -> "正在关闭副驾座椅加热..."
+            key.startsWith("passengerSeatHeating") || lbl.contains("副驾加热") -> "正在开启副驾座椅加热..."
+            key == "leftRearSeatVentilation_0" || lbl == "二排左通风关闭" -> "正在关闭二排左座椅通风..."
+            key.startsWith("leftRearSeatVentilation") || lbl.contains("二排左通风") -> "正在开启二排左座椅通风..."
+            key == "leftRearSeatHeating_0" || lbl == "二排左加热关闭" -> "正在关闭二排左座椅加热..."
+            key.startsWith("leftRearSeatHeating") || lbl.contains("二排左加热") -> "正在开启二排左座椅加热..."
+            key == "rightRearSeatVentilation_0" || lbl == "二排右通风关闭" -> "正在关闭二排右座椅通风..."
+            key.startsWith("rightRearSeatVentilation") || lbl.contains("二排右通风") -> "正在开启二排右座椅通风..."
+            key == "rightRearSeatHeating_0" || lbl == "二排右加热关闭" -> "正在关闭二排右座椅加热..."
+            key.startsWith("rightRearSeatHeating") || lbl.contains("二排右加热") -> "正在开启二排右座椅加热..."
+            key == "steeringWheelHeating_0" || lbl == "方向盘加热关闭" -> "正在关闭方向盘加热..."
+            key.startsWith("steeringWheelHeating") || lbl.contains("方向盘加热") -> "正在开启方向盘加热..."
+            key == "rearviewMirrorHeating_0" || lbl == "关闭后视镜加热" -> "正在关闭后视镜加热..."
+            key.startsWith("rearviewMirrorHeating") || lbl.contains("后视镜加热") -> "正在开启后视镜加热..."
+            key.startsWith("fotaDownload") -> "正在启动固件下载..."
+            key.startsWith("fotaInstall") -> "正在发送固件升级指令..."
+            key.startsWith("fotaSchedule") -> "正在提交定时升级预约..."
+            lbl.isNotBlank() && lbl != "应用空调设置" && lbl != "climate" -> "${lbl.removeSuffix("中").removeSuffix("...")}中..."
+            else -> "处理中..."
+        }
+    }
+
+    fun success(commandName: String?, label: String?): String {
+        val key = (commandName ?: label).orEmpty().trim()
+        val lbl = label.orEmpty().trim()
+        return when {
+            key == "unlock" || key == "解锁" -> "解锁成功"
+            key == "lock" || key == "上锁" -> "上锁成功"
+            key == "trunkOpen" || key == "开后备箱" -> "后备箱已开启"
+            key == "trunkClose" || key == "关后备箱" -> "后备箱已关闭"
+            key == "trunk" || key == "后备箱" -> "后备箱操作成功"
+            key == "frunkOpen" || key == "开前备箱" -> "前备箱已开启"
+            key == "frunkClose" || key == "关前备箱" -> "前备箱已关闭"
+            key == "windowVent" || key == "车窗微开" -> "车窗已微开"
+            key == "windowOpen" || key == "开窗" -> "车窗已开启"
+            key == "windowClose" || key == "关窗" -> "车窗已关闭"
+            key == "sunshadeOpen" || key == "遮阳帘开启" -> "遮阳帘已开启"
+            key == "sunshadeClose" || key == "遮阳帘关闭" -> "遮阳帘已关闭"
+            key == "sunshadeHalf" || key == "遮阳帘半开" -> "遮阳帘设置成功"
+            key == "acOn" || key == "开空调" -> "制冷已开启"
+            key == "acOff" || key == "关空调" -> "空调已关闭"
+            key == "quickCool" || key == "极速降温" -> "极速降温已开启"
+            key == "quickHeat" || key == "一键制热" -> "制热已开启"
+            key == "defrost" || key == "前挡除霜" -> "前挡除霜已开启"
+            key == "deodorize" || key == "一键除味" || key == "快速除味" -> "快速除味已开启"
+            key == "sentryOn" -> "哨兵模式已开启"
+            key == "sentryOff" -> "哨兵模式已关闭"
+            key.startsWith("fotaDownload") -> "固件下载已启动"
+            key.startsWith("fotaInstall") -> "整车升级指令已发送"
+            key.startsWith("fotaSchedule") -> "定时升级已预约成功"
+            key == "sentry" || key == "哨兵模式" -> "哨兵模式设置成功"
+            key == "batteryPreheat" || key == "电池预热" -> "电池预热已开启"
+            key == "horn" || key == "鸣笛" || key == "鸣笛寻车" -> "鸣笛寻车已完成"
+            key == "fridgeOn" || key == "开启冰箱" -> {
+                if (lbl.contains("制热") || lbl.contains("50°C")) {
+                    "车载冰箱已开启 · 保温 50°C"
+                } else {
+                    val tempMatch = Regex("(-?\\d+°C)").find(lbl)?.value
+                    if (tempMatch != null) "车载冰箱已开启 · 冷藏 $tempMatch"
+                    else "冰箱已开启"
+                }
+            }
+            key == "fridgeOff" || key == "关闭冰箱" || key == "关闭车载冰箱" -> {
+                if (lbl.contains("车载冰箱")) "车载冰箱已关闭" else "冰箱已关闭"
+            }
+            key.startsWith("fridge") -> {
+                val tempMatch = Regex("(-?\\d+°C)").find(lbl)?.value
+                if (tempMatch != null) "车载冰箱已调至 $tempMatch"
+                else "冰箱设置成功"
+            }
+            key == "driverSeatVentilation_0" || lbl == "主驾通风关闭" -> "主驾座椅通风已关闭"
+            key.startsWith("driverSeatVentilation") || lbl.contains("主驾通风") -> "主驾座椅通风已打开"
+            key == "driverSeatHeating_0" || lbl == "主驾加热关闭" -> "主驾座椅加热已关闭"
+            key.startsWith("driverSeatHeating") || lbl.contains("主驾加热") -> "主驾座椅加热已打开"
+            key == "passengerSeatVentilation_0" || lbl == "副驾通风关闭" -> "副驾座椅通风已关闭"
+            key.startsWith("passengerSeatVentilation") || lbl.contains("副驾通风") -> "副驾座椅通风已打开"
+            key == "passengerSeatHeating_0" || lbl == "副驾加热关闭" -> "副驾座椅加热已关闭"
+            key.startsWith("passengerSeatHeating") || lbl.contains("副驾加热") -> "副驾座椅加热已打开"
+            key == "leftRearSeatVentilation_0" || lbl == "二排左通风关闭" -> "二排左座椅通风已关闭"
+            key.startsWith("leftRearSeatVentilation") || lbl.contains("二排左通风") -> "二排左座椅通风已打开"
+            key == "leftRearSeatHeating_0" || lbl == "二排左加热关闭" -> "二排左座椅加热已关闭"
+            key.startsWith("leftRearSeatHeating") || lbl.contains("二排左加热") -> "二排左座椅加热已打开"
+            key == "rightRearSeatVentilation_0" || lbl == "二排右通风关闭" -> "二排右座椅通风已关闭"
+            key.startsWith("rightRearSeatVentilation") || lbl.contains("二排右通风") -> "二排右座椅通风已打开"
+            key == "rightRearSeatHeating_0" || lbl == "二排右加热关闭" -> "二排右座椅加热已关闭"
+            key.startsWith("rightRearSeatHeating") || lbl.contains("二排右加热") -> "二排右座椅加热已打开"
+            key == "steeringWheelHeating_0" || lbl == "方向盘加热关闭" -> "方向盘加热已关闭"
+            key.startsWith("steeringWheelHeating") || lbl.contains("方向盘加热") -> "方向盘加热已打开"
+            key == "rearviewMirrorHeating_0" || lbl == "关闭后视镜加热" -> "后视镜加热已关闭"
+            key.startsWith("rearviewMirrorHeating") || lbl.contains("后视镜加热") -> "后视镜加热已打开"
+            lbl.isNotBlank() && lbl != "应用空调设置" && lbl != "climate" -> {
+                if (lbl.startsWith("已切换") || lbl.contains("已调至") || lbl.endsWith("已开启") || lbl.endsWith("已关闭") || lbl.endsWith("已打开") || lbl.endsWith("已完成") || lbl.endsWith("成功")) {
+                    lbl
+                } else if (lbl.startsWith("温度") || lbl.startsWith("风量")) {
+                    "${lbl}已生效"
+                } else {
+                    "${lbl.removeSuffix("中").removeSuffix("...")}成功"
+                }
+            }
+            else -> "操作成功"
+        }
     }
 }
 
@@ -762,13 +910,13 @@ object Commands {
     const val DEFAULT_AC_TEMPERATURE = 24
 
     const val AC_ON_STATE =
-        """{"operate":"manual","temperature":"24","windlevel":"3","mode":"cold","circle":"in","wshld":"0","position":"all"}"""
+        """{"operate":"auto","temperature":"24","windlevel":"3","mode":"cold","circle":"in","wshld":"1","position":"all"}"""
     const val AC_OFF_STATE =
-        """{"operate":"off","temperature":"24","windlevel":"3","mode":"nohotcold","circle":"out","wshld":"0","position":"all"}"""
+        """{"operate":"off","temperature":"24","windlevel":"3","mode":"nohotcold","circle":"in","wshld":"1","position":"all"}"""
     const val QUICK_COOL_STATE =
-        """{"operate":"manual","temperature":"18","windlevel":"7","mode":"cold","circle":"in","wshld":"0","position":"all"}"""
+        """{"operate":"manual","temperature":"18","windlevel":"7","mode":"cold","circle":"in","wshld":"1","position":"all"}"""
     const val QUICK_HEAT_STATE =
-        """{"operate":"manual","temperature":"32","windlevel":"7","mode":"hot","circle":"in","wshld":"0","position":"all"}"""
+        """{"operate":"manual","temperature":"32","windlevel":"7","mode":"hot","circle":"in","wshld":"1","position":"all"}"""
     const val QUICK_DEODORIZE_STATE =
         """{"operate":"manual","temperature":"24","windlevel":"7","mode":"nohotcold","circle":"out","wshld":"0","position":"all"}"""
 
@@ -818,12 +966,42 @@ object Commands {
                     val lvl = name.removePrefix("passengerSeatVentilation_").toIntOrNull() ?: 0
                     buildSeatVentilation("right_front", lvl)
                 }
+                name.startsWith("leftRearSeatHeating_") -> {
+                    val lvl = name.removePrefix("leftRearSeatHeating_").toIntOrNull() ?: 0
+                    buildSeatHeating("left_rear", lvl)
+                }
+                name.startsWith("rightRearSeatHeating_") -> {
+                    val lvl = name.removePrefix("rightRearSeatHeating_").toIntOrNull() ?: 0
+                    buildSeatHeating("right_rear", lvl)
+                }
+                name.startsWith("leftRearSeatVentilation_") -> {
+                    val lvl = name.removePrefix("leftRearSeatVentilation_").toIntOrNull() ?: 0
+                    buildSeatVentilation("left_rear", lvl)
+                }
+                name.startsWith("rightRearSeatVentilation_") -> {
+                    val lvl = name.removePrefix("rightRearSeatVentilation_").toIntOrNull() ?: 0
+                    buildSeatVentilation("right_rear", lvl)
+                }
                 name.startsWith("steeringWheelHeating_") -> {
                     val lvl = name.removePrefix("steeringWheelHeating_").toIntOrNull() ?: 0
                     buildSteeringWheelHeating(lvl)
                 }
                 name == "rearviewMirrorHeating_on" -> buildRearviewMirrorHeating(true)
                 name == "rearviewMirrorHeating_off" -> buildRearviewMirrorHeating(false)
+                name.startsWith("fotaDownload:") -> {
+                    val taskId = name.removePrefix("fotaDownload:")
+                    ControlCommand("390", """{"taskId":"$taskId"}""", "下载固件")
+                }
+                name.startsWith("fotaInstall:") -> {
+                    val taskId = name.removePrefix("fotaInstall:")
+                    ControlCommand("391", """{"taskId":"$taskId"}""", "安装固件")
+                }
+                name.startsWith("fotaSchedule:") -> {
+                    val parts = name.removePrefix("fotaSchedule:").split(":", limit = 2)
+                    val taskId = parts.getOrNull(0).orEmpty()
+                    val time = parts.getOrNull(1).orEmpty()
+                    ControlCommand("392", """{"taskId":"$taskId","scheduleTime":"$time"}""", "预约安装固件")
+                }
                 else -> throw ApiException("未知命令: $name")
             }
         }
@@ -985,11 +1163,14 @@ object Commands {
             put("wshld", if (command.windshieldDefogging) "1" else "0")
             put("position", command.outlet.wireValue)
         }
-        val label = when (command.operation) {
-            HvacOperation.ON -> "应用空调设置"
-            HvacOperation.OFF -> "关闭空调"
-            HvacOperation.FAST_COOL -> "极速降温"
-            HvacOperation.FAST_HEAT -> "极速升温"
+        val label = command.customLabel ?: when (command.operation) {
+            HvacOperation.ON -> {
+                if (command.windshieldDefogging) "前挡除霜已开启"
+                else "温度已调至 ${command.temperatureC}°C"
+            }
+            HvacOperation.OFF -> "空调已关闭"
+            HvacOperation.FAST_COOL -> "极速降温已开启"
+            HvacOperation.FAST_HEAT -> "制热已开启"
             HvacOperation.DEODORIZE -> "快速除味"
         }
         return ControlCommand("170", state.toString(), label)
@@ -1076,9 +1257,9 @@ data class FridgeControlCommand(
 
 data class FridgeStatus(
     val enabled: Boolean,
-    val mode: FridgeMode,
-    val targetTemp: Int,
-    val style: FridgeStyle,
+    val mode: FridgeMode = FridgeMode.COLD,
+    val targetTemp: Int = Commands.FRIDGE_DEFAULT_TEMP,
+    val style: FridgeStyle = FridgeStyle.NORMAL,
     val fault: Int = 0,
     val parkEnable: Boolean = false,
     val parkDurationHours: Int = 1,
@@ -1122,6 +1303,16 @@ object SentryModeControlPolicy {
             else -> return false
         }
         return value == "0"
+    }
+}
+
+object VehicleOtaPolicy {
+    const val SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE = "当前账号为授权子账号，车机 OTA 更新需车主主账号操作"
+    const val SUB_ACCOUNT_OTA_HINT_TITLE = "子账号无车机 OTA 更新权限"
+    const val SUB_ACCOUNT_OTA_HINT_DESC = "受整车安全法规与零跑官方云端权限管控，固件版本检测、更新日志查看与远程刷写升级仅限车主主账号可用。\n\n如需检查或升级车机系统，请使用车主手机号登录。"
+
+    fun canOperateOta(isSharedAccount: Boolean): Boolean {
+        return !isSharedAccount
     }
 }
 
@@ -1225,6 +1416,37 @@ object OperationPasswordErrorPolicy {
     }
 }
 
+object PostLoginPinSetupPolicy {
+    fun shouldPromptPinSetup(isNewLogin: Boolean, pinSaved: Boolean): Boolean {
+        return isNewLogin && !pinSaved
+    }
+}
+
+object RearSeatComfortPolicy {
+    /**
+     * 判定指定车型是否支持第二排独立座椅加热与通风。
+     * 仅具备独立二排座椅特性的车型（如 C16 6座车型）支持；
+     * C11、C10、C01（5座）、T03（4座）等车型硬件不支持，界面自适应隐藏。
+     */
+    fun supportsRearSeats(carType: String?): Boolean {
+        val model = carType?.trim().orEmpty()
+        if (model.isBlank()) return false
+        return model.contains("C16", ignoreCase = true) ||
+            model.contains("6座") ||
+            model.contains("7座") ||
+            model.contains("6-seat", ignoreCase = true)
+    }
+}
+
+object VehicleDrivingSafetyPolicy {
+    const val DRIVING_OPERATION_PROHIBITED_HINT = "为了您的安全，请停车后在操作"
+
+    fun isDrivingGear(gearStatus: String?): Boolean {
+        val gear = gearStatus?.trim()?.uppercase() ?: return false
+        return gear in setOf("D", "D挡", "DRIVE", "前进", "3", "R", "R挡", "REVERSE", "倒车", "1")
+    }
+}
+
 /** 驻车实景环视照片信息 */
 data class ChassisParkingPhoto(
     val fileUrl: String,
@@ -1240,5 +1462,122 @@ sealed interface ParkingPhotoLoadState {
     data class Success(val bitmap: android.graphics.Bitmap) : ParkingPhotoLoadState
     data object Empty : ParkingPhotoLoadState
     data class Failed(val message: String) : ParkingPhotoLoadState
+}
+
+/** 整车 FOTA 固件升级状态枚举 */
+enum class OtaStatus {
+    UP_TO_DATE,        // 已是最新版本
+    UPDATE_AVAILABLE,  // 发现新版本（待下载）
+    DOWNLOADING,       // 正在下载固件包
+    DOWNLOADED,        // 固件包已下载（待安装）
+    INSTALLING,        // 正在刷写安装
+    SCHEDULED,         // 已预约定时安装
+    FAILED,            // 升级/下载失败
+    UNKNOWN            // 未知
+}
+
+/** 车辆车机系统与 OTA 固件升级详情数据模型 */
+data class VehicleOtaInfo(
+    val currentVersion: String = "--",
+    val hasNewVersion: Boolean = false,
+    val newVersion: String = "",
+    val releaseNotes: String = "",
+    val updateTime: String = "",
+    val taskId: String = "",
+    val packageSize: String = "",
+    val status: OtaStatus = OtaStatus.UP_TO_DATE,
+    val progressPercent: Int? = null,
+    val scheduledTime: String? = null,
+    val rawJson: JSONObject? = null
+) {
+    val isUpToDate: Boolean get() = status == OtaStatus.UP_TO_DATE || (!hasNewVersion && status != OtaStatus.DOWNLOADING && status != OtaStatus.DOWNLOADED)
+    val isDownloading: Boolean get() = status == OtaStatus.DOWNLOADING
+    val isDownloaded: Boolean get() = status == OtaStatus.DOWNLOADED
+    val isInstalling: Boolean get() = status == OtaStatus.INSTALLING
+    val isScheduled: Boolean get() = status == OtaStatus.SCHEDULED || !scheduledTime.isNullOrBlank()
+
+    companion object {
+        fun fromJson(data: JSONObject?, code: String? = null, msg: String? = null): VehicleOtaInfo {
+            if (data == null || data.length() == 0) {
+                return VehicleOtaInfo(
+                    currentVersion = "最新系统",
+                    hasNewVersion = false,
+                    status = OtaStatus.UP_TO_DATE,
+                    releaseNotes = msg.orEmpty()
+                )
+            }
+            val current = data.optString("versionNo")
+                .ifBlank { data.optString("currentVersion") }
+                .ifBlank { data.optString("curVersion") }
+                .ifBlank { data.optString("version") }
+                .ifBlank { data.optString("currentVer") }
+                .ifBlank { "最新系统" }
+            val next = data.optString("targetVersion")
+                .ifBlank { data.optString("newVersion") }
+                .ifBlank { data.optString("nextVersion") }
+                .ifBlank { data.optString("upgradeVersion") }
+                .ifBlank { data.optString("updateVersion") }
+            val notes = data.optString("logContent")
+                .ifBlank { data.optString("releaseNotes") }
+                .ifBlank { data.optString("description") }
+                .ifBlank { data.optString("updateContent") }
+                .ifBlank { data.optString("content") }
+                .ifBlank { data.optString("remark") }
+            val updateTime = data.optString("updateTime")
+                .ifBlank { data.optString("releaseDate") }
+            val taskId = data.optString("taskId")
+                .ifBlank { data.optString("fotaTaskId") }
+                .ifBlank { data.optString("id") }
+            val rawSize = data.optLong("fileSize", 0L).takeIf { it > 0 }
+                ?: data.optLong("packageSize", 0L).takeIf { it > 0 }
+                ?: data.optLong("size", 0L).takeIf { it > 0 }
+            val sizeStr = when {
+                rawSize != null && rawSize > 1024L * 1024L * 1024L -> String.format(java.util.Locale.US, "%.2f GB", rawSize.toDouble() / (1024L * 1024L * 1024L))
+                rawSize != null && rawSize > 1024L * 1024L -> String.format(java.util.Locale.US, "%.1f MB", rawSize.toDouble() / (1024L * 1024L))
+                else -> data.optString("sizeStr").ifBlank { data.optString("packageSizeStr") }
+            }
+            val rawStatus = data.optInt("status", -1).takeIf { it != -1 }
+                ?: data.optInt("state", -1).takeIf { it != -1 }
+                ?: data.optInt("downloadStatus", -1).takeIf { it != -1 }
+                ?: data.optInt("upgradeStatus", -1)
+            val progress = data.optInt("progress", -1).takeIf { it >= 0 }
+                ?: data.optInt("downloadProgress", -1).takeIf { it >= 0 }
+                ?: data.optInt("percent", -1).takeIf { it >= 0 }
+            val hasUpdate = data.optBoolean("hasNewVersion", false) ||
+                data.optBoolean("hasUpdate", false) ||
+                (next.isNotBlank() && next != current && next != "--")
+
+            val statusEnum = when {
+                rawStatus == 2 || (progress != null && progress in 1..99) -> OtaStatus.DOWNLOADING
+                rawStatus == 3 || progress == 100 -> OtaStatus.DOWNLOADED
+                rawStatus == 4 -> OtaStatus.INSTALLING
+                rawStatus == 6 -> OtaStatus.FAILED
+                hasUpdate -> OtaStatus.UPDATE_AVAILABLE
+                else -> OtaStatus.UP_TO_DATE
+            }
+
+            return VehicleOtaInfo(
+                currentVersion = current,
+                hasNewVersion = hasUpdate,
+                newVersion = next,
+                releaseNotes = notes,
+                updateTime = updateTime,
+                taskId = taskId,
+                packageSize = sizeStr,
+                status = statusEnum,
+                progressPercent = progress,
+                scheduledTime = data.optString("scheduleTime").ifBlank { data.optString("appointmentTime") }.takeIf { it.isNotBlank() },
+                rawJson = data
+            )
+        }
+    }
+}
+
+/** 界面展示态 */
+sealed interface VehicleOtaState {
+    data object Idle : VehicleOtaState
+    data object Checking : VehicleOtaState
+    data class Success(val info: VehicleOtaInfo) : VehicleOtaState
+    data class Error(val message: String) : VehicleOtaState
 }
 

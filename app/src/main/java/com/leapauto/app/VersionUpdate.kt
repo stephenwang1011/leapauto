@@ -7,7 +7,8 @@ import java.net.URL
 data class PgyerRelease(
     val versionName: String,
     val buildNumber: Int?,
-    val updateDescription: String?
+    val updateDescription: String?,
+    val buildKey: String? = null
 )
 
 sealed interface VersionUpdateState {
@@ -76,16 +77,22 @@ object PgyerPageParser {
         "<div\\s+class=\\\"update-description\\\"[^>]*>(.*?)</div>",
         setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
     )
+    private val buildKeyPattern = Regex(
+        "(?:/app/build/|/app/install/|(?:aKey|appKey|buildKey)\\s*=\\s*['\"])([a-f0-9]{32})",
+        RegexOption.IGNORE_CASE
+    )
 
     fun parse(html: String): PgyerRelease? {
         val plainText = htmlToText(html)
         val versionMatch = versionPattern.find(plainText) ?: return null
         val description = descriptionPattern.find(html)?.groupValues?.get(1)
             ?.let(::normalizeUpdateDescription)
+        val buildKey = buildKeyPattern.find(html)?.groupValues?.get(1)
         return PgyerRelease(
             versionName = versionMatch.groupValues[1],
             buildNumber = versionMatch.groupValues.getOrNull(2)?.toIntOrNull(),
-            updateDescription = description
+            updateDescription = description,
+            buildKey = buildKey
         )
     }
 

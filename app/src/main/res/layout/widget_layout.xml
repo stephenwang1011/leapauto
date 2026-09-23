@@ -99,13 +99,14 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="3dp"
+                    android:layout_marginBottom="1.5dp"
                     android:includeFontPadding="false"
                     android:shadowColor="@color/widget_text_shadow"
                     android:shadowDx="0"
                     android:shadowDy="0"
                     android:shadowRadius="1.5"
                     android:text="km"
-                    android:textColor="@color/widget_on_surface"
+                    android:textColor="@color/widget_on_surface_variant"
                     android:textSize="12sp"
                     android:textStyle="bold" />
 
@@ -114,6 +115,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="3dp"
+                    android:layout_marginBottom="1.5dp"
                     android:includeFontPadding="false"
                     android:maxLines="1"
                     android:shadowColor="@color/widget_text_shadow"
@@ -121,7 +123,7 @@
                     android:shadowDy="0"
                     android:shadowRadius="1.5"
                     android:text=""
-                    android:textColor="@color/widget_on_surface"
+                    android:textColor="@color/widget_range_good"
                     android:textSize="13sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -412,9 +414,9 @@
     <LinearLayout
         android:id="@+id/widgetActionRow"
         android:layout_width="match_parent"
-        android:layout_height="28dp"
+        android:layout_height="42dp"
         android:layout_marginTop="0dp"
-        android:layout_marginBottom="4dp"
+        android:layout_marginBottom="2dp"
         android:clipChildren="false"
         android:gravity="center"
         android:orientation="horizontal">
@@ -432,51 +434,62 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:background="@drawable/widget_action_background"
+            android:padding="0dp"
             android:clipChildren="false">
 
-            <ImageView
-                android:id="@+id/imgWSlot1"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+            <FrameLayout
+                android:id="@+id/btnBgSlot1"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
                 android:layout_gravity="center"
-                android:padding="0dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_phosphor_lock_open"
-                android:tint="@color/widget_action_icon" />
+                android:background="@drawable/widget_action_background">
 
-            <ProgressBar
-                android:id="@+id/progressWSlot1AcCooling"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
-                android:visibility="gone" />
+                <ImageView
+                    android:id="@+id/imgWSlot1"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_phosphor_lock_open"
+                    android:tint="@color/widget_action_icon" />
 
-            <ProgressBar
-                android:id="@+id/progressWSlot1AcHeating"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
-                android:visibility="gone" />
+                <ProgressBar
+                    android:id="@+id/progressWSlot1AcCooling"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
+                    android:visibility="gone" />
 
-            <ProgressBar
-                android:id="@+id/progressWSlot1AcVent"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
-                android:visibility="gone" />
+                <ProgressBar
+                    android:id="@+id/progressWSlot1AcHeating"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
+                    android:visibility="gone" />
+
+                <ProgressBar
+                    android:id="@+id/progressWSlot1AcVent"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
+                    android:visibility="gone" />
+            </FrameLayout>
         </FrameLayout>
 
         <!-- Slot 2 -->
@@ -485,51 +498,62 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:background="@drawable/widget_action_background"
+            android:padding="0dp"
             android:clipChildren="false">
 
-            <ImageView
-                android:id="@+id/imgWSlot2"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+            <FrameLayout
+                android:id="@+id/btnBgSlot2"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
                 android:layout_gravity="center"
-                android:padding="0dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_phosphor_lock"
-                android:tint="@color/widget_action_icon" />
+                android:background="@drawable/widget_action_background">
 
-            <ProgressBar
-                android:id="@+id/progressWSlot2AcCooling"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
-                android:visibility="gone" />
+                <ImageView
+                    android:id="@+id/imgWSlot2"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_phosphor_lock"
+                    android:tint="@color/widget_action_icon" />
 
-            <ProgressBar
-                android:id="@+id/progressWSlot2AcHeating"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
-                android:visibility="gone" />
+                <ProgressBar
+                    android:id="@+id/progressWSlot2AcCooling"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
+                    android:visibility="gone" />
 
-            <ProgressBar
-                android:id="@+id/progressWSlot2AcVent"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
-                android:visibility="gone" />
+                <ProgressBar
+                    android:id="@+id/progressWSlot2AcHeating"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
+                    android:visibility="gone" />
+
+                <ProgressBar
+                    android:id="@+id/progressWSlot2AcVent"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
+                    android:visibility="gone" />
+            </FrameLayout>
         </FrameLayout>
 
         <!-- Slot 3 -->
@@ -538,51 +562,62 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:background="@drawable/widget_action_background"
+            android:padding="0dp"
             android:clipChildren="false">
 
-            <ImageView
-                android:id="@+id/imgWSlot3"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+            <FrameLayout
+                android:id="@+id/btnBgSlot3"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
                 android:layout_gravity="center"
-                android:padding="0dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_sentry"
-                android:tint="@color/widget_action_icon" />
+                android:background="@drawable/widget_action_background">
 
-            <ProgressBar
-                android:id="@+id/progressWSlot3AcCooling"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
-                android:visibility="gone" />
+                <ImageView
+                    android:id="@+id/imgWSlot3"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_sentry"
+                    android:tint="@color/widget_action_icon" />
 
-            <ProgressBar
-                android:id="@+id/progressWSlot3AcHeating"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
-                android:visibility="gone" />
+                <ProgressBar
+                    android:id="@+id/progressWSlot3AcCooling"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
+                    android:visibility="gone" />
 
-            <ProgressBar
-                android:id="@+id/progressWSlot3AcVent"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
-                android:visibility="gone" />
+                <ProgressBar
+                    android:id="@+id/progressWSlot3AcHeating"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
+                    android:visibility="gone" />
+
+                <ProgressBar
+                    android:id="@+id/progressWSlot3AcVent"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
+                    android:visibility="gone" />
+            </FrameLayout>
         </FrameLayout>
 
         <!-- Slot 4 -->
@@ -591,51 +626,62 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:background="@drawable/widget_action_background"
+            android:padding="0dp"
             android:clipChildren="false">
 
-            <ImageView
-                android:id="@+id/imgWSlot4"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+            <FrameLayout
+                android:id="@+id/btnBgSlot4"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
                 android:layout_gravity="center"
-                android:padding="0dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_phosphor_fan"
-                android:tint="@color/widget_action_icon" />
+                android:background="@drawable/widget_action_background">
 
-            <ProgressBar
-                android:id="@+id/progressWSlot4AcCooling"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
-                android:visibility="gone" />
+                <ImageView
+                    android:id="@+id/imgWSlot4"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_phosphor_fan"
+                    android:tint="@color/widget_action_icon" />
 
-            <ProgressBar
-                android:id="@+id/progressWSlot4AcHeating"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
-                android:visibility="gone" />
+                <ProgressBar
+                    android:id="@+id/progressWSlot4AcCooling"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
+                    android:visibility="gone" />
 
-            <ProgressBar
-                android:id="@+id/progressWSlot4AcVent"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
-                android:visibility="gone" />
+                <ProgressBar
+                    android:id="@+id/progressWSlot4AcHeating"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
+                    android:visibility="gone" />
+
+                <ProgressBar
+                    android:id="@+id/progressWSlot4AcVent"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
+                    android:visibility="gone" />
+            </FrameLayout>
         </FrameLayout>
 
         <!-- Slot 5 -->
@@ -644,51 +690,62 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:background="@drawable/widget_action_background"
+            android:padding="0dp"
             android:clipChildren="false">
 
-            <ImageView
-                android:id="@+id/imgWSlot5"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+            <FrameLayout
+                android:id="@+id/btnBgSlot5"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
                 android:layout_gravity="center"
-                android:padding="0dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_phosphor_trunk_open"
-                android:tint="@color/widget_action_icon" />
+                android:background="@drawable/widget_action_background">
 
-            <ProgressBar
-                android:id="@+id/progressWSlot5AcCooling"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
-                android:visibility="gone" />
+                <ImageView
+                    android:id="@+id/imgWSlot5"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_phosphor_trunk_open"
+                    android:tint="@color/widget_action_icon" />
 
-            <ProgressBar
-                android:id="@+id/progressWSlot5AcHeating"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
-                android:visibility="gone" />
+                <ProgressBar
+                    android:id="@+id/progressWSlot5AcCooling"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_cooling"
+                    android:visibility="gone" />
 
-            <ProgressBar
-                android:id="@+id/progressWSlot5AcVent"
-                style="@null"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:indeterminateOnly="true"
-                android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
-                android:visibility="gone" />
+                <ProgressBar
+                    android:id="@+id/progressWSlot5AcHeating"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_heating"
+                    android:visibility="gone" />
+
+                <ProgressBar
+                    android:id="@+id/progressWSlot5AcVent"
+                    style="@null"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:padding="8.5dp"
+                    android:indeterminate="true"
+                    android:indeterminateOnly="true"
+                    android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
+                    android:visibility="gone" />
+            </FrameLayout>
         </FrameLayout>
 
         <FrameLayout

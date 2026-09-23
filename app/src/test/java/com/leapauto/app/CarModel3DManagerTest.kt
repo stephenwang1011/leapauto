@@ -40,6 +40,32 @@ class CarModel3DManagerTest {
     }
 
     @Test
+    fun `isModelReady with srcKey checks both base ready and specific model ready marker`() {
+        val baseDir = tempFolder.root.resolve("CarModel3D")
+        val modelKey = "3D_shared_engine"
+        val srcKey = "3D-d0453f6d-7a31-4a0f-8b4d-7146f4026250"
+        val dir = File(baseDir, modelKey)
+        dir.mkdirs()
+        File(dir, "index.html").writeText("<html></html>")
+        File(dir, ".ready").createNewFile()
+
+        // Base model without srcKey is ready
+        assertTrue(CarModel3DManager.isModelReady(baseDir, modelKey))
+
+        // But with srcKey requested, it should be false until .ready_<sanitized_srcKey> exists
+        assertFalse(CarModel3DManager.isModelReady(baseDir, modelKey, srcKey))
+
+        // Once srcKey marker is created, it should be ready
+        val sanitizedSrc = CarModel3DManager.sanitizeKey(srcKey)
+        File(dir, ".ready_$sanitizedSrc").createNewFile()
+        assertTrue(CarModel3DManager.isModelReady(baseDir, modelKey, srcKey))
+
+        // Another vehicle model with different srcKey is still not ready in the same directory
+        val anotherSrcKey = "3D-d3e0fbce-0755-441e-8381-7512fd49bc70"
+        assertFalse(CarModel3DManager.isModelReady(baseDir, modelKey, anotherSrcKey))
+    }
+
+    @Test
     fun `vehicle picture meta extracts h5Key and modelParam correctly`() {
         val json = JSONObject(
             """
@@ -179,7 +205,7 @@ class CarModel3DManagerTest {
             .first { File(it, "app").isDirectory }
         val viewSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/CarModel3DView.kt").readText()
 
-        assertTrue(viewSource.contains("targetZoom = 1.23"))
+        assertTrue(viewSource.contains("targetZoom = 0.9225"))
         assertTrue(viewSource.contains("cam.updateProjectionMatrix()"))
         assertTrue(viewSource.contains("cam.position.set(-14.5, 1.96, 14.5)"))
         assertTrue(viewSource.contains("ctrl.target.copy(target)"))
@@ -247,14 +273,14 @@ class CarModel3DManagerTest {
         val viewSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/CarModel3DView.kt").readText()
 
         assertTrue(viewSource.contains("c.handleVehicleMove(speed)"))
-        assertTrue(viewSource.contains("c.__laneLine__.visible = true"))
+        assertTrue(viewSource.contains("c.__laneLine__.visible = speed > 0"))
         assertTrue(viewSource.contains("loopTilingOffset"))
         assertTrue(viewSource.contains("0.0, 0.42, 1.0"))
         assertTrue(viewSource.contains("0.22"))
         assertTrue(viewSource.contains("pulse = pow"))
         assertTrue(viewSource.contains("skyBox.setDayOrNight(isDark)"))
         assertTrue(viewSource.contains("skyBox.setDayOrNightImmediately"))
-        assertTrue(viewSource.contains("c.handleMarkLight(isDark)"))
+        assertTrue(viewSource.contains("c.handleMarkLight(markLightOn, imm)"))
         assertTrue(viewSource.contains("dayTexture"))
     }
 
@@ -291,13 +317,10 @@ class CarModel3DManagerTest {
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
         assertTrue(screenSource.contains("3D车模加载中..."))
-        assertTrue(screenSource.contains("3D车模加载失败"))
-        assertTrue(screenSource.contains("重新下载3D车模"))
-        assertTrue(screenSource.contains("使用2D车图"))
-        assertTrue(screenSource.contains("3D车模加载超时"))
         assertTrue(screenSource.contains("15_000L"))
         assertTrue(screenSource.contains("prefer2DModel"))
         assertTrue(screenSource.contains("onRetryDownload3D"))
+        assertTrue(screenSource.contains("切回3D"))
     }
 
     @Test
@@ -329,13 +352,13 @@ class CarModel3DManagerTest {
     }
 
     @Test
-    fun `leap auto screen vehicle hero uses compact 155dp stage`() {
+    fun `leap auto screen vehicle hero uses compact 180dp stage`() {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
             .first { File(it, "app").isDirectory }
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
-        assertTrue(screenSource.contains(".height(155.dp)"))
+        assertTrue(screenSource.contains(".height(180.dp)"))
     }
 
     @Test
@@ -347,7 +370,7 @@ class CarModel3DManagerTest {
 
         assertTrue(screenSource.contains("heroCardShape = RoundedCornerShape(16.dp)"))
         assertTrue(screenSource.contains("border = glassCardBorder()"))
-        assertTrue(screenSource.contains("pageBg.copy(alpha = 0.45f)"))
+        assertTrue(screenSource.contains("pageBg.copy(alpha = if (isDark)"))
     }
 
     @Test
@@ -365,16 +388,30 @@ class CarModel3DManagerTest {
     }
 
     @Test
-    fun `d and r gear triggers vehicle move dynamics even when speed is zero`() {
+    fun `d and r gear does not trigger vehicle move dynamics when speed is zero`() {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
             .first { File(it, "app").isDirectory }
         val viewSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/CarModel3DView.kt").readText()
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
-        assertTrue(viewSource.contains("isDrivingGear -> if (parsedSpeed > 0f) parsedSpeed else 40f"))
+        assertTrue(viewSource.contains("isDrivingGear && parsedSpeed <= 0f -> 0f"))
         assertTrue(screenSource.contains("val isDrivingGear = gear in setOf(\"D\", \"D挡\", \"DRIVE\", \"前进\", \"3\", \"R\", \"R挡\", \"REVERSE\", \"倒车\", \"1\")"))
-        assertTrue(screenSource.contains("val isActuallyDriving = isDrivingGear || status?.isDriving == true || speedValue > 0f"))
+        assertTrue(screenSource.contains("val isActuallyDriving = if (isDrivingGear && speedValue <= 0f) false else (isDrivingGear || status?.isDriving == true || speedValue > 0f)"))
+
+        // Direct behavior verification via CarModel3DStateHelper
+        assertEquals(0f, com.leapauto.app.ui.CarModel3DStateHelper.calculateEffectiveSpeed(gearStatus = "D", speedStr = "0", isDriving = true))
+        assertEquals(0f, com.leapauto.app.ui.CarModel3DStateHelper.calculateEffectiveSpeed(gearStatus = "D", speedStr = "0km/h", isDriving = true))
+        assertEquals(0f, com.leapauto.app.ui.CarModel3DStateHelper.calculateEffectiveSpeed(gearStatus = "R", speedStr = "0", isDriving = true))
+        assertEquals(0f, com.leapauto.app.ui.CarModel3DStateHelper.calculateEffectiveSpeed(gearStatus = "R", speedStr = "0.0 km/h", isDriving = true))
+        assertFalse(com.leapauto.app.ui.CarModel3DStateHelper.isActuallyDriving(gearStatus = "D", speedStr = "0", isDriving = true))
+        assertFalse(com.leapauto.app.ui.CarModel3DStateHelper.isActuallyDriving(gearStatus = "R", speedStr = "0km/h", isDriving = true))
+
+        // When vehicle speed is greater than 0 in D or R gear, driving dynamics are enabled
+        assertEquals(35f, com.leapauto.app.ui.CarModel3DStateHelper.calculateEffectiveSpeed(gearStatus = "D", speedStr = "35km/h", isDriving = true))
+        assertTrue(com.leapauto.app.ui.CarModel3DStateHelper.isActuallyDriving(gearStatus = "D", speedStr = "35km/h", isDriving = true))
+        assertEquals(12f, com.leapauto.app.ui.CarModel3DStateHelper.calculateEffectiveSpeed(gearStatus = "R", speedStr = "12 km/h", isDriving = true))
+        assertTrue(com.leapauto.app.ui.CarModel3DStateHelper.isActuallyDriving(gearStatus = "R", speedStr = "12 km/h", isDriving = true))
     }
 
     @Test
@@ -397,7 +434,7 @@ class CarModel3DManagerTest {
         val mainSource = File(projectDir, "app/src/main/java/com/leapauto/app/MainActivity.kt").readText()
         val modelsSource = File(projectDir, "app/src/main/java/com/leapauto/app/Models.kt").readText()
 
-        assertTrue(screenSource.contains("padding(horizontal = 7.dp, vertical = 1.dp)"))
+        assertTrue(screenSource.contains("padding(horizontal = 6.dp, vertical = 0.5.dp)"))
         assertTrue(mainSource.contains("SUB_ACCOUNT_UNSUPPORTED_MESSAGE"))
         assertTrue(modelsSource.contains("SUB_ACCOUNT_UNSUPPORTED_MESSAGE"))
     }
@@ -409,7 +446,67 @@ class CarModel3DManagerTest {
             .first { File(it, "app").isDirectory }
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
-        assertTrue(screenSource.contains("padding(horizontal = 5.dp, vertical = 0.5.dp)"))
+        assertTrue(screenSource.contains("padding(horizontal = 6.dp, vertical = 1.dp)"))
         assertTrue(screenSource.contains("style = MaterialTheme.typography.labelSmall.copy(lineHeight = 11.sp)"))
+    }
+
+    @Test
+    fun `3d model timeout or failure defaults directly to 2d car model without intrusive popup`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+
+        assertTrue(screenSource.contains("if (!show3D && remoteBitmap != null)"))
+        assertTrue(screenSource.contains("切回3D"))
+        assertTrue(screenSource.contains("onRetryDownload3D()"))
+        org.junit.Assert.assertFalse(screenSource.contains("重新下载3D车模"))
+        org.junit.Assert.assertFalse(screenSource.contains("3D车模加载超时 (15秒)"))
+    }
+
+    @Test
+    fun `car model web view contains mtk mali webgl preserveDrawingBuffer hook`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val viewSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/CarModel3DView.kt").readText()
+
+        assertTrue(viewSource.contains("__mtkWebglHooked"))
+        assertTrue(viewSource.contains("attributes.preserveDrawingBuffer = true"))
+        assertTrue(viewSource.contains("attributes.failIfMajorPerformanceCaveat = false"))
+        assertTrue(viewSource.contains("attributes.powerPreference = 'high-performance'"))
+    }
+
+    @Test
+    fun `3d snapshot timing and validation guards prevent blank or incomplete car snapshots across gpus`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val viewSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/CarModel3DView.kt").readText()
+        val cacheSource = File(projectDir, "app/src/main/java/com/leapauto/app/VehicleImageCache.kt").readText()
+
+        // 验证时序解耦：onFullCarLoaded 后才触发 capture3DSnapshot
+        assertTrue(viewSource.contains("capture3DSnapshot(view)"))
+        assertTrue(viewSource.contains("hasCarMeshes()"))
+        assertTrue(viewSource.contains("url.length > 2000"))
+
+        // 验证空图过滤与小组件 3D 文件有效门禁 (>= 4096 字节)
+        assertTrue(viewSource.contains("cropped == null"))
+        assertTrue(cacheSource.contains("visiblePixelCount < 100"))
+        assertTrue(cacheSource.contains("isUsable3DSnapshotFile(): Boolean = exists() && length() >= 4096"))
+    }
+
+    @Test
+    fun `home content and 3d car model stay permanently alive in scheme a keepalive architecture across subpage navigations`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+
+        // 验证主页常驻保活与防穿透
+        assertTrue(screenSource.contains("label = \"home_keepalive_alpha\""))
+        assertTrue(screenSource.contains("effectiveHomeTopPadding"))
+        assertTrue(screenSource.contains("translationX = if (destination == ScreenDestination.HOME || homeAlpha > 0.05f) 0f else -50000f"))
+        assertTrue(screenSource.contains("label = \"subpage-navigation\""))
     }
 }

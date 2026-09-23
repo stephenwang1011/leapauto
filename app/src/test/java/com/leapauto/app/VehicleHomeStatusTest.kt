@@ -212,9 +212,9 @@ class VehicleHomeStatusTest {
         val yesterday = LocalDateTime.of(2026, 8, 23, 23, 6).atZone(zone).toInstant().toEpochMilli()
         val earlier = LocalDateTime.of(2026, 8, 12, 8, 9).atZone(zone).toInstant().toEpochMilli()
 
-        assertEquals("状态更新 今天 19:03", VehicleHomeStatus.updatedLabel(today, now, zone))
-        assertEquals("状态更新 昨天 23:06", VehicleHomeStatus.updatedLabel(yesterday, now, zone))
-        assertEquals("状态更新 8/12 08:09", VehicleHomeStatus.updatedLabel(earlier, now, zone))
+        assertEquals("今天19:03更新", VehicleHomeStatus.updatedLabel(today, now, zone))
+        assertEquals("昨天23:06更新", VehicleHomeStatus.updatedLabel(yesterday, now, zone))
+        assertEquals("8/12 08:09更新", VehicleHomeStatus.updatedLabel(earlier, now, zone))
     }
 
     @Test

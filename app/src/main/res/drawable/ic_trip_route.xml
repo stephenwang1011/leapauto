@@ -1,0 +1,25 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 蜿蜒连接路径 -->
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 7,4.5 L 14.5,4.5 A 3.5,3.5 0 0,1 18,8 A 3.5,3.5 0 0,1 14.5,11.5 L 6.5,11.5 A 3.5,3.5 0 0,0 3,15 A 3.5,3.5 0 0,0 6.5,18.5 L 17,18.5" />
+
+    <!-- 起点实心圆点 (左上角) -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M 7,4.5 m -2.6,0 a 2.6,2.6 0 1,0 5.2,0 a 2.6,2.6 0 1,0 -5.2,0" />
+
+    <!-- 终点镂空圆环 (右下角同心环，支持全局 tint 穿透) -->
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M 17,14.4 A 4.1,4.1 0 1,1 16.99,14.4 Z M 17,16.7 A 1.8,1.8 0 1,0 17.01,16.7 Z" />
+</vector>

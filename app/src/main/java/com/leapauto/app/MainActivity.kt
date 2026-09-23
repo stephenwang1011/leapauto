@@ -27,6 +27,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.leapauto.app.trip.TripRecord
+import com.leapauto.app.trip.TripStore
+import com.leapauto.app.trip.TripSyncWorker
 import com.leapauto.app.ui.LeapAutoScreen
 import com.leapauto.app.ui.BluetoothKeyDialog
 import com.leapauto.app.ui.BluetoothActionConfirmation
@@ -119,6 +122,10 @@ data class VehicleStatus(
     val driverSeatVentilation: Int? = null,
     val passengerSeatHeating: Int? = null,
     val passengerSeatVentilation: Int? = null,
+    val leftRearSeatHeating: Int? = null,
+    val leftRearSeatVentilation: Int? = null,
+    val rightRearSeatHeating: Int? = null,
+    val rightRearSeatVentilation: Int? = null,
     val steeringWheelHeating: Boolean? = null,
     val steeringWheelHeatingLevel: Int? = null,
     val rearviewMirrorHeating: Boolean? = null,
@@ -132,7 +139,8 @@ data class VehicleStatus(
     val chargeScheduleSocLimit: Int? = null,
     val chargeGunConnected: Boolean = false,
     val roofOpeningPercent: Int? = null,
-    val fridgeStatus: FridgeStatus? = null
+    val fridgeStatus: FridgeStatus? = null,
+    val carType: String? = null
 )
 
 data class TireStatus(
@@ -163,6 +171,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var session: Session
     private val mainHandler = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
+    private val asyncWorker = Executors.newFixedThreadPool(3)
     private val statusRefreshInFlight = AtomicBoolean(false)
     private val statusRefreshRequested = AtomicBoolean(false)
     private val statusRefreshRequestedVerbose = AtomicBoolean(false)
@@ -184,6 +193,7 @@ class MainActivity : ComponentActivity() {
     @Volatile private var vehicleLocationSnapshot: VehicleLocationSnapshot? = null
     private var vehicleLocationSnapshotState by mutableStateOf<VehicleLocationSnapshot?>(null)
     private var vehicleAddress by mutableStateOf<GeocodedAddress?>(null)
+    private var liveWeather by mutableStateOf<com.leapauto.app.weather.LiveWeather?>(null)
     @Volatile private var lastGeocodedLocation: Pair<Double, Double>? = null
     private var statusError by mutableStateOf("")
     private var controlFeedback by mutableStateOf<ControlFeedback?>(null)
@@ -193,6 +203,19 @@ class MainActivity : ComponentActivity() {
     @Volatile private var climateOptimisticGuard: ClimateOptimisticGuard? = null
     @Volatile private var optimisticWindowPercent: Int? = null
     @Volatile private var optimisticTrunkState: TrunkState? = null
+    @Volatile private var optimisticDriverSeatHeating: Int? = null
+    @Volatile private var optimisticDriverSeatVentilation: Int? = null
+    @Volatile private var optimisticPassengerSeatHeating: Int? = null
+    @Volatile private var optimisticPassengerSeatVentilation: Int? = null
+    @Volatile private var optimisticLeftRearSeatHeating: Int? = null
+    @Volatile private var optimisticLeftRearSeatVentilation: Int? = null
+    @Volatile private var optimisticRightRearSeatHeating: Int? = null
+    @Volatile private var optimisticRightRearSeatVentilation: Int? = null
+    @Volatile private var optimisticSteeringWheelHeating: Boolean? = null
+    @Volatile private var optimisticRearviewMirrorHeating: Boolean? = null
+    @Volatile private var lastComfortActionEpochMs = 0L
+    @Volatile private var optimisticFridgeStatus: FridgeStatus? = null
+    @Volatile private var lastFridgeActionEpochMs = 0L
     private var climatePreControlStatus: VehicleStatus? = null
     @Volatile private var pendingClimateConfirmation: PendingClimateConfirmation? = null
     private var pendingStatusRefreshCompletion: ((Boolean) -> Unit)? = null
@@ -227,9 +250,14 @@ class MainActivity : ComponentActivity() {
     private var scheduledPreheatDays by mutableStateOf("1,1,1,1,1,1,1")
     private var signalMapDebugState by mutableStateOf<VehicleSignalMapDebugState>(VehicleSignalMapDebugState.Idle)
     private var versionUpdateState by mutableStateOf<VersionUpdateState>(VersionUpdateState.Idle)
+    private var vehicleOtaState by mutableStateOf<VehicleOtaState>(VehicleOtaState.Idle)
     private var handledUpdateVersion by mutableStateOf<String?>(null)
+    private var downloadUpdateProgress by mutableStateOf<Int?>(null)
     private var showAuthorSupportDialog by mutableStateOf(false)
     private var showSessionExpiredDialog by mutableStateOf(false)
+    private val tripStore by lazy { TripStore(this) }
+    private var tripRecords by mutableStateOf<List<TripRecord>>(emptyList())
+    private var tripRecordEnabled by mutableStateOf(false)
     private var availableVehicles by mutableStateOf<List<Vehicle>>(emptyList())
     private var vehicleImageVersion by mutableIntStateOf(0)
     private var activeGeetestChallenge by mutableStateOf<GeetestChallenge?>(null)
@@ -243,6 +271,7 @@ class MainActivity : ComponentActivity() {
     private var bluetoothConfigurationConfirmation by mutableStateOf<BlePassiveConfiguration?>(null)
     private var bluetoothConfigurationIdentity: BleSessionIdentity? = null
     private var bluetoothSettingsRequestId by mutableStateOf(0L)
+    private var tripJournalRequestId by mutableStateOf(0L)
     private var showBluetoothKey by mutableStateOf(false)
     private var bluetoothPermissionsGranted by mutableStateOf(false)
     private var bluetoothState by mutableStateOf(BleConnectionState())
@@ -325,6 +354,9 @@ class MainActivity : ComponentActivity() {
         scheduledPreheatEnabled = sessionStore.loadScheduledPreheatEnabled(session.selectedVin)
         scheduledPreheatStartTime = sessionStore.loadScheduledPreheatStartTime(session.selectedVin)
         scheduledPreheatDays = sessionStore.loadScheduledPreheatDays(session.selectedVin)
+        tripRecordEnabled = tripStore.isTripRecordEnabled()
+        tripStore.removeLegacyMockTripsIfPresent(session.selectedVin)
+        tripRecords = tripStore.getTrips(session.selectedVin)
         ChargeNotificationManager.ensureChannel(this)
         ParkingAnomalyNotificationManager.ensureChannel(this)
 
@@ -343,6 +375,7 @@ class MainActivity : ComponentActivity() {
                     statusUpdatedAtEpochMs = statusUpdatedAtEpochMs,
                     locationSnapshot = vehicleLocationSnapshotState,
                     vehicleAddress = vehicleAddress,
+                    liveWeather = liveWeather,
                     vehicleVin = session.selectedVin,
                     statusError = statusError,
                     controlFeedback = controlFeedback,
@@ -362,6 +395,8 @@ class MainActivity : ComponentActivity() {
                     showVehicleConfigConfirmationPrompt = showVehicleConfigConfirmationPrompt,
                     availableVehicles = availableVehicles,
                     onSwitchVehicle = ::switchVehicle,
+                    tripRecords = tripRecords,
+                    onClearTrips = ::clearTripRecords,
                     widgetOpacity = widgetOpacity,
                     appearanceMode = appearanceMode,
                     energyState = energyState,
@@ -385,6 +420,11 @@ class MainActivity : ComponentActivity() {
                     currentVersion = AppReleaseInfo.currentVersion,
                     currentReleaseNotes = AppReleaseInfo.currentReleaseNotes,
                     versionUpdateState = versionUpdateState,
+                    vehicleOtaState = vehicleOtaState,
+                    onCheckVehicleOta = { checkForVehicleOta(force = true) },
+                    onDownloadVehicleOta = ::downloadVehicleOta,
+                    onInstallVehicleOta = ::installVehicleOta,
+                    onScheduleVehicleOta = ::scheduleVehicleOta,
                     handledUpdateVersion = handledUpdateVersion,
                     showAuthorSupportDialog = showAuthorSupportDialog,
                     showSessionExpiredDialog = showSessionExpiredDialog,
@@ -419,6 +459,8 @@ class MainActivity : ComponentActivity() {
                     onOpenUpdate = ::openUpdatePage,
                     onDismissVersionUpdatePrompt = ::markVersionUpdateHandled,
                     onOpenVersionUpdatePrompt = ::openVersionUpdatePage,
+                    downloadUpdateProgress = downloadUpdateProgress,
+                    onStartInAppUpdate = ::startInAppUpdateDownload,
                     onDismissAuthorSupport = { showAuthorSupportDialog = false },
                     onDisableAuthorSupport = {
                         sessionStore.disableAuthorSupportPrompt()
@@ -437,7 +479,11 @@ class MainActivity : ComponentActivity() {
                     onQuickAc = ::quickAc,
                     onOpenBluetoothKey = ::openBluetoothKey,
                     onRetryDownload3D = ::retryDownload3DModel,
-                    bluetoothSettingsRequestId = bluetoothSettingsRequestId
+                    bluetoothSettingsRequestId = bluetoothSettingsRequestId,
+                    tripJournalRequestId = tripJournalRequestId,
+                    tripRecordEnabled = tripRecordEnabled,
+                    onTripRecordEnabledChange = ::saveTripRecordEnabled,
+                    onPowerTypeChange = ::savePowerType
                 )
                 if (showBluetoothKey && !pinSetupInProgress) {
                     BluetoothKeyDialog(
@@ -860,6 +906,7 @@ class MainActivity : ComponentActivity() {
         NetworkDebugController.disableAndClear()
         operationGeneration += 1L
         worker.shutdownNow()
+        asyncWorker.shutdownNow()
         mainHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
@@ -874,14 +921,18 @@ class MainActivity : ComponentActivity() {
             intent.removeExtra(BleKeyService.EXTRA_OPEN_KEY)
             bluetoothSettingsRequestId++
         }
+        if (intent.getBooleanExtra(TripSyncWorker.EXTRA_OPEN_TRIP_JOURNAL, false)) {
+            intent.removeExtra(TripSyncWorker.EXTRA_OPEN_TRIP_JOURNAL)
+            tripJournalRequestId++
+        }
         bluetoothPermissionsGranted = bluetoothKeyController.hasPermissions()
         resumeBluetoothScanAfterPermission()
-        checkForUpdate()
         if (loggedIn && carScreenVisible) {
             // Refresh immediately when returning to the foreground while the vehicle tab is visible.
             refreshStatus(silent = true)
             refreshEnergy(force = true)
         }
+        checkForUpdate()
         updateAutoRefreshLoop()
         maybeShowAuthorSupportPrompt()
     }
@@ -1068,7 +1119,7 @@ class MainActivity : ComponentActivity() {
                     toast("登录成功")
                     activeGeetestChallenge = null
                     loggedIn = true
-                    beginPostLoginPrompts()
+                    beginPostLoginPrompts(isNewLogin = true)
                     checkForUpdate()
                     refreshStatus()
                     refreshEnergy(force = true)
@@ -1113,7 +1164,7 @@ class MainActivity : ComponentActivity() {
                     hvacCapability = session.hvacCapability
                     toast("凭据导入成功，已绑定远控权限")
                     loggedIn = true
-                    beginPostLoginPrompts()
+                    beginPostLoginPrompts(isNewLogin = true)
                     checkForUpdate()
                     refreshStatus()
                     refreshEnergy(force = true)
@@ -1151,6 +1202,7 @@ class MainActivity : ComponentActivity() {
         vehicleLocationSnapshot = null
         vehicleLocationSnapshotState = null
         vehicleAddress = null
+        liveWeather = null
         lastGeocodedLocation = null
         statusError = ""
         controlFeedback = null
@@ -1163,6 +1215,7 @@ class MainActivity : ComponentActivity() {
         signalMapDebugState = VehicleSignalMapDebugState.Idle
         loggedIn = false
         versionUpdateState = VersionUpdateState.Idle
+        vehicleOtaState = VehicleOtaState.Idle
         busy = false
         toast("已登出")
     }
@@ -1182,6 +1235,7 @@ class MainActivity : ComponentActivity() {
         pin = ""
         toast("操控密码已保存")
         pendingAction?.invoke()
+        maybeShowAuthorSupportPrompt()
     }
 
     private fun cancelPinSetup() {
@@ -1242,6 +1296,23 @@ class MainActivity : ComponentActivity() {
         sessionStore.saveWidget4x2Actions(actions)
         widget4x2Actions = actions
         ControlWidget.refreshAppearance(this)
+    }
+
+    private fun clearTripRecords() {
+        tripStore.clearTrips(session.selectedVin)
+        tripRecords = emptyList()
+        toast("已清空行程记录")
+    }
+
+    private fun saveTripRecordEnabled(enabled: Boolean) {
+        tripStore.setTripRecordEnabled(enabled)
+        tripRecordEnabled = enabled
+        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val hasBtConnect = checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+            if (!hasBtConnect) {
+                requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), BLUETOOTH_PERMISSION_REQUEST)
+            }
+        }
     }
 
     private fun clearEnergyState() {
@@ -1674,6 +1745,15 @@ class MainActivity : ComponentActivity() {
         maybeShowAuthorSupportPrompt()
     }
 
+    private fun savePowerType(powerType: SessionStore.VehiclePowerType) {
+        sessionStore.saveVehiclePowerType(session.selectedVin, powerType)
+        vehicleConfig = vehicleConfig.copy(powerType = powerType)
+        refreshStatus()
+        ControlWidget.refreshData(this)
+        CompactControlWidget.refreshData(this)
+        toast("已切换为${if (powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER) "增程" else "纯电"}动力模式")
+    }
+
     private fun updateVehicleNickname(newNickname: String) {
         val trimmed = newNickname.trim().take(10)
         vehicleConfig = vehicleConfig.copy(nickname = trimmed)
@@ -1713,12 +1793,18 @@ class MainActivity : ComponentActivity() {
 
     private fun canShowAuthorSupportPrompt(): Boolean = canArmAuthorSupportPrompt()
 
-    private fun beginPostLoginPrompts() {
+    private fun beginPostLoginPrompts(isNewLogin: Boolean = false) {
         mainHandler.removeCallbacks(authorSupportPromptRunnable)
         showAuthorSupportDialog = false
         showVehicleConfigConfirmationPrompt = false
-        pinSetupInProgress = false
-        maybeShowAuthorSupportPrompt()
+        if (PostLoginPinSetupPolicy.shouldPromptPinSetup(isNewLogin = isNewLogin, pinSaved = pinSaved)) {
+            pin = ""
+            pinSetupErrorMessage = ""
+            pinSetupInProgress = true
+        } else {
+            pinSetupInProgress = false
+            maybeShowAuthorSupportPrompt()
+        }
     }
 
     private fun openFeedback() {
@@ -1741,7 +1827,7 @@ class MainActivity : ComponentActivity() {
         lastUpdateCheckEpochMs = now
         versionUpdateState = VersionUpdateState.Checking(currentVersion)
         val generation = operationGeneration
-        worker.execute {
+        asyncWorker.execute {
             try {
                 val result = PgyerUpdateChecker.check(currentVersion)
                 runOnMain(generation) { versionUpdateState = result }
@@ -1756,6 +1842,74 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun checkForVehicleOta(force: Boolean = false) {
+        val vin = session.selectedVin
+        if (vin.isBlank() || !loggedIn) return
+        val currentVehicle = availableVehicles.firstOrNull { it.vin == vin }
+        if (currentVehicle?.isSharedAccount == true) {
+            vehicleOtaState = VehicleOtaState.Error(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
+            return
+        }
+        if (!force && vehicleOtaState is VehicleOtaState.Checking) return
+        vehicleOtaState = VehicleOtaState.Checking
+        val generation = operationGeneration
+        worker.execute {
+            try {
+                val api = LeapmotorApi(session)
+                val info = api.getVehicleOtaInfo(vin)
+                runOnMain(generation) {
+                    vehicleOtaState = if (info != null) {
+                        VehicleOtaState.Success(info)
+                    } else {
+                        VehicleOtaState.Success(VehicleOtaInfo(currentVersion = "最新系统", hasNewVersion = false, status = OtaStatus.UP_TO_DATE))
+                    }
+                }
+            } catch (e: Exception) {
+                runOnMain(generation) {
+                    vehicleOtaState = VehicleOtaState.Error(e.message ?: "检查车机更新失败")
+                }
+            }
+        }
+    }
+
+    private fun downloadVehicleOta(taskId: String) {
+        if (taskId.isBlank()) return
+        val currentVehicle = availableVehicles.firstOrNull { it.vin == session.selectedVin }
+        if (currentVehicle?.isSharedAccount == true) {
+            toast(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
+            return
+        }
+        control("fotaDownload:$taskId")
+    }
+
+    private fun installVehicleOta(taskId: String, pin: String) {
+        if (taskId.isBlank()) return
+        val currentVehicle = availableVehicles.firstOrNull { it.vin == session.selectedVin }
+        if (currentVehicle?.isSharedAccount == true) {
+            toast(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
+            return
+        }
+        if (pin.length == 4) {
+            sessionStore.saveOpPassword(pin)
+            pinSaved = true
+        }
+        control("fotaInstall:$taskId")
+    }
+
+    private fun scheduleVehicleOta(taskId: String, scheduleTime: String, pin: String) {
+        if (taskId.isBlank() || scheduleTime.isBlank()) return
+        val currentVehicle = availableVehicles.firstOrNull { it.vin == session.selectedVin }
+        if (currentVehicle?.isSharedAccount == true) {
+            toast(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
+            return
+        }
+        if (pin.length == 4) {
+            sessionStore.saveOpPassword(pin)
+            pinSaved = true
+        }
+        control("fotaSchedule:$taskId:$scheduleTime")
+    }
+
     private fun openUpdatePage() {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PgyerUpdateChecker.DOWNLOAD_URL)))
@@ -1764,14 +1918,47 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun startInAppUpdateDownload(release: PgyerRelease) {
+        if (downloadUpdateProgress != null && downloadUpdateProgress!! < 100) return
+        downloadUpdateProgress = 0
+        toast("正在解析新版本下载通道...")
+        AppUpdateInstaller.downloadApk(
+            context = this,
+            release = release,
+            onProgress = { progress ->
+                runOnUiThread { downloadUpdateProgress = progress }
+            },
+            onSuccess = { apkFile ->
+                runOnUiThread {
+                    downloadUpdateProgress = null
+                    markVersionUpdateHandled(release.versionName)
+                    toast("下载完成，正在调起系统安装器")
+                    AppUpdateInstaller.triggerInstall(this, apkFile)
+                }
+            },
+            onError = { errMsg ->
+                runOnUiThread {
+                    downloadUpdateProgress = null
+                    toast(errMsg)
+                    openUpdatePage()
+                }
+            }
+        )
+    }
+
     private fun markVersionUpdateHandled(version: String) {
         sessionStore.saveHandledUpdateVersion(version)
         handledUpdateVersion = version
     }
 
     private fun openVersionUpdatePage(version: String) {
-        markVersionUpdateHandled(version)
-        openUpdatePage()
+        val update = (versionUpdateState as? VersionUpdateState.UpdateAvailable)?.latestRelease
+        if (update != null) {
+            startInAppUpdateDownload(update)
+        } else {
+            markVersionUpdateHandled(version)
+            openUpdatePage()
+        }
     }
 
     // ------------------------------------------------------------- 状态查询
@@ -1860,9 +2047,9 @@ class MainActivity : ComponentActivity() {
                 }
                 ChargeNotificationManager.process(this@MainActivity, sessionStore, session.selectedVin, signalMap)
                 sessionStore.save(session)
-                val snapshotPowerType = VehiclePowerTypeResolver.fromStatus(
+                val snapshotPowerType = if (parsed.rangeExtender) SessionStore.VehiclePowerType.RANGE_EXTENDER else (VehiclePowerTypeResolver.fromStatus(
                     signalMap, vehicleConfig.powerType, session.selectedCarType
-                )
+                ) ?: vehicleConfig.powerType)
                 sessionStore.saveWidgetSnapshot(
                     vin = session.selectedVin,
                     carType = session.selectedCarType,
@@ -1873,7 +2060,7 @@ class MainActivity : ComponentActivity() {
                     updated = ControlWidget.formatUpdatedTime(),
                     powerType = snapshotPowerType,
                     electricRange = VehicleStatusMapper.electricRemainingRange(signalMap),
-                    fuelRange = VehicleStatusMapper.fuelRemainingRange(signalMap),
+                    fuelRange = parsed.fuelMileage?.removeSuffix(" km")?.trim() ?: VehicleStatusMapper.fuelRemainingRange(signalMap),
                     electricTotalRange = VehicleStatusMapper.electricTotalRange(signalMap),
                     fuelTotalRange = VehicleStatusMapper.fuelTotalRange(signalMap),
                     statusLabel = WidgetStatusMapper.label(signalMap, session.selectedCarType).orEmpty(),
@@ -1890,10 +2077,12 @@ class MainActivity : ComponentActivity() {
                     chargeRemainTime = ChargeStatus.remainingTime(signalMap.opt("chargeRemainTime")),
                     driving = parsed.isDriving,
                     trunkState = parsed.trunkState,
-                    sentryEnabled = parsed.sentryMode
+                    sentryEnabled = parsed.sentryMode,
+                    windowOpen = parsed.windowStatusAvailable && parsed.openWindows.isNotEmpty()
                 )
                 ControlWidget.updateSyncCadence(this@MainActivity, parsed.isDriving)
                 ControlWidget.refreshData(this@MainActivity)
+                CompactControlWidget.refreshData(this@MainActivity)
                 runOnMain(generation) {
                     // Replace the activity-only snapshot only when this refresh yields a valid position.
                     vehicleLocationSnapshot = locationSnapshot
@@ -1924,6 +2113,8 @@ class MainActivity : ComponentActivity() {
                     }
                     val winPercent = optimisticWindowPercent
                     val trunk = optimisticTrunkState
+                    val comfortProtected = System.currentTimeMillis() - lastComfortActionEpochMs < 15_000L
+                    val fridgeProtected = System.currentTimeMillis() - lastFridgeActionEpochMs < 15_000L
                     status = baseRefreshed.copy(
                         leftFrontWindowPercent = winPercent ?: baseRefreshed.leftFrontWindowPercent,
                         rightFrontWindowPercent = winPercent ?: baseRefreshed.rightFrontWindowPercent,
@@ -1932,12 +2123,67 @@ class MainActivity : ComponentActivity() {
                         trunkState = trunk ?: baseRefreshed.trunkState,
                         openWindows = if (winPercent != null && winPercent > 0) listOf("左前", "右前", "左后", "右后")
                                       else if (winPercent == 0) emptyList()
-                                      else baseRefreshed.openWindows
+                                      else baseRefreshed.openWindows,
+                        driverSeatHeating = if (comfortProtected && optimisticDriverSeatHeating != null) optimisticDriverSeatHeating else baseRefreshed.driverSeatHeating,
+                        driverSeatVentilation = if (comfortProtected && optimisticDriverSeatVentilation != null) optimisticDriverSeatVentilation else baseRefreshed.driverSeatVentilation,
+                        passengerSeatHeating = if (comfortProtected && optimisticPassengerSeatHeating != null) optimisticPassengerSeatHeating else baseRefreshed.passengerSeatHeating,
+                        passengerSeatVentilation = if (comfortProtected && optimisticPassengerSeatVentilation != null) optimisticPassengerSeatVentilation else baseRefreshed.passengerSeatVentilation,
+                        leftRearSeatHeating = if (comfortProtected && optimisticLeftRearSeatHeating != null) optimisticLeftRearSeatHeating else baseRefreshed.leftRearSeatHeating,
+                        leftRearSeatVentilation = if (comfortProtected && optimisticLeftRearSeatVentilation != null) optimisticLeftRearSeatVentilation else baseRefreshed.leftRearSeatVentilation,
+                        rightRearSeatHeating = if (comfortProtected && optimisticRightRearSeatHeating != null) optimisticRightRearSeatHeating else baseRefreshed.rightRearSeatHeating,
+                        rightRearSeatVentilation = if (comfortProtected && optimisticRightRearSeatVentilation != null) optimisticRightRearSeatVentilation else baseRefreshed.rightRearSeatVentilation,
+                        steeringWheelHeating = if (comfortProtected && optimisticSteeringWheelHeating != null) optimisticSteeringWheelHeating else baseRefreshed.steeringWheelHeating,
+                        steeringWheelHeatingLevel = if (comfortProtected && optimisticSteeringWheelHeating != null) (if (optimisticSteeringWheelHeating == true) 2 else 0) else baseRefreshed.steeringWheelHeatingLevel,
+                        rearviewMirrorHeating = if (comfortProtected && optimisticRearviewMirrorHeating != null) optimisticRearviewMirrorHeating else baseRefreshed.rearviewMirrorHeating,
+                        fridgeStatus = if (fridgeProtected && optimisticFridgeStatus != null) optimisticFridgeStatus else baseRefreshed.fridgeStatus
                     )
                     statusUpdatedAtEpochMs = receivedAtEpochMs
                     climateOptimisticGuard = ClimateTelemetryMergePolicy.consume(guard, decision)
                     if (decision == ClimateTelemetryMergeDecision.APPLY) {
                         confirmClimateTelemetryIfMatched(refreshClimateRevision, parsed)
+                    }
+
+                    // 行程状态机自动识别与归档 (异步磁盘IO，避免卡顿UI主线程)
+                    val currentVin = session.selectedVin
+                    val curAddress = vehicleAddress?.shortAddress.orEmpty().ifBlank {
+                        locationSnapshot?.let { snap ->
+                            val lat = snap.location.latitude
+                            val lng = snap.location.longitude
+                            VehicleLocationGeocoder.reverseGeocode(lat, lng)?.shortAddress
+                        }.orEmpty()
+                    }
+                    asyncWorker.execute {
+                        // 异步静默预缓存车载蓝牙硬件 MAC 地址，保障无感行程两级匹配 100% 命中
+                        if (sessionStore.loadVehicleBluetoothMac(currentVin) == null) {
+                            runCatching {
+                                val meta = LeapmotorApi(session).getBluetoothVehicleMetadata()
+                                meta?.address?.let { mac ->
+                                    sessionStore.saveVehicleBluetoothMac(currentVin, mac)
+                                }
+                            }
+                        }
+
+                        val completedTrip = tripStore.processTelemetry(
+                            vin = currentVin,
+                            totalMileageStr = parsed.totalMileage,
+                            socStr = parsed.preciseSoc ?: parsed.soc,
+                            speedStr = parsed.speed,
+                            gearStatus = parsed.gearStatus,
+                            isDriving = parsed.isDriving,
+                            isShutDown = parsed.isShutDown,
+                            currentAddress = curAddress,
+                            nowEpochMs = receivedAtEpochMs
+                        )
+                        val trips = tripStore.getTrips(currentVin)
+                        runOnMain(generation) {
+                            tripRecords = trips
+                            if (completedTrip != null) {
+                                controlFeedback = ControlFeedback(
+                                    "本次行程已记录 · ${completedTrip.distanceKm}km",
+                                    ControlFeedbackKind.SUCCESS
+                                )
+                            }
+                        }
                     }
 
                     // 车端若返回了真实充电计划 (config.3)，同步反显更新
@@ -2162,15 +2408,14 @@ class MainActivity : ComponentActivity() {
         toast("已恢复默认官方车模")
         ControlWidget.refreshData(this)
         CompactControlWidget.refreshData(this)
-        if (!VehicleImageCache.getCacheFile(this, vin).exists()) {
-            worker.execute {
-                val api = LeapmotorApi(session)
-                val updated = VehicleImageCache.sync(this@MainActivity, api, vin)
-                if (updated) {
-                    runOnUiThread {
-                        ControlWidget.refreshData(this@MainActivity)
-                        CompactControlWidget.refreshData(this@MainActivity)
-                    }
+        worker.execute {
+            val api = LeapmotorApi(session)
+            val updated = VehicleImageCache.sync(this@MainActivity, api, vin)
+            if (updated) {
+                runOnUiThread {
+                    vehicleImageVersion++
+                    ControlWidget.refreshData(this@MainActivity)
+                    CompactControlWidget.refreshData(this@MainActivity)
                 }
             }
         }
@@ -2214,10 +2459,13 @@ class MainActivity : ComponentActivity() {
         vehicleLocationSnapshot = null
         vehicleLocationSnapshotState = null
         vehicleAddress = null
+        liveWeather = null
         lastGeocodedLocation = null
         energyState = EnergyAnalyticsState.Idle
         energyLastSuccessAt = 0L
         vehicleImageVersion++
+        tripStore.removeLegacyMockTripsIfPresent(target.vin)
+        tripRecords = tripStore.getTrips(target.vin)
 
         ControlWidget.refreshData(this)
         refreshStatus()
@@ -2327,10 +2575,11 @@ class MainActivity : ComponentActivity() {
             applyClimateOptimisticUpdate(it)
             ClimateOptimisticGuard(climateControlRevision, it)
         }
-        busy { generation ->
+        // 空调控制采用非阻塞后台调度 (showBusy = false)，不锁死整屏交互，保持极致跟手性
+        busy(showBusy = false) { generation ->
             runOnMain(generation) {
                 controlFeedback = ControlFeedback(
-                    ClimateControlFeedbackText.sending(command.label),
+                    ControlFeedbackFormatter.inProgress("climate", command.label),
                     ControlFeedbackKind.IN_PROGRESS
                 )
             }
@@ -2357,7 +2606,7 @@ class MainActivity : ComponentActivity() {
                     optimisticUpdate = optimisticUpdate,
                     telemetryExpectation = telemetryExpectation,
                     climateTemperatureRequestId = climateTemperatureRequestId,
-                    pollingId = result.msgID.takeIf { postDecision.shouldQueryControlResult }
+                    pollingId = null // 对齐官方App：空调指令云端接收后无需轮询 /query 接口，由遥测静默刷新接管
                 )
             } catch (e: Exception) {
                 if (postAccepted) {
@@ -2409,14 +2658,13 @@ class MainActivity : ComponentActivity() {
             )
             completeClimatePost(revision, optimisticUpdate)
             controlFeedback = ControlFeedback(
-                ClimateControlFeedbackText.submitted(command.label),
-                ControlFeedbackKind.SUBMITTED
+                ControlFeedbackFormatter.success("climate", command.label),
+                ControlFeedbackKind.SUCCESS
             )
             climateTemperatureRequestId?.let {
                 updateClimateTemperatureRequest(it, ClimateControlRequestPhase.ACCEPTED)
             }
-            // 空调控制指令被服务器接收后，立即触发一次静默刷新，第一时间同步最新车况
-            refreshStatus(silent = true)
+            // 空调控制指令被服务器接收后，对齐官方App：立即安排遥测静默刷新确认最终状态
             scheduleClimateTelemetryRefreshes(generation, revision)
             pollingId?.let {
                 scheduleClimateResultQuery(generation, revision, it, optimisticUpdate, telemetryExpectation, 0)
@@ -2603,14 +2851,9 @@ class MainActivity : ComponentActivity() {
         if (!isClimateConfirmationPending(generation, revision)) return
         val pending = pendingClimateConfirmation
         pending?.climateTemperatureRequestId?.let {
-            updateClimateTemperatureRequest(it, ClimateControlRequestPhase.NOT_CONFIRMED)
+            updateClimateTemperatureRequest(it, ClimateControlRequestPhase.COMPLETED)
         }
-        pending?.let {
-            controlFeedback = ControlFeedback(
-                ClimateControlFeedbackText.notConfirmed(it.label),
-                ControlFeedbackKind.WARNING
-            )
-        }
+        // 空调指令已成功送达车端，后续遥测由静默轮询更新，不以延迟未同步的“暂未确认”告警打扰用户
         pendingClimateConfirmation = null
         climateOptimisticGuard = null
         climatePreControlStatus = null
@@ -2715,10 +2958,7 @@ class MainActivity : ComponentActivity() {
         pending.climateTemperatureRequestId?.let {
             updateClimateTemperatureRequest(it, ClimateControlRequestPhase.COMPLETED)
         }
-        controlFeedback = ControlFeedback(
-            climateConfirmedFeedback(pending.label, pending.telemetryExpectation),
-            ControlFeedbackKind.SUCCESS
-        )
+        // 车端遥测已确认匹配生效，静默闭环同步状态，不重复弹出多余提示打扰用户
         return true
     }
 
@@ -2800,9 +3040,15 @@ class MainActivity : ComponentActivity() {
         val fuelMileage = VehicleStatusMapper.fuelRange(m)?.let { "$it km" }
         val electricMileage = VehicleStatusMapper.electricRange(m)?.let { "$it km" }
         val combinedMileage = VehicleStatusMapper.combinedRange(m)?.let { "$it km" }
-        val rangeExtender = resolvedPowerType == SessionStore.VehiclePowerType.RANGE_EXTENDER
+        val hasFuelData = fuelMileage != null || (VehicleStatusMapper.fuelSocPercent(m) ?: 0) > 0
+        val rangeExtender = resolvedPowerType == SessionStore.VehiclePowerType.RANGE_EXTENDER || hasFuelData
+        val effectivePowerType = if (rangeExtender) SessionStore.VehiclePowerType.RANGE_EXTENDER else resolvedPowerType
+        if (rangeExtender && vehicleConfig.powerType != SessionStore.VehiclePowerType.RANGE_EXTENDER) {
+            sessionStore.saveVehiclePowerType(session.selectedVin, SessionStore.VehiclePowerType.RANGE_EXTENDER)
+            vehicleConfig = vehicleConfig.copy(powerType = SessionStore.VehiclePowerType.RANGE_EXTENDER)
+        }
         val displayMileage = VehicleStatusMapper.remainingRange(
-            m, session.selectedCarType, resolvedPowerType.toStatusPowerType()
+            m, session.selectedCarType, effectivePowerType.toStatusPowerType()
         )
         val preciseSocStr = VehicleStatusMapper.displayPreciseSoc(m.opt("preciseSoc"))
             ?: formatPercentage(m.opt("preciseSoc"))
@@ -2877,10 +3123,10 @@ class MainActivity : ComponentActivity() {
             sentryMode = m.optBool("sentryMode"),
             windowStatusAvailable = WidgetStatusMapper.hasWindowTelemetry(m, session.selectedCarType),
             openWindows = openWinLabels,
-            leftFrontWindowPercent = parseWindowPercent("leftFrontWindowPercent", "3727", "左前"),
-            rightFrontWindowPercent = parseWindowPercent("rightFrontWindowPercent", "3728", "右前"),
-            leftRearWindowPercent = parseWindowPercent("leftRearWindowPercent", "1879", "左后"),
-            rightRearWindowPercent = parseWindowPercent("rightRearWindowPercent", "1880", "右后"),
+            leftFrontWindowPercent = parseWindowPercent("leftFrontWindowPercent", "", "左前"),
+            rightFrontWindowPercent = parseWindowPercent("rightFrontWindowPercent", "", "右前"),
+            leftRearWindowPercent = parseWindowPercent("leftRearWindowPercent", "", "左后"),
+            rightRearWindowPercent = parseWindowPercent("rightRearWindowPercent", "", "右后"),
             tires = tireList,
             chargeLabel = ChargeStatus.label(charge?.toString()?.toIntOrNull()),
             chargeState = charge?.toString()?.toIntOrNull(),
@@ -2897,6 +3143,10 @@ class MainActivity : ComponentActivity() {
             driverSeatVentilation = m.opt("driverSeatVentilation")?.toString()?.toIntOrNull(),
             passengerSeatHeating = m.opt("passengerSeatHeating")?.toString()?.toIntOrNull(),
             passengerSeatVentilation = m.opt("passengerSeatVentilation")?.toString()?.toIntOrNull(),
+            leftRearSeatHeating = if (RearSeatComfortPolicy.supportsRearSeats(session.selectedCarType)) m.opt("leftRearSeatHeating")?.toString()?.toIntOrNull() else null,
+            leftRearSeatVentilation = if (RearSeatComfortPolicy.supportsRearSeats(session.selectedCarType)) m.opt("leftRearSeatVentilation")?.toString()?.toIntOrNull() else null,
+            rightRearSeatHeating = if (RearSeatComfortPolicy.supportsRearSeats(session.selectedCarType)) m.opt("rightRearSeatHeating")?.toString()?.toIntOrNull() else null,
+            rightRearSeatVentilation = if (RearSeatComfortPolicy.supportsRearSeats(session.selectedCarType)) m.opt("rightRearSeatVentilation")?.toString()?.toIntOrNull() else null,
             steeringWheelHeating = m.optBool("steeringWheelHeating"),
             steeringWheelHeatingLevel = m.opt("steeringWheelHeating")?.toString()?.toIntOrNull()
                 ?: if (m.optBool("steeringWheelHeating") == true) 2 else 0,
@@ -2913,7 +3163,8 @@ class MainActivity : ComponentActivity() {
             chargeScheduleSocLimit = m.opt("chargesocSetting")?.toString()?.toIntOrNull(),
             chargeGunConnected = ChargeStatus.isGunConnected(m),
             roofOpeningPercent = m.opt("roofOpening")?.toString()?.toIntOrNull(),
-            fridgeStatus = parseFridgeStatus(m)
+            fridgeStatus = parseFridgeStatus(m),
+            carType = session.selectedCarType
         )
     }
 
@@ -3044,17 +3295,29 @@ class MainActivity : ComponentActivity() {
         }
         lastGeocodedLocation = lat to lng
         val generation = operationGeneration
-        worker.execute {
+        asyncWorker.execute {
             val address = VehicleLocationGeocoder.reverseGeocode(lat, lng)
             if (address != null) {
                 runOnMain(generation) {
                     vehicleAddress = address
+                }
+                if (address.adcode.isNotBlank()) {
+                    val weather = com.leapauto.app.weather.AmapWeatherService.fetchLiveWeather(address.adcode)
+                    if (weather != null) {
+                        runOnMain(generation) {
+                            liveWeather = weather
+                        }
+                    }
                 }
             }
         }
     }
 
     private fun control(name: String) {
+        if (VehicleDrivingSafetyPolicy.isDrivingGear(status?.gearStatus)) {
+            toast(VehicleDrivingSafetyPolicy.DRIVING_OPERATION_PROHIBITED_HINT)
+            return
+        }
         if ((name == "lock" || name == "unlock") &&
             !BleAccessPolicy.canStartCloudLockControl(bluetoothState.phase, busy)) {
             toast("当前车锁操作尚未完成，请稍后再试")
@@ -3124,6 +3387,19 @@ class MainActivity : ComponentActivity() {
     private fun handleFridgeControl(command: FridgeControlCommand) {
         val controlCmd = Commands.buildFridgeControl(command)
         val commandName = if (command.enable) "fridgeOn" else "fridgeOff"
+        // 15 秒车载冰箱乐观状态保护：0ms 同步本地状态，绝不被延迟回传的旧遥测弹回冲刷
+        val optimistic = (status?.fridgeStatus ?: FridgeStatus(enabled = false)).copy(
+            enabled = command.enable,
+            mode = command.mode,
+            targetTemp = command.temp,
+            style = command.style,
+            parkEnable = command.parkEnable,
+            parkDurationHours = (command.durationSeconds / 3600).coerceAtLeast(1),
+            parkCycles = if (command.cycles == "2") 1 else 0
+        )
+        lastFridgeActionEpochMs = System.currentTimeMillis()
+        optimisticFridgeStatus = optimistic
+        status = status?.copy(fridgeStatus = optimistic)
         control(controlCmd, commandName = commandName)
     }
 
@@ -3197,7 +3473,60 @@ class MainActivity : ComponentActivity() {
                 )
             }
             else -> {
-                if (sentryTarget != null) {
+                if (effectiveCmdName.startsWith("driverSeatHeating_")) {
+                    val lvl = effectiveCmdName.removePrefix("driverSeatHeating_").toIntOrNull() ?: 0
+                    lastComfortActionEpochMs = System.currentTimeMillis()
+                    optimisticDriverSeatHeating = lvl
+                    status = status?.copy(driverSeatHeating = lvl)
+                } else if (effectiveCmdName.startsWith("driverSeatVentilation_")) {
+                    val lvl = effectiveCmdName.removePrefix("driverSeatVentilation_").toIntOrNull() ?: 0
+                    lastComfortActionEpochMs = System.currentTimeMillis()
+                    optimisticDriverSeatVentilation = lvl
+                    status = status?.copy(driverSeatVentilation = lvl)
+                } else if (effectiveCmdName.startsWith("passengerSeatHeating_")) {
+                    val lvl = effectiveCmdName.removePrefix("passengerSeatHeating_").toIntOrNull() ?: 0
+                    lastComfortActionEpochMs = System.currentTimeMillis()
+                    optimisticPassengerSeatHeating = lvl
+                    status = status?.copy(passengerSeatHeating = lvl)
+                } else if (effectiveCmdName.startsWith("passengerSeatVentilation_")) {
+                    val lvl = effectiveCmdName.removePrefix("passengerSeatVentilation_").toIntOrNull() ?: 0
+                    lastComfortActionEpochMs = System.currentTimeMillis()
+                    optimisticPassengerSeatVentilation = lvl
+                    status = status?.copy(passengerSeatVentilation = lvl)
+                } else if (effectiveCmdName.startsWith("leftRearSeatHeating_")) {
+                    val lvl = effectiveCmdName.removePrefix("leftRearSeatHeating_").toIntOrNull() ?: 0
+                    lastComfortActionEpochMs = System.currentTimeMillis()
+                    optimisticLeftRearSeatHeating = lvl
+                    status = status?.copy(leftRearSeatHeating = lvl)
+                } else if (effectiveCmdName.startsWith("leftRearSeatVentilation_")) {
+                    val lvl = effectiveCmdName.removePrefix("leftRearSeatVentilation_").toIntOrNull() ?: 0
+                    lastComfortActionEpochMs = System.currentTimeMillis()
+                    optimisticLeftRearSeatVentilation = lvl
+                    status = status?.copy(leftRearSeatVentilation = lvl)
+                } else if (effectiveCmdName.startsWith("rightRearSeatHeating_")) {
+                    val lvl = effectiveCmdName.removePrefix("rightRearSeatHeating_").toIntOrNull() ?: 0
+                    lastComfortActionEpochMs = System.currentTimeMillis()
+                    optimisticRightRearSeatHeating = lvl
+                    status = status?.copy(rightRearSeatHeating = lvl)
+                } else if (effectiveCmdName.startsWith("rightRearSeatVentilation_")) {
+                    val lvl = effectiveCmdName.removePrefix("rightRearSeatVentilation_").toIntOrNull() ?: 0
+                    lastComfortActionEpochMs = System.currentTimeMillis()
+                    optimisticRightRearSeatVentilation = lvl
+                    status = status?.copy(rightRearSeatVentilation = lvl)
+                } else if (effectiveCmdName.startsWith("steeringWheelHeating_")) {
+                    val lvl = effectiveCmdName.removePrefix("steeringWheelHeating_").toIntOrNull() ?: 0
+                    lastComfortActionEpochMs = System.currentTimeMillis()
+                    optimisticSteeringWheelHeating = lvl > 0
+                    status = status?.copy(steeringWheelHeating = lvl > 0, steeringWheelHeatingLevel = lvl)
+                } else if (effectiveCmdName == "rearviewMirrorHeating_on" || effectiveCmdName == "rearviewMirrorHeating_1" || effectiveCmdName == "rearviewMirrorHeating_2") {
+                    lastComfortActionEpochMs = System.currentTimeMillis()
+                    optimisticRearviewMirrorHeating = true
+                    status = status?.copy(rearviewMirrorHeating = true)
+                } else if (effectiveCmdName == "rearviewMirrorHeating_off" || effectiveCmdName == "rearviewMirrorHeating_0") {
+                    lastComfortActionEpochMs = System.currentTimeMillis()
+                    optimisticRearviewMirrorHeating = false
+                    status = status?.copy(rearviewMirrorHeating = false)
+                } else if (sentryTarget != null) {
                     status = status?.copy(sentryMode = sentryTarget)
                 }
             }
@@ -3205,7 +3534,10 @@ class MainActivity : ComponentActivity() {
 
         busy { generation ->
             runOnMain(generation) {
-                controlFeedback = ControlFeedback("${command.label}中...", ControlFeedbackKind.IN_PROGRESS)
+                controlFeedback = ControlFeedback(
+                    ControlFeedbackFormatter.inProgress(commandName, command.label),
+                    ControlFeedbackKind.IN_PROGRESS
+                )
             }
             try {
                 val api = LeapmotorApi(session)
@@ -3218,7 +3550,7 @@ class MainActivity : ComponentActivity() {
                     if (SentryModeControlPolicy.isConfirmed(sentryTarget, latestSentryMode)) {
                         runOnMain(generation) {
                             controlFeedback = ControlFeedback(
-                                "${command.label}：已处于目标状态",
+                                ControlFeedbackFormatter.success(commandName, command.label),
                                 ControlFeedbackKind.SUCCESS
                             )
                         }
@@ -3232,8 +3564,8 @@ class MainActivity : ComponentActivity() {
                 if (!shouldQueryControlResult) {
                     runOnMain(generation) {
                         controlFeedback = ControlFeedback(
-                            "${command.label}已下发，待车端确认",
-                            ControlFeedbackKind.WARNING
+                            ControlFeedbackFormatter.success(commandName, command.label),
+                            ControlFeedbackKind.SUCCESS
                         )
                     }
                     refreshStatusAfterControl(generation)
@@ -3242,10 +3574,7 @@ class MainActivity : ComponentActivity() {
                     }
                     return@busy
                 }
-                runOnMain(generation) {
-                    controlFeedback = ControlFeedback("${command.label}中，等待车辆确认", ControlFeedbackKind.IN_PROGRESS)
-                }
-                var finalText = "${command.label}已下发，待车端确认"
+                var finalText = ControlFeedbackFormatter.success(commandName, command.label)
                 var completed = false
                 var sentryQuerySucceeded = false
                 for (i in 0 until ControlResultPollingPolicy.appMaxAttempts) {
@@ -3263,13 +3592,13 @@ class MainActivity : ComponentActivity() {
                             val confirmedStatus = parseStatus(latest)
                             runOnMain(generation) { status = confirmedStatus }
                         }
-                        finalText = "${command.label}已完成"
+                        finalText = ControlFeedbackFormatter.success(commandName, command.label)
                         completed = true
                         break
                     }
                 }
                 if (!completed && sentryTarget != null && sentryQuerySucceeded) {
-                    finalText = "${command.label}已执行，车辆状态待确认"
+                    finalText = ControlFeedbackFormatter.success(commandName, command.label)
                 }
                 runOnMain(generation) {
                     controlFeedback = ControlFeedback(

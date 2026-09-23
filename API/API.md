@@ -218,7 +218,8 @@ SDK 资产由 `scripts/rebuild-shumei-dex.ps1` 离线重建，使用本地 Andro
 | 里程与驾驶 | `1318 → totalMileage`、`1319 → speed`、`1010 → gearStatus`、`1944 → vehicleState`、`1480 → parkingBrakeState` | 总里程、车速、挡位、整车状态、驻车制动 |
 | 门锁与车门 | `1298 → driverDoorLockStatus`、`1277/1278/1279/1280 → 四门状态`、`1281 → bbcmBackDoorStatus` | 门锁、四门、后备箱状态；后备箱遥测仅按 `0=关闭`、`1=打开` 解释，其他值按未知处理 |
 | 空调 | `1938 → acSwitch`、`2183/2184 → acSetting/acSettingRight`、`1349 → interiorTemp`、`1943 → recirculationMode`、`1945 → windshieldDefrost`、`1946 → rearWindowHeating`、`1941 → acAirVolume` | 空调开关、左右温度、车内温度、循环（`0=外循环`、`1=内循环`）、前后除雾、风量；旧 T03 在 `1943` 缺失时兼容命名字段 `acCircleMode`（`false=外循环`、`true=内循环`） |
-| 车窗与天幕 | `3727/3728/1879/1880 → 四窗开度`、`1693/1694/1695/1696 → 四窗状态`、`1724 → roofOpening` | 车窗百分比、开关状态、天幕开度 |
+| 车窗与天幕 | `1693/1694/1695/1696 → 四窗状态`、`1724 → roofOpening` | 开关状态、天幕开度 |
+| 座椅与舒适 | `2100/2118 → 主驾/副驾座椅加热`、`2101/2119 → 主驾/副驾座椅通风`、`1879/1880 → 二排左/二排右座椅加热`、`3727/3728 → 二排左/二排右座椅通风`、`1816 → steeringWheelHeating`、`49/50 → 后视镜加热` | 前后排座椅加热/通风状态（0=关，1..3=档位）、方向盘加热（0=关，1..2=档位）、左右后视镜加热（0=关，1=开） |
 | 轮胎 | `2646 → 左前`、`2653 → 右前`、`2660 → 左后`、`2667 → 右后`；`2641/2648/2662/2655 → 对应胎压状态` | 四轮胎压及异常状态（数值映射按最新实车核验修正；告警状态映射保持原验证结果） |
 | 车载冰箱 | `10709 → fridgeSwitch`、`10708 → fridgeMode`、`10707 → fridgeTargetTemp`、`10711 → fridgeStyle`、`10712 → fridgeFault`、`11190 → fridgeParkSwitch`、`11189 → fridgeParkDurationHours`、`11191 → fridgeParkCycles`、`11260 → fridgeParkEndTime` | 冰箱开关（0=关，1=开）、模式（0=制冷，1=制热）、设定温度（制冷设定 ℃，制热为 50℃）、风格（0=标准，1=急速）、故障码、离车运行开关（0=关，1=开）、离车时长（小时）、离车频次（0=单次，1=每次离车）、离车结束时间戳（秒级） |
 | 安防与位置 | `1255 → vehicleSecurityActive`、`3636 → sentryMode`、`3725/3724 → latitude/longitude` | 安防、哨兵模式、车辆坐标 |
@@ -286,8 +287,8 @@ SDK 资产由 `scripts/rebuild-shumei-dex.ps1` 离线重建，使用本地 Andro
 | `horn` | 120 | `{"value":"true"}` | 鸣笛寻车 |
 | `batteryPreheat` | 160 | `{"value":"ptcon"}` | 电池预热开 |
 | `batteryPreheatOff` | 160 | `{"value":"ptcoff"}` | 电池预热关 |
-| `seatHeat` | 301 | `{"position":"left_front","level":"3"}` | 座椅加热（position: left_front/right_front，level: 0..3） |
-| `seatVentilation` | 370 | `{"position":"left_front","level":"3"}` | 座椅通风（position: left_front/right_front，level: 0..3） |
+| `seatHeat` | 301 | `{"position":"left_front","level":"3"}` | 座椅加热（position: left_front/right_front/left_rear/right_rear，level: 0..3） |
+| `seatVentilation` | 370 | `{"position":"left_front","level":"3"}` | 座椅通风（position: left_front/right_front/left_rear/right_rear，level: 0..3） |
 | `steeringWheelHeat` | 320 | `{"level":"2"}` | 方向盘加热（level: 0=关, 1=弱, 2=强） |
 | `rearviewMirrorHeat` | 440 | `{"value":"2"}` | 后视镜加热（value: 1=关, 2=开） |
 | `fridgeOn` | 500 | `{"cycles":"1","duration":3600,"enable":1,"mode":"cold","parkEnable":0,"style":"normal","temp":4,"value":"false"}` | 车载冰箱开机（默认制冷 4°C） |

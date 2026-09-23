@@ -224,15 +224,16 @@ object VehicleHomeStatus {
         nowEpochMs: Long = System.currentTimeMillis(),
         zoneId: ZoneId = ZoneId.systemDefault()
     ): String {
-        if (updatedAtEpochMs <= 0L) return "状态更新时间待同步"
+        if (updatedAtEpochMs <= 0L) return "状态待同步"
         val updated = Instant.ofEpochMilli(updatedAtEpochMs).atZone(zoneId)
         val today = Instant.ofEpochMilli(nowEpochMs).atZone(zoneId).toLocalDate()
+        val timeStr = updated.format(TIME_FORMATTER)
         val prefix = when (updated.toLocalDate()) {
             today -> "今天"
             today.minusDays(1) -> "昨天"
-            else -> updated.format(DateTimeFormatter.ofPattern("M/d", Locale.CHINA))
+            else -> "${updated.format(DateTimeFormatter.ofPattern("M/d", Locale.CHINA))} "
         }
-        return "状态更新 $prefix ${updated.format(TIME_FORMATTER)}"
+        return "${prefix}${timeStr}更新"
     }
 
     private val TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm", Locale.CHINA)

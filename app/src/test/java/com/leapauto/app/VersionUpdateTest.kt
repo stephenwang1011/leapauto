@@ -35,6 +35,23 @@ class VersionUpdateTest {
     }
 
     @Test
+    fun parsesPgyerBuildKeyFromPageHtml() {
+        val html = """
+            <div class="app-info">版本：3.4.88 (build 3004088)</div>
+            <script>
+                var appKey = "840ca8fb3fa9900c6d9a101f37e40fa3";
+            </script>
+            <div class="update-description">更新内容</div>
+        """.trimIndent()
+
+        val release = PgyerPageParser.parse(html)
+
+        assertNotNull(release)
+        assertEquals("3.4.88", release?.versionName)
+        assertEquals("840ca8fb3fa9900c6d9a101f37e40fa3", release?.buildKey)
+    }
+
+    @Test
     fun preservesEscapedLineBreaksInPgyerUpdateDescription() {
         val html = """
             <div class="app-info">版本：1.5.20</div>

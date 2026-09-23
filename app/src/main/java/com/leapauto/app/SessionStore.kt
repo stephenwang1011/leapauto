@@ -52,7 +52,8 @@ class SessionStore(context: Context) {
         val sessionGeneration: Long = 0L,
         val driving: Boolean? = null,
         val trunkState: TrunkState = TrunkState.UNKNOWN,
-        val sentryEnabled: Boolean? = null
+        val sentryEnabled: Boolean? = null,
+        val windowOpen: Boolean? = null
     )
 
     enum class WidgetAccess { NO_SESSION, CONTROL }
@@ -385,6 +386,14 @@ class SessionStore(context: Context) {
             .apply()
     }
 
+    fun saveVehiclePowerType(vin: String, powerType: VehiclePowerType) {
+        if (vin.isBlank()) return
+        val prefix = VehicleConfigStorageKeys.prefix(vin) ?: return
+        appPrefs.edit()
+            .putString(prefix + "power_type", if (powerType == VehiclePowerType.PURE_ELECTRIC) "pure_electric" else "range_extender")
+            .apply()
+    }
+
     fun isVehicleConfigConfirmed(vin: String): Boolean {
         val key = VehicleConfigConfirmationPolicy.confirmationPreferenceKey(vin) ?: return false
         val storedSchemaVersion = appPrefs.getInt(key, 0)
@@ -470,7 +479,8 @@ class SessionStore(context: Context) {
         sessionGeneration: Long = load().generation,
         driving: Boolean? = null,
         trunkState: TrunkState? = null,
-        sentryEnabled: Boolean? = null
+        sentryEnabled: Boolean? = null,
+        windowOpen: Boolean? = null
     ) {
         val previousTrunkState = if (vin == prefs.getString("widget_snapshot_vin", "") &&
             prefs.contains("widget_snapshot_trunk_open")
@@ -544,6 +554,10 @@ class SessionStore(context: Context) {
                 if (sentryEnabled == null) remove("widget_snapshot_sentry_enabled")
                 else putBoolean("widget_snapshot_sentry_enabled", sentryEnabled)
             }
+            .apply {
+                if (windowOpen == null) remove("widget_snapshot_window_open")
+                else putBoolean("widget_snapshot_window_open", windowOpen)
+            }
             .remove(WIDGET_AUTH_INVALID)
             .apply()
     }
@@ -616,6 +630,11 @@ class SessionStore(context: Context) {
                 prefs.getBoolean("widget_snapshot_sentry_enabled", false)
             } else {
                 null
+            },
+            windowOpen = if (prefs.contains("widget_snapshot_window_open")) {
+                prefs.getBoolean("widget_snapshot_window_open", false)
+            } else {
+                null
             }
         )
     }
@@ -661,7 +680,8 @@ class SessionStore(context: Context) {
             sessionGeneration = snapshot.sessionGeneration,
             driving = snapshot.driving,
             trunkState = snapshot.trunkState,
-            sentryEnabled = snapshot.sentryEnabled
+            sentryEnabled = snapshot.sentryEnabled,
+            windowOpen = snapshot.windowOpen
         )
         return true
     }
@@ -692,7 +712,40 @@ class SessionStore(context: Context) {
             sessionGeneration = snapshot.sessionGeneration,
             driving = snapshot.driving,
             trunkState = trunkState,
-            sentryEnabled = snapshot.sentryEnabled
+            sentryEnabled = snapshot.sentryEnabled,
+            windowOpen = snapshot.windowOpen
+        )
+        return true
+    }
+
+    /** Updates only the locally cached window state after a confirmed window command. */
+    fun updateWidgetWindowState(vin: String, windowOpen: Boolean): Boolean {
+        val snapshot = loadWidgetSnapshot(vin) ?: return false
+        saveWidgetSnapshot(
+            vin = snapshot.vin,
+            carType = snapshot.carType,
+            range = snapshot.range,
+            soc = snapshot.soc,
+            fuelSoc = snapshot.fuelSoc,
+            updated = snapshot.updated,
+            powerType = snapshot.powerType,
+            electricRange = snapshot.electricRange,
+            fuelRange = snapshot.fuelRange,
+            electricTotalRange = snapshot.electricTotalRange,
+            fuelTotalRange = snapshot.fuelTotalRange,
+            statusLabel = snapshot.statusLabel,
+            locked = snapshot.locked,
+            acEnabled = snapshot.acEnabled,
+            chargingPower = snapshot.chargingPower,
+            chargeState = snapshot.chargeState,
+            chargeRemainTime = snapshot.chargeRemainTime,
+            capturedAt = snapshot.capturedAt,
+            lastSuccessAt = snapshot.lastSuccessAt,
+            sessionGeneration = snapshot.sessionGeneration,
+            driving = snapshot.driving,
+            trunkState = snapshot.trunkState,
+            sentryEnabled = snapshot.sentryEnabled,
+            windowOpen = windowOpen
         )
         return true
     }
@@ -809,9 +862,23 @@ class SessionStore(context: Context) {
 
     private fun lastChargeStateKey(vin: String): String = "${LAST_CHARGE_STATE}_$vin"
 
+    fun loadVehicleBluetoothMac(vin: String): String? {
+        val safeVin = vin.replace(Regex("[^A-Za-z0-9]"), "_")
+        return appPrefs.getString("vehicle_bt_mac_$safeVin", null)?.takeIf { it.isNotBlank() }
+    }
+
+    fun saveVehicleBluetoothMac(vin: String, mac: String) {
+        val safeVin = vin.replace(Regex("[^A-Za-z0-9]"), "_")
+        val clean = mac.trim().uppercase()
+        if (clean.isNotBlank()) {
+            appPrefs.edit().putString("vehicle_bt_mac_$safeVin", clean).apply()
+        }
+    }
+
     companion object {
-        const val WIDGET_BG_STYLE_DEFAULT = 0
+        const val WIDGET_BG_STYLE_CLASSIC = 0
         const val WIDGET_BG_STYLE_LANDSCAPE = 1
+        const val WIDGET_BG_STYLE_DEFAULT = WIDGET_BG_STYLE_LANDSCAPE
         const val SESSION_GENERATION = "session_generation"
         const val AUTHOR_SUPPORT_LAST_SHOWN_EPOCH_DAY = "author_support_last_shown_epoch_day"
         const val AUTHOR_SUPPORT_PROMPT_DISABLED = "author_support_prompt_disabled"

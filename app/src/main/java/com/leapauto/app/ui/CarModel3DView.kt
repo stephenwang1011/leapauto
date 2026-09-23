@@ -133,10 +133,70 @@ internal class CarModelWebView(
                     )
                 }
                 val checkPath = decodedPath.lowercase()
+                if (checkPath.endsWith("index.html")) {
+                    return try {
+                        val originalHtml = file.readText(Charsets.UTF_8)
+                        val mtkHookScript = """
+                            <script>
+                            (function() {
+                                if (window.__mtkWebglHooked) return;
+                                window.__mtkWebglHooked = true;
+                                var orig = HTMLCanvasElement.prototype.getContext;
+                                HTMLCanvasElement.prototype.getContext = function(type, attributes) {
+                                    if (type === 'webgl' || type === 'experimental-webgl' || type === 'webgl2') {
+                                        attributes = attributes || {};
+                                        attributes.preserveDrawingBuffer = true;
+                                        attributes.failIfMajorPerformanceCaveat = false;
+                                        attributes.powerPreference = 'high-performance';
+                                    }
+                                    return orig.call(this, type, attributes);
+                                };
+                            })();
+                            </script>
+                        """.trimIndent()
+                        val patchedHtml = if (originalHtml.contains("<head>", ignoreCase = true)) {
+                            originalHtml.replaceFirst("<head>", "<head>\n$mtkHookScript", ignoreCase = true)
+                        } else {
+                            "$mtkHookScript\n$originalHtml"
+                        }
+                        val bytes = patchedHtml.toByteArray(Charsets.UTF_8)
+                        WebResourceResponse("text/html", "UTF-8", ByteArrayInputStream(bytes))
+                    } catch (e: Exception) {
+                        Log.w(TAG, "动态注入 index.html WebGL hook 异常，回退原始流", e)
+                        try {
+                            WebResourceResponse("text/html", "UTF-8", FileInputStream(file))
+                        } catch (_: Exception) { null }
+                    }
+                }
                 if (checkPath.endsWith("index.js")) {
                     return try {
                         val originalJs = file.readText(Charsets.UTF_8)
-                        val patchedJs = originalJs
+                        val errIdx = originalJs.indexOf("加载车模型颜色信息错误")
+                        if (errIdx != -1) {
+                            val start = (errIdx - 300).coerceAtLeast(0)
+                            val end = (errIdx + 200).coerceAtMost(originalJs.length)
+                            Log.i("CarModelAssetDump", "Color snippet: " + originalJs.substring(start, end))
+                        }
+                        val filesList = modelDir.walkTopDown().maxDepth(2).map { it.name }.take(50).toList()
+                        Log.i("CarModelAssetDump", "Files in modelDir: $filesList")
+                        val mtkPrefix = """
+                            (function(){
+                                if (!window.__mtkWebglHooked) {
+                                    window.__mtkWebglHooked = true;
+                                    var orig = HTMLCanvasElement.prototype.getContext;
+                                    HTMLCanvasElement.prototype.getContext = function(t, a) {
+                                        if (t === 'webgl' || t === 'experimental-webgl' || t === 'webgl2') {
+                                            a = a || {};
+                                            a.preserveDrawingBuffer = true;
+                                            a.failIfMajorPerformanceCaveat = false;
+                                            a.powerPreference = 'high-performance';
+                                        }
+                                        return orig.call(this, t, a);
+                                    };
+                                }
+                            })();
+                        """.trimIndent()
+                        val patchedJs = mtkPrefix + "\n" + originalJs
                             .replace(
                                 "if(e.name===t)return e;",
                                 "if(e.name&&(e.name===t||e.name.toLowerCase().replaceAll(\".\",\"\").replaceAll(\" \",\"\")===t))return e;"
@@ -209,6 +269,10 @@ internal class CarModelWebView(
                             view?.postDelayed({
                                 lastStatus?.let { updateVehicleState(it, forceImmediately = true) }
                             }, 500)
+                            // 兜底防线：若极少数特殊老车型资产未发送 onFullCarLoaded，延时 3.5 秒安全截取
+                            view?.postDelayed({
+                                capture3DSnapshot(view)
+                            }, 3500)
                         }
                     }
                     "onFullCarLoaded" -> {
@@ -220,7 +284,8 @@ internal class CarModelWebView(
                         view?.postDelayed({
                             tuneViewer(view)
                             lastStatus?.let { updateVehicleState(it, forceImmediately = true) }
-                        }, 500)
+                            capture3DSnapshot(view)
+                        }, 400)
                     }
                     "on3DSnapshot" -> {
                         val dataUrl = defaultValue.orEmpty()
@@ -263,11 +328,13 @@ internal class CarModelWebView(
 
         val gear = status?.gearStatus?.trim()?.uppercase()
         val isDrivingGear = gear in setOf("D", "D挡", "DRIVE", "前进", "3", "R", "R挡", "REVERSE", "倒车", "1")
-        val parsedSpeed = status?.speed.orEmpty().replace("km/h", "").replace("KM/H", "").trim().toFloatOrNull() ?: 0f
+        val parsedSpeed = status?.speed.orEmpty().replace("km/h", "", ignoreCase = true).trim().toFloatOrNull() ?: 0f
         val effectiveSpeed = when {
-            isDrivingGear -> if (parsedSpeed > 0f) parsedSpeed else 40f
-            cruising -> 60f
-            status?.isDriving == true -> if (parsedSpeed > 0f) parsedSpeed else 40f
+            isDrivingGear && parsedSpeed <= 0f -> 0f
+            isDrivingGear -> parsedSpeed
+            cruising -> if (parsedSpeed > 0f) parsedSpeed else 60f
+            status?.isDriving == true && parsedSpeed <= 0f -> 0f
+            status?.isDriving == true -> parsedSpeed
             else -> parsedSpeed
         }
         obj.put("speed", effectiveSpeed)
@@ -381,11 +448,18 @@ internal class CarModelWebView(
         obj.put("tp_lr_alert", tpLrAlert)
         obj.put("tp_rr_alert", tpRrAlert)
 
-        // 5. 全功能车灯联动 (行车开大灯、解锁通电亮灯、刹车亮高位红光)
-        val isDrivingNow = effectiveSpeed > 0f || status?.isDriving == true
-        val isParkedBrake = status?.isShutDown == false && !isDrivingNow
-        obj.put("lowBeam", isDrivingNow || (status?.locked == false && status?.isShutDown == false))
-        obj.put("stopLight", isParkedBrake)
+        // 5. 全功能车灯联动 (行车开大灯/日行灯、暗夜展车点亮、刹车亮高位红光)
+        val isDrivingNow = effectiveSpeed > 0f || (status?.isDriving == true && !(isDrivingGear && parsedSpeed <= 0f))
+        // 仅在挂 D/R 挡且速度为 0 时 (等待红绿灯/踩刹车 AutoHold) 触发高位刹车灯红光；挂 P 挡驻车绝不常亮刹车灯
+        val isBraking = isDrivingGear && parsedSpeed <= 0f
+        // 日间行车灯 (星环日行灯带/贯穿式前后示宽灯)：行车中必亮、通电未休眠必亮、暗夜模式点亮以勾勒车身
+        val shouldMarkLight = isDark || isDrivingNow || isDrivingGear || (status?.locked == false && status?.isShutDown == false)
+        // 近光透镜大灯：暗夜模式下点亮（照亮夜空展台）、行车中点亮、通电/解锁点亮
+        val shouldLowBeam = isDark || isDrivingNow || (status?.locked == false && status?.isShutDown == false)
+
+        obj.put("lowBeam", shouldLowBeam)
+        obj.put("stopLight", isBraking)
+        obj.put("markLight", shouldMarkLight)
 
         // 6. 前舱盖 (引擎盖/前备箱) 状态
         obj.put("bonnet", 0)
@@ -499,7 +573,7 @@ internal class CarModelWebView(
                     var isDark = state.isDark !== undefined ? !!state.isDark : true;
                     if (typeof c.handleVehicleMove === 'function') {
                         if (c.__laneLine__) {
-                            c.__laneLine__.visible = true;
+                            c.__laneLine__.visible = speed > 0;
                             // 动态调节车道线 Shader 颜色：浅色模式使用零跑科技蓝高光流动标线，深色模式使用高亮纯白流光
                             if (c.__laneLine__.material && c.__laneLine__.material.uniforms && c.__laneLine__.material.uniforms.color) {
                                 if (isDark) {
@@ -550,11 +624,16 @@ internal class CarModelWebView(
                     }
 
                     // 12. 全功能透镜车灯联动
+                    var lowBeamOn = state.lowBeam !== undefined ? !!state.lowBeam : false;
                     if (typeof c.handleLowBeamLight === 'function') {
-                        c.handleLowBeamLight(!!state.lowBeam);
+                        c.handleLowBeamLight(lowBeamOn, imm);
                     }
+                    if (typeof c.handleHeadLight === 'function') {
+                        c.handleHeadLight(lowBeamOn, imm);
+                    }
+                    var stopLightOn = state.stopLight !== undefined ? !!state.stopLight : false;
                     if (typeof c.handleStopLight === 'function') {
-                        c.handleStopLight(!!state.stopLight);
+                        c.handleStopLight(stopLightOn, imm);
                     }
 
                     // 13. 前舱盖 (引擎盖/前备箱) 开启动效
@@ -563,9 +642,13 @@ internal class CarModelWebView(
                         c.handleBonnet(bonnetOpen, imm);
                     }
 
-                    // 14. 深色暗夜座舱氛围：点亮前后贯穿式示宽日行灯带
+                    // 14. 贯穿式星环日行灯/示宽灯带 (行车点亮、通电点亮、暗夜模式点亮)
+                    var markLightOn = state.markLight !== undefined ? !!state.markLight : isDark;
                     if (typeof c.handleMarkLight === 'function') {
-                        c.handleMarkLight(isDark);
+                        c.handleMarkLight(markLightOn, imm);
+                    }
+                    if (typeof c.handleDayLight === 'function') {
+                        c.handleDayLight(markLightOn, imm);
                     }
 
                     // 严禁在此处直接强行给 c.LFDoorState、c.TrunkState 或 c.DoorLFWindowState 赋值，
@@ -648,7 +731,7 @@ internal class CarModelWebView(
                     setTimeout(start, 100);
                     return;
                 }
-                if (++tries > 200) {
+                if (++tries > 400) {
                     window.prompt('onInitTimeout');
                     return;
                 }
@@ -676,7 +759,8 @@ internal class CarModelWebView(
                                     (c.material && c.material.uniforms && (c.material.uniforms.dayTexture || c.material.uniforms.nightTexture));
                         var isCharger = (window.car && c === window.car.__charger__) ||
                                         (c.name && c.name.toLowerCase().indexOf("charger") >= 0);
-                        if (!isLane && !isSky && !isCharger) {
+                        var isLight = (c.name && (c.name.toLowerCase().indexOf("light") >= 0 || c.name.toLowerCase().indexOf("beam") >= 0 || c.name.toLowerCase().indexOf("lamp") >= 0));
+                        if (!isLane && !isSky && !isCharger && !isLight) {
                             c.visible = false;
                         }
                     }
@@ -717,8 +801,8 @@ internal class CarModelWebView(
                     console.log('3D Golden front-45 angle set: cam=(-14.5, 1.96, 14.5), target=(0, 0.16, 0)');
                 }
 
-                // 在 1.40 基础上再缩小 1/8 (1.40 * 7/8 = 1.225 ≈ 1.23)，精致饱满，兼顾呼吸感与视觉张力
-                var targetZoom = 1.23;
+                // 再缩小 1/10 (1.025 * 0.9 = 0.9225)，视野更舒适精致
+                var targetZoom = 0.9225;
                 cam.zoom = targetZoom;
                 if (!cam.__leapZoomHooked) {
                     cam.__leapZoomHooked = true;
@@ -730,43 +814,73 @@ internal class CarModelWebView(
                 }
                 cam.updateProjectionMatrix();
             }
-
-            // 4. 导出一次高保真 3D 前侧斜 45 度定妆照给桌面小组件使用
-            if (!v.__leapSnapshotTaken) {
-                v.__leapSnapshotTaken = true;
-                setTimeout(function() {
-                    try {
-                        var activeCam = cam || v.camera;
-                        console.log('3D snapshot starting, cam=' + !!activeCam + ', renderer=' + !!v.renderer + ', scene=' + !!v.scene);
-                        var sky = v.frameState && v.frameState.skyBox;
-                        if (sky) sky.visible = false;
-                        if (v.renderer && v.scene && activeCam) {
-                            v.renderer.render(v.scene, activeCam);
-                        }
-                        var canvas = v.renderer ? v.renderer.domElement : null;
-                        if (sky) sky.visible = true;
-                        console.log('3D snapshot canvas=' + !!canvas + ', toDataURL=' + (canvas && typeof canvas.toDataURL));
-                        if (canvas && typeof canvas.toDataURL === 'function') {
-                            var url = canvas.toDataURL('image/png');
-                            console.log('3D snapshot url length=' + (url ? url.length : 0));
-                            if (url && url.length > 200) {
-                                if (window.LeapNative && typeof window.LeapNative.saveSnapshot === 'function') {
-                                    console.log('3D snapshot calling LeapNative.saveSnapshot');
-                                    window.LeapNative.saveSnapshot(url);
-                                } else {
-                                    console.log('3D snapshot calling window.prompt on3DSnapshot');
-                                    window.prompt('on3DSnapshot', url);
-                                }
-                            }
-                        }
-                    } catch(e) {
-                        console.warn('3D snapshot export error: ' + e);
-                    }
-                }, 500);
-            }
         })();
         """.trimIndent()
         view?.evaluateJavascript(tuneScript, null)
+    }
+
+    private fun capture3DSnapshot(view: WebView?) {
+        if (snapshotSaved || vin.isBlank()) return
+        val captureScript = """
+        (function() {
+            var v = window.viewer;
+            if (!v || v.__leapSnapshotTaken) return;
+
+            function hasCarMeshes() {
+                if (window.car && window.car.children && window.car.children.length > 0) return true;
+                if (v.scene) {
+                    var meshCount = 0;
+                    v.scene.traverse(function(obj) {
+                        if (obj.isMesh && obj.visible) meshCount++;
+                    });
+                    return meshCount >= 5;
+                }
+                return false;
+            }
+
+            function doSnapshot(attempt) {
+                try {
+                    if (!hasCarMeshes() && attempt < 4) {
+                        console.log('3D snapshot waiting for car meshes, attempt=' + attempt);
+                        setTimeout(function() { doSnapshot(attempt + 1); }, 400);
+                        return;
+                    }
+
+                    var cam = (v.controls && v.controls.object) || v.camera;
+                    var activeCam = cam || v.camera;
+                    var sky = v.frameState && v.frameState.skyBox;
+                    if (sky) sky.visible = false;
+
+                    if (v.renderer && v.scene && activeCam) {
+                        v.renderer.render(v.scene, activeCam);
+                    }
+                    var canvas = v.renderer ? v.renderer.domElement : null;
+                    if (sky) sky.visible = true;
+
+                    if (canvas && typeof canvas.toDataURL === 'function') {
+                        var url = canvas.toDataURL('image/png');
+                        console.log('3D snapshot attempt=' + attempt + ', url length=' + (url ? url.length : 0));
+                        // 完整 3D 车模 Base64 数据通常大于 30KB，若小于 2000 字节则通常为空白画板或尚未就绪
+                        if (url && url.length > 2000) {
+                            v.__leapSnapshotTaken = true;
+                            if (window.LeapNative && typeof window.LeapNative.saveSnapshot === 'function') {
+                                window.LeapNative.saveSnapshot(url);
+                            } else {
+                                window.prompt('on3DSnapshot', url);
+                            }
+                        } else if (attempt < 4) {
+                            setTimeout(function() { doSnapshot(attempt + 1); }, 400);
+                        }
+                    }
+                } catch(e) {
+                    console.warn('3D snapshot export error: ' + e);
+                }
+            }
+
+            setTimeout(function() { doSnapshot(1); }, 300);
+        })();
+        """.trimIndent()
+        view?.evaluateJavascript(captureScript, null)
     }
 
     private fun handle3DSnapshot(base64: String) {
@@ -777,6 +891,10 @@ internal class CarModelWebView(
                 val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
                 val raw = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@Thread
                 val cropped = VehicleImageCache.cropTransparentPixels(raw)
+                if (cropped == null) {
+                    Log.w(TAG, "3D 定妆照裁切后为无效/纯透明图，拒绝保存，保护小组件回退官方2D图")
+                    return@Thread
+                }
                 VehicleImageCache.save3DSnapshot(context, vin, cropped, modelKey)
                 snapshotSaved = true
                 ControlWidget.refreshData(context)
@@ -830,5 +948,41 @@ class LeapNativeBridge(private val onSnapshot: (String) -> Unit) {
     fun saveSnapshot(dataUrl: String) {
         android.util.Log.i("CarModel3DView", "LeapNativeBridge.saveSnapshot received, length=${dataUrl.length}")
         onSnapshot(dataUrl)
+    }
+}
+
+object CarModel3DStateHelper {
+    fun calculateEffectiveSpeed(
+        gearStatus: String?,
+        speedStr: String?,
+        isDriving: Boolean? = null,
+        cruising: Boolean = false
+    ): Float {
+        val gear = gearStatus?.trim()?.uppercase()
+        val isDrivingGear = gear in setOf("D", "D挡", "DRIVE", "前进", "3", "R", "R挡", "REVERSE", "倒车", "1")
+        val parsedSpeed = speedStr.orEmpty().replace("km/h", "", ignoreCase = true).trim().toFloatOrNull() ?: 0f
+        return when {
+            isDrivingGear && parsedSpeed <= 0f -> 0f
+            isDrivingGear -> parsedSpeed
+            cruising -> if (parsedSpeed > 0f) parsedSpeed else 60f
+            isDriving == true && parsedSpeed <= 0f -> 0f
+            isDriving == true -> parsedSpeed
+            else -> parsedSpeed
+        }
+    }
+
+    fun isActuallyDriving(
+        gearStatus: String?,
+        speedStr: String?,
+        isDriving: Boolean? = null
+    ): Boolean {
+        val gear = gearStatus?.trim()?.uppercase()
+        val isDrivingGear = gear in setOf("D", "D挡", "DRIVE", "前进", "3", "R", "R挡", "REVERSE", "倒车", "1")
+        val speedValue = speedStr.orEmpty().replace("km/h", "", ignoreCase = true).trim().toFloatOrNull() ?: 0f
+        return if (isDrivingGear && speedValue <= 0f) {
+            false
+        } else {
+            isDrivingGear || isDriving == true || speedValue > 0f
+        }
     }
 }

@@ -412,16 +412,31 @@ object VehicleHealthDiagnostics {
         }
 
         // ====== 4. 环控与电气系统 ======
-        // 4.1 空调座舱环境
+        val isLocked = status.locked == true
+
+        // 4.1 空调座舱环境（锁车未关预警与一键关闭）
         if (status.acSwitch == true) {
             val target = cleanTemp(status.acSetting)?.let { "$it°C" } ?: "自动"
-            climateItems.add(
-                HealthCheckItem(
-                    title = "空调座舱环境",
-                    detail = "空调开启中 · 设定温度 $target · 车内 ${formatTemp(status.indoorTemp)}",
-                    level = HealthCheckLevel.GOOD
+            if (isLocked) {
+                score -= 5
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "空调座舱环境",
+                        detail = "车辆已锁闭但空调仍开启运行 ($target · 车内 ${formatTemp(status.indoorTemp)})，建议及时关闭防电量耗尽",
+                        level = HealthCheckLevel.WARNING,
+                        fixCommand = "acOff",
+                        fixLabel = "关闭空调"
+                    )
                 )
-            )
+            } else {
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "空调座舱环境",
+                        detail = "空调开启中 · 设定温度 $target · 车内 ${formatTemp(status.indoorTemp)}",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
         } else {
             climateItems.add(
                 HealthCheckItem(
@@ -432,38 +447,32 @@ object VehicleHealthDiagnostics {
             )
         }
 
-        // 4.2 双区独立温区调控
-        if (!status.acSettingRight.isNullOrBlank()) {
-            climateItems.add(
-                HealthCheckItem(
-                    title = "双区温控系统",
-                    detail = "主副驾独立温区开启，副驾设定 ${cleanTemp(status.acSettingRight)}°C",
-                    level = HealthCheckLevel.GOOD
-                )
-            )
-        } else {
-            climateItems.add(
-                HealthCheckItem(
-                    title = "空气循环风道",
-                    detail = "座舱空气内外循环与电控风阀巡检正常",
-                    level = HealthCheckLevel.GOOD
-                )
-            )
-        }
-
-        // 4.3 前后风挡除霜除雾
+        // 4.2 前后风挡除霜除雾
         if (status.windshieldDefrost == true) {
-            climateItems.add(
-                HealthCheckItem(
-                    title = "除霜除雾系统",
-                    detail = "前风挡强力电加热除霜除雾工作中",
-                    level = HealthCheckLevel.GOOD
+            if (isLocked) {
+                score -= 3
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "除霜除雾系统",
+                        detail = "车辆已锁闭但前风挡强力电加热除霜仍在运行，持续耗电",
+                        level = HealthCheckLevel.WARNING,
+                        fixCommand = "acOff",
+                        fixLabel = "关闭除霜"
+                    )
                 )
-            )
+            } else {
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "前挡除霜系统",
+                        detail = "前风挡强力电加热除霜除雾工作中",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
         } else if (status.rearWindowHeating == true) {
             climateItems.add(
                 HealthCheckItem(
-                    title = "除霜除雾系统",
+                    title = "后挡除雾系统",
                     detail = "后风挡电加热丝除雾工作中",
                     level = HealthCheckLevel.GOOD
                 )
@@ -478,15 +487,29 @@ object VehicleHealthDiagnostics {
             )
         }
 
-        // 4.4 方向盘舒适加热
-        if (status.steeringWheelHeating == true) {
-            climateItems.add(
-                HealthCheckItem(
-                    title = "方向盘加热系统",
-                    detail = "方向盘加热开启中，阻丝持续升温",
-                    level = HealthCheckLevel.GOOD
+        // 4.3 方向盘舒适加热
+        val steerHeatingActive = status.steeringWheelHeating == true || (status.steeringWheelHeatingLevel ?: 0) > 0
+        if (steerHeatingActive) {
+            if (isLocked) {
+                score -= 3
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "方向盘加热系统",
+                        detail = "车辆已锁闭但方向盘加热仍在运行升温，建议及时关闭",
+                        level = HealthCheckLevel.WARNING,
+                        fixCommand = "steeringWheelHeating_0",
+                        fixLabel = "关方向盘加热"
+                    )
                 )
-            )
+            } else {
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "方向盘加热系统",
+                        detail = "方向盘加热开启中，阻丝持续升温",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
         } else {
             climateItems.add(
                 HealthCheckItem(
@@ -497,31 +520,289 @@ object VehicleHealthDiagnostics {
             )
         }
 
-        // 4.5 前排座椅舒适系统
-        val activeSeats = mutableListOf<String>()
-        if (status.driverSeatHeating != null && status.driverSeatHeating > 0) activeSeats.add("主驾加热")
-        if (status.driverSeatVentilation != null && status.driverSeatVentilation > 0) activeSeats.add("主驾通风")
-        if (status.passengerSeatHeating != null && status.passengerSeatHeating > 0) activeSeats.add("副驾加热")
-        if (status.passengerSeatVentilation != null && status.passengerSeatVentilation > 0) activeSeats.add("副驾通风")
-        if (activeSeats.isNotEmpty()) {
-            climateItems.add(
-                HealthCheckItem(
-                    title = "座椅舒适系统",
-                    detail = "${activeSeats.joinToString("、")}工作中，温控正常",
-                    level = HealthCheckLevel.GOOD
+        // 4.4 外后视镜电加热
+        if (status.rearviewMirrorHeating == true) {
+            if (isLocked) {
+                score -= 3
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "外后视镜加热",
+                        detail = "车辆已锁闭但外后视镜电加热除雾仍在通电加热",
+                        level = HealthCheckLevel.WARNING,
+                        fixCommand = "rearviewMirrorHeating_off",
+                        fixLabel = "关后视镜加热"
+                    )
                 )
-            )
+            } else {
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "外后视镜加热",
+                        detail = "双侧外后视镜电加热除雾除霜工作中",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
         } else {
             climateItems.add(
                 HealthCheckItem(
-                    title = "座椅舒适总成",
-                    detail = "前排座椅电加热膜与通风风机处于待命态",
+                    title = "外后视镜加热",
+                    detail = "外后视镜电加热电路就绪待命",
                     level = HealthCheckLevel.GOOD
                 )
             )
         }
 
-        // 4.6 车联通信系统
+        // 4.5 前排座椅通风与加热细粒度检测（锁车未关预警与一键关闭）
+        // 主驾通风
+        if ((status.driverSeatVentilation ?: 0) > 0) {
+            if (isLocked) {
+                score -= 3
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "锁车后主驾通风未关闭",
+                        detail = "车辆已锁闭但主驾座椅通风仍处于开启状态 (${status.driverSeatVentilation}挡)",
+                        level = HealthCheckLevel.WARNING,
+                        fixCommand = "driverSeatVentilation_0",
+                        fixLabel = "关主驾通风"
+                    )
+                )
+            } else {
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "主驾座椅通风",
+                        detail = "主驾座椅通风运行中 (${status.driverSeatVentilation}挡)，风机运转正常",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
+        }
+        // 主驾加热
+        if ((status.driverSeatHeating ?: 0) > 0) {
+            if (isLocked) {
+                score -= 3
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "锁车后主驾加热未关闭",
+                        detail = "车辆已锁闭但主驾座椅加热仍在持续加热 (${status.driverSeatHeating}挡)",
+                        level = HealthCheckLevel.WARNING,
+                        fixCommand = "driverSeatHeating_0",
+                        fixLabel = "关主驾加热"
+                    )
+                )
+            } else {
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "主驾座椅加热",
+                        detail = "主驾座椅加热升温中 (${status.driverSeatHeating}挡)，温控正常",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
+        }
+        // 副驾通风
+        if ((status.passengerSeatVentilation ?: 0) > 0) {
+            if (isLocked) {
+                score -= 3
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "锁车后副驾通风未关闭",
+                        detail = "车辆已锁闭但副驾座椅通风仍处于开启状态 (${status.passengerSeatVentilation}挡)",
+                        level = HealthCheckLevel.WARNING,
+                        fixCommand = "passengerSeatVentilation_0",
+                        fixLabel = "关副驾通风"
+                    )
+                )
+            } else {
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "副驾座椅通风",
+                        detail = "副驾座椅通风运行中 (${status.passengerSeatVentilation}挡)，风机运转正常",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
+        }
+        // 副驾加热
+        if ((status.passengerSeatHeating ?: 0) > 0) {
+            if (isLocked) {
+                score -= 3
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "锁车后副驾加热未关闭",
+                        detail = "车辆已锁闭但副驾座椅加热仍在持续加热 (${status.passengerSeatHeating}挡)",
+                        level = HealthCheckLevel.WARNING,
+                        fixCommand = "passengerSeatHeating_0",
+                        fixLabel = "关副驾加热"
+                    )
+                )
+            } else {
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "副驾座椅加热",
+                        detail = "副驾座椅加热升温中 (${status.passengerSeatHeating}挡)，温控正常",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
+        }
+        // 二排左通风
+        if ((status.leftRearSeatVentilation ?: 0) > 0) {
+            if (isLocked) {
+                score -= 3
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "锁车后二排左通风未关闭",
+                        detail = "车辆已锁闭但二排左座椅通风仍处于开启状态 (${status.leftRearSeatVentilation}挡)",
+                        level = HealthCheckLevel.WARNING,
+                        fixCommand = "leftRearSeatVentilation_0",
+                        fixLabel = "关二排左通风"
+                    )
+                )
+            } else {
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "二排左座椅通风",
+                        detail = "二排左座椅通风运行中 (${status.leftRearSeatVentilation}挡)，风机运转正常",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
+        }
+        // 二排左加热
+        if ((status.leftRearSeatHeating ?: 0) > 0) {
+            if (isLocked) {
+                score -= 3
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "锁车后二排左加热未关闭",
+                        detail = "车辆已锁闭但二排左座椅加热仍在持续加热 (${status.leftRearSeatHeating}挡)",
+                        level = HealthCheckLevel.WARNING,
+                        fixCommand = "leftRearSeatHeating_0",
+                        fixLabel = "关二排左加热"
+                    )
+                )
+            } else {
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "二排左座椅加热",
+                        detail = "二排左座椅加热升温中 (${status.leftRearSeatHeating}挡)，温控正常",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
+        }
+        // 二排右通风
+        if ((status.rightRearSeatVentilation ?: 0) > 0) {
+            if (isLocked) {
+                score -= 3
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "锁车后二排右通风未关闭",
+                        detail = "车辆已锁闭但二排右座椅通风仍处于开启状态 (${status.rightRearSeatVentilation}挡)",
+                        level = HealthCheckLevel.WARNING,
+                        fixCommand = "rightRearSeatVentilation_0",
+                        fixLabel = "关二排右通风"
+                    )
+                )
+            } else {
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "二排右座椅通风",
+                        detail = "二排右座椅通风运行中 (${status.rightRearSeatVentilation}挡)，风机运转正常",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
+        }
+        // 二排右加热
+        if ((status.rightRearSeatHeating ?: 0) > 0) {
+            if (isLocked) {
+                score -= 3
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "锁车后二排右加热未关闭",
+                        detail = "车辆已锁闭但二排右座椅加热仍在持续加热 (${status.rightRearSeatHeating}挡)",
+                        level = HealthCheckLevel.WARNING,
+                        fixCommand = "rightRearSeatHeating_0",
+                        fixLabel = "关二排右加热"
+                    )
+                )
+            } else {
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "二排右座椅加热",
+                        detail = "二排右座椅加热升温中 (${status.rightRearSeatHeating}挡)，温控正常",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
+        }
+        if ((status.driverSeatHeating ?: 0) == 0 && (status.driverSeatVentilation ?: 0) == 0 &&
+            (status.passengerSeatHeating ?: 0) == 0 && (status.passengerSeatVentilation ?: 0) == 0 &&
+            (status.leftRearSeatHeating ?: 0) == 0 && (status.leftRearSeatVentilation ?: 0) == 0 &&
+            (status.rightRearSeatHeating ?: 0) == 0 && (status.rightRearSeatVentilation ?: 0) == 0) {
+            climateItems.add(
+                HealthCheckItem(
+                    title = "座椅舒适系统",
+                    detail = "全车座椅电加热膜与通风风机处于待命态",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        }
+
+        // 4.6 车载冰箱检测（锁车且非离车模式预警与一键关闭）
+        val fridge = status.fridgeStatus
+        if (fridge != null) {
+            if (fridge.enabled) {
+                if (isLocked && !fridge.parkEnable) {
+                    score -= 3
+                    climateItems.add(
+                        HealthCheckItem(
+                            title = "锁车后车载冰箱未开启离车模式",
+                            detail = "车辆已锁闭但冰箱仍在常开工作 (${fridge.targetTemp}°C)，建议关闭或设离车模式",
+                            level = HealthCheckLevel.WARNING,
+                            fixCommand = "fridgeOff",
+                            fixLabel = "关闭冰箱"
+                        )
+                    )
+                } else if (fridge.isParkRunning) {
+                    climateItems.add(
+                        HealthCheckItem(
+                            title = "车载冰箱离车保持",
+                            detail = "离车持续运行中 (${fridge.targetTemp}°C · ${fridge.parkDurationHours}小时)，状态良好",
+                            level = HealthCheckLevel.GOOD
+                        )
+                    )
+                } else {
+                    climateItems.add(
+                        HealthCheckItem(
+                            title = "车载冰箱工作状态",
+                            detail = "车载冰箱运行中 (${fridge.targetTemp}°C)，制冷回路正常",
+                            level = HealthCheckLevel.GOOD
+                        )
+                    )
+                }
+            } else {
+                climateItems.add(
+                    HealthCheckItem(
+                        title = "车载冰箱待命状态",
+                        detail = "车载冰箱已关闭休眠，无异常功耗",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
+        }
+
+        // 4.7 双区温控与车联通信
+        if (!status.acSettingRight.isNullOrBlank()) {
+            climateItems.add(
+                HealthCheckItem(
+                    title = "双区温控系统",
+                    detail = "主副驾独立温区开启，副驾设定 ${cleanTemp(status.acSettingRight)}°C",
+                    level = HealthCheckLevel.GOOD
+                )
+            )
+        }
         climateItems.add(
             HealthCheckItem(
                 title = "车联通信系统",

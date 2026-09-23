@@ -250,10 +250,10 @@ class LeapmotorApi internal constructor(
         val headers = linkedMapOf(
             "User-Agent" to "okhttp/4.9.3",
             "APPPlatform" to "Android",
-            "APPVersion" to "3.19.2-2",
+            "APPVersion" to session.appVersion,
             "APPImei" to session.deviceId,
             "C-VERSIONS" to "APP",
-            "XFX-CDN-VRS" to "IPv4"
+            "XFX-CDN-VRS" to "v4"
         )
         if (withToken && session.oldAuth != null) {
             headers["XFX-CDN-CROSS-NODE"] = session.oldAuth!!.token
@@ -866,57 +866,76 @@ class LeapmotorApi internal constructor(
         destDir.mkdirs()
         val canonicalDest = destDir.canonicalFile
 
-        for (host in candidateHosts) {
+        fun tryDownload(host: String): Pair<Boolean, Boolean> {
             val cleanHost = host.trim().removeSuffix("/")
             val url = "$cleanHost$path"
-            try {
-                val signed = oldSignedParams(
-                    params = mapOf("key" to key),
-                    includeTimespan = true
-                )
-                // 官方 fb1.smali:14905 仅传入 oldAppHeaders，绝不注入新网关 headers
-                val headers = oldAppHeaders(withToken = true)
-                val queryStr = signed.entries.joinToString("&") { (k, v) ->
-                    "${URLEncoder.encode(k, "UTF-8")}=${URLEncoder.encode(v, "UTF-8")}"
+            val signed = oldSignedParams(
+                params = mapOf("key" to key),
+                includeTimespan = true
+            )
+            val headers = oldAppHeaders(withToken = true)
+            val queryStr = signed.entries.joinToString("&") { (k, v) ->
+                "${URLEncoder.encode(k, "UTF-8")}=${URLEncoder.encode(v, "UTF-8")}"
+            }
+            val request = Request.Builder()
+                .url("$url?$queryStr")
+                .get()
+                .apply { headers.forEach { (k, v) -> header(k, v) } }
+                .build()
+
+            val client = NetworkDebugController.httpClient()
+            return client.newCall(request).execute().use { response ->
+                android.util.Log.i("CarModelDownload", "downloadCarModelPackage: url=$url, code=${response.code}")
+                if (!response.isSuccessful) {
+                    android.util.Log.w("CarModelDownload", "downloadCarModelPackage HTTP error: ${response.code} ${response.message}")
+                    return@use false to false
                 }
-                val request = Request.Builder()
-                    .url("$url?$queryStr")
-                    .get()
-                    .apply { headers.forEach { (k, v) -> header(k, v) } }
-                    .build()
+                val bytes = response.body?.bytes()
+                if (bytes == null || bytes.isEmpty()) {
+                    android.util.Log.w("CarModelDownload", "downloadCarModelPackage body empty")
+                    return@use false to false
+                }
+                if (bytes.size < 4 || bytes[0] != 0x50.toByte() || bytes[1] != 0x4B.toByte()) {
+                    val content = bytes.take(150).toByteArray().toString(Charsets.UTF_8)
+                    android.util.Log.w("CarModelDownload", "downloadCarModelPackage not ZIP! size=${bytes.size}, content=$content")
+                    val isTokenError = content.contains("39") || content.contains("信息校验失败") || content.contains("token")
+                    return@use false to isTokenError
+                }
 
-                val client = NetworkDebugController.httpClient()
-                val success = client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@use false
-                    val bytes = response.body?.bytes() ?: return@use false
-                    // 官方 fb1.smali:15008 校验首两字节必须为 0x50, 0x4B ('PK' ZIP 魔数)
-                    if (bytes.size < 4 || bytes[0] != 0x50.toByte() || bytes[1] != 0x4B.toByte()) {
-                        return@use false
-                    }
-
-                    ZipInputStream(java.io.ByteArrayInputStream(bytes)).use { zis ->
-                        while (true) {
-                            val entry = zis.nextEntry ?: break
-                            val targetFile = File(canonicalDest, entry.name).canonicalFile
-                            if (!targetFile.path.startsWith(canonicalDest.path + File.separator)) {
-                                throw IOException("Zip traversal entry rejected: ${entry.name}")
-                            }
-                            if (entry.isDirectory) {
-                                targetFile.mkdirs()
-                            } else {
-                                targetFile.parentFile?.mkdirs()
-                                FileOutputStream(targetFile).use { fos ->
-                                    zis.copyTo(fos)
-                                }
-                            }
-                            zis.closeEntry()
+                ZipInputStream(java.io.ByteArrayInputStream(bytes)).use { zis ->
+                    while (true) {
+                        val entry = zis.nextEntry ?: break
+                        val targetFile = File(canonicalDest, entry.name).canonicalFile
+                        if (!targetFile.path.startsWith(canonicalDest.path + File.separator)) {
+                            throw IOException("Zip traversal entry rejected: ${entry.name}")
                         }
+                        if (entry.isDirectory) {
+                            targetFile.mkdirs()
+                        } else {
+                            targetFile.parentFile?.mkdirs()
+                            FileOutputStream(targetFile).use { fos ->
+                                zis.copyTo(fos)
+                            }
+                        }
+                        zis.closeEntry()
                     }
-                    true
+                }
+                true to false
+            }
+        }
+
+        for (host in candidateHosts) {
+            try {
+                var (success, needRetryToken) = tryDownload(host)
+                if (needRetryToken) {
+                    android.util.Log.i("CarModelDownload", "3D 车模下载遇到 token 校验失败，尝试自动续期后重试一次...")
+                    runCatching { refreshOldToken() }
+                    val retry = tryDownload(host)
+                    success = retry.first
                 }
                 if (success) return true
-            } catch (_: Exception) {
-                // 尝试下一个主机
+            } catch (e: Exception) {
+                android.util.Log.w("CarModelDownload", "下载异常 host=$host: ${e.message}")
             }
         }
         return false
@@ -1683,6 +1702,87 @@ class LeapmotorApi internal constructor(
             }
         } catch (_: Exception) {
             null
+        }
+    }
+
+    /**
+     * 获取车辆 OTA 固件升级信息（调用 GET /carownerservice/v3/api/fota/getCurrentVersion）。
+     */
+    fun getVehicleOtaInfo(vin: String): VehicleOtaInfo? {
+        val cleanVin = vin.ifBlank { session.selectedVin }
+        if (cleanVin.isBlank()) return null
+        val routeHost = session.route?.appRegion?.takeIf { it.isNotBlank() } ?: runCatching { ensureRoute().appRegion }.getOrNull() ?: "https://appgateway.leapmotor.com"
+        val candidates = listOf(
+            "https://appgateway.leapmotor.com/carownerservice/v3/api/fota/getCurrentVersion",
+            "$routeHost/carownerservice/v3/api/fota/getCurrentVersion",
+            "https://app-gw-global-master.leapmotor.com/carownerservice/v3/api/fota/getCurrentVersion"
+        ).distinct()
+
+        val signedQuery = oldSignedParams(params = mapOf("vin" to cleanVin), includeTimespan = true)
+        val headers = combinedAppAndGatewayHeaders(params = signedQuery, needLogin = true)
+
+        var lastError: String? = null
+        for (url in candidates) {
+            // 1. 官方实机抓包首选通道：GET 请求 + signedQuery 签名参数 + 包含 signedQuery 参数的完整网关鉴权签名
+            try {
+                val resp = http(url, method = "GET", headers = headers, query = signedQuery)
+                android.util.Log.i("LeapOtaDebug", "getVehicleOtaInfo GET url=$url, resp=$resp")
+                val code = resp.optInt("code", resp.optInt("result", -1))
+                val isSuccess = code == 0 || resp.optString("message") == "请求成功"
+                if (isSuccess) {
+                    val data = resp.optJSONObject("data")
+                    return VehicleOtaInfo.fromJson(data, code.toString(), resp.optString("message"))
+                } else {
+                    lastError = resp.optString("message").ifBlank { resp.optString("msg", "查询失败($code)") }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("LeapOtaDebug", "GET failed at $url: ${e.message}")
+                lastError = e.message
+            }
+
+            // 2. 备选尝试网关 JSON POST
+            try {
+                val params = mapOf("vin" to cleanVin, "carvin" to cleanVin)
+                val resp = gatewayFetch(url, method = "POST", params = params, jsonBody = JSONObject(params))
+                android.util.Log.i("LeapOtaDebug", "getVehicleOtaInfo POST JSON url=$url, resp=$resp")
+                val code = resp.optInt("code", resp.optInt("result", -1))
+                val isSuccess = code == 0 || resp.optString("message") == "请求成功"
+                if (isSuccess) {
+                    val data = resp.optJSONObject("data")
+                    return VehicleOtaInfo.fromJson(data, code.toString(), resp.optString("message"))
+                } else {
+                    lastError = resp.optString("message").ifBlank { resp.optString("msg", "查询失败($code)") }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("LeapOtaDebug", "POST JSON failed at $url: ${e.message}")
+                if (lastError == null) lastError = e.message
+            }
+        }
+
+        if (lastError != null) {
+            throw ApiException(lastError)
+        }
+        return null
+    }
+
+    /**
+     * 重置 FOTA 状态（调用 POST /carownerservice/v3/api/fota/resetStatus）。
+     */
+    fun fotaResetStatus(vin: String): Boolean {
+        val cleanVin = vin.ifBlank { session.selectedVin }
+        if (cleanVin.isBlank()) return false
+        val signed = oldSignedParams(
+            params = mapOf("vin" to cleanVin),
+            includeTimespan = true
+        )
+        val headers = combinedAppAndGatewayHeaders(signed, needLogin = true)
+        val routeHost = session.route?.appRegion?.takeIf { it.isNotBlank() } ?: runCatching { ensureRoute().appRegion }.getOrNull() ?: "https://appgateway.leapmotor.com"
+        val url = "$routeHost/carownerservice/v3/api/fota/resetStatus"
+        return try {
+            val resp = http(url, method = "POST", headers = headers, query = signed, formBody = signed)
+            resp.optString("code") == "0" || resp.optInt("code", -1) == 0
+        } catch (_: Exception) {
+            false
         }
     }
 
