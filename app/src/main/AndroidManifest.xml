@@ -97,6 +97,40 @@
             android:foregroundServiceType="dataSync"
             android:exported="false" />
 
+        <!-- 下拉控制中心快捷磁贴 (Quick Settings Tiles) -->
+        <service
+            android:name=".tiles.HornTileService"
+            android:label="寻车"
+            android:icon="@drawable/ic_location_horn"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".tiles.LockToggleTileService"
+            android:label="车锁"
+            android:icon="@drawable/ic_phosphor_lock"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".tiles.ClimateTileService"
+            android:label="空调"
+            android:icon="@drawable/ic_phosphor_fan"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

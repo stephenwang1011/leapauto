@@ -1869,6 +1869,7 @@ private fun MyContent(
             actions = widget4x2Actions,
             onActionsChange = onWidget4x2ActionsChange
         )
+        QuickSettingsTileCard()
         TripRecordSettingCard(
             enabled = tripRecordEnabled,
             onEnabledChange = onTripRecordEnabledChange
@@ -3005,6 +3006,81 @@ private fun Widget4x2ActionsCard(
                 showDialog = false
             }
         )
+    }
+}
+
+@Composable
+private fun QuickSettingsTileCard() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = glassCardBorder(),
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "下拉控制中心快捷开关",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "支持在手机下拉通知栏添加快捷开关，单手盲按即控",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                com.leapauto.app.tiles.TilePromptHelper.TileType.values().forEach { tileType ->
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                com.leapauto.app.tiles.TilePromptHelper.requestAddTile(context, tileType)
+                            },
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.glassInsetSurface,
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(tileType.iconRes),
+                                contentDescription = tileType.title,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "+ ${tileType.title}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
