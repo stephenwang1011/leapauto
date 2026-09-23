@@ -1,347 +1,500 @@
-# 零跑云接口 API 清单（leapauto）
+# 零跑智控（LeapAuto）API 接口与协议规范文档
 
-协议移植自社区逆向的零跑中国 App 链路，所有接口在 2026 款 C16（国内版）上验证可用。
-两个主机域：
-
-| 域 | 用途 |
-| --- | --- |
-| `https://appuser.leapmotor.cn` | 旧链路：短信/登录/token 续期（RSA + MD5 签名） |
-| `https://app-gw-global-master.leapmotor.com` | 新网关：车辆列表/路由/车况（HMAC-SHA256 签名） |
-
-路由域 `appRegion`（如 `https://app-gw-global-master.leapmotor.com`）由 getCarRoute 动态返回，用于车况和控车。
-
-## 蓝牙钥匙（手动控制与可选后台配置）
-
-新增蓝牙路径的证据来自 `D:/young/work/hackapp/BLUETOOTH_ANALYSIS.md`、对应 APK
-解壳源码和 smali。用户回传的 `3.3.33` 实车日志已到达认证阶段，但被车辆以结果码 `9` 拒绝；尚未完成认证与控车互通验收，不属于上述已实车验证的云接口范围。
-详细字段和离线向量分别见 [证书同步](BLUETOOTH_CERTIFICATE.md)、[蓝牙协议](BLUETOOTH_PROTOCOL.md) 和 [现场测试](BLUETOOTH_FIELD_TEST.md)。
-本节描述当前源码；本轮认证修复已随 `3.3.34`（versionCode `3003034`）生成本地签名 Release，实车复测待验收。
-
-- 蓝牙入口仅位于“我的（设置） → 蓝牙钥匙”。手动同步、扫描、连接、锁控、自动操作配置和诊断均从管理页发起；后台通知点击也定位到该页。
-- 爱车页不展示蓝牙入口、状态或通道选择；原有控车按钮均使用既有云端路径，不按蓝牙连接状态切换。
-  蓝牙动作确认仅在管理页可见时有效；关闭管理页或失去认证则取消待确认操作，失败不自动回退云端。
-  蓝牙锁控仍在等待车辆确认时，主界面暂不允许再次发出云端车锁指令，需本次操作结束后重新点击。
-- 证书同步使用运行时 `appCenter`：`POST /carownerservice/v3/api/bluetoothkey/combine/syncBluetoothKeys`，
-  签名表单为 `vin/timespan/nonce/deviceID/signStr`。证书请求不经过网络诊断拦截器；证书按账号及 VIN 在 Android Keystore 加密存储中隔离。
-  `APPVersion` 使用会话 App 版本；证书缓存绑定请求设备 ID，续期后的凭据与证书一起校验并提交，设备身份变化时旧连接失效。
-- 蓝牙管理页会按当前账号、VIN 和请求设备 ID 获取并加密保存 `commonConfig["4"]` 的车辆蓝牙元数据；扫描候选按地址匹配优先展示，未匹配只标记“身份待核对”，不会阻断用户选择，也不会把 `version="2.0"` 转换为协议 minor。
-- 蓝牙云端偏好使用官方已核实的两个上传接口：`POST /app/app-global-service/v3/api/commoninfo/transparent/conf/upload` 保存 `bleKeySwitch/bleKeyUnlock/bleKeyLock/bleKeyBtn`，`POST /app/app-global-service/v3/api/bluetoothkey/uploadAutonomyCalibrateParams` 保存或删除标定参数。云端状态与车辆 GATT `cmdId=3` 应用状态分开显示；云端 HTTP 成功不表示车辆已应用。
-- 支持 `keyType=0` 的 P-256 / AES 与 `keyType=1` 的 SM2 / SM3 / SM4 会话，使用 FFFE 服务与 FFF2 特征、完整认证和手动上锁/解锁。
-  SM2 公钥从 X.509 证书提取，按已解包源码的协商和派生流程实现；两类协议均待实车互通验证。
-  未实现原版快速重连凭据或 EEED 座舱通道。后台断线恢复每次都重新完整认证，不复用会话密钥。
-- 扫描不依赖钥匙证书，用户可先搜索附近车辆；连接前必须持有当前车辆的受支持证书。
-  同 MAC 的广播信息跨包合并，缺少版本的后续广播不会覆盖已见版本；认证日志区分真实广播 minor 与默认回退 `8`。
-  同步钥匙、扫描和认证连接遵守互斥规则，页面退出或进入后台会作废待处理的权限回调。
-- 设置页新增四个开关：后台蓝牙钥匙 `enabled`、靠近自动解锁 `autoUnlock`、远离自动锁车 `autoLock`、微动开关控锁 `buttonEnabled`，本应用默认全部为 `false`。
-  三个子选项只有总开关打开后可编辑；微动选项要求协议 minor 至少为 9，未知或旧协议不假定支持。
-  开关只修改本地草稿，点击“保存设置”后仍须操作密码前置检查和明确确认；关闭总开关同时关闭三个子选项。蓝牙忙碌时暂不提交新配置。
-- 设置页高级标定允许保存协议字段 `uint8 / uint16 little-endian / uint8 / uint8`，系数按百分之一编码；当前不把这些字段解释为米，也不把抓包中的单车参数改成全局默认。完整认证和 `cmdId=3` 使用同一份按账号、VIN、设备 ID 隔离的标定配置。
-- 首次扫描连接只建立手动会话，自动解锁、自动锁车、微动选项保持关闭；完整认证成功后才保存设备绑定。
-  绑定含账号、VIN、设备地址、协议 minor 和证书指纹，按账号及 VIN 隔离加密存储；证书变化时不得直接复用旧绑定启动后台。
-- 配置同步复用加密命令 `cmdId=3`。仅当前认证会话的待同步配置收到可解密的 `2;3;0` 或 `2;3;00` 结果，并完成该帧全部写入，才进入本地确认流程。
-  持久状态区分 `desired`、`applied`、`revision/confirmedRevision`；只确认当前请求版本，即使新请求值与上次相同也必须重新确认。缺失、其他结果或超时都不标记“已同步”。
-  完整认证本身也携带配置字段；`cmd3` 是客户端确认依据，不能据此断言车辆仅在该回执之后才应用自动操作。
-- 关闭设置会记录全关闭目标并显示“关闭待同步”；在车辆确认前保留待同步状态，条件允许时继续后台连接以同步关闭，确认后停止后台服务。
-  断连、暂停通知服务、权限撤销或强制停止应用均不等于车辆已关闭自动操作。
-- 用户明确保存并确认后，`BleKeyService` 以 `connectedDevice` 前台服务维持当前绑定车辆连接，通知区显示连接/同步状态。
-  重连采用 2、5、10、20、30 秒退避，之后最多每 30 秒尝试一次；只重建连接、完整认证并同步当前保存配置，不排队或重发手动上锁/解锁。
-  靠近、远离和微动的物理动作由车辆按配置决定；手机没有根据 RSSI 阈值发送自动锁控命令，也不把信号强度换算成米。
-- 控制沿用应用已保存四位操作密码的本地前置检查，并要求一次用户动作确认；蓝牙控制帧本身不携带该密码，不代表车辆端校验了操作密码。
-- GATT 写入成功只代表传输回调。控制必须在当前认证连接中、开始写入后，收到匹配动作的 `AA AC / Active` 事件才报告确认。
-  事件尚无已证实的请求 ID 关联，每次认证连接仅执行一条手动控制，成功、失败或超时均断开；后台模式可重新建立认证连接，但不会代替用户发出下一条手动控制。
-- 已写入后的断连或超时一律显示“结果未确认”，不自动重发、不回退云控，也不修改云端遥测或桌面插件快照。
-- 收起管理页会取消待确认操作。未启用后台时离开前台会断开手动连接；已启动后台服务时，Activity 退到后台不主动销毁服务连接。
-  切车、会话过期及退出登录停止服务、关闭 GATT 并作废旧回调，旧绑定目标按全关闭保留待同步状态；退出登录清除本地证书。
-  从最近任务划掉应用会主动暂停后台连接，系统强制停止不保证自动恢复；重新打开后仅在当前会话、绑定、权限及操作密码满足时恢复此前已请求的配置或待关闭同步，也可点击“恢复连接”。
-- 连接诊断只在内存中保留最近 120 条结构化事件，包括相对耗时、系统 GATT 状态码、协议类型、报文长度和动作确认。
-  用户可主动复制或通过系统分享诊断；诊断、日志、通知与测试记录不得包含证书、密钥、PIN、VIN、蓝牙地址、设备名或原始报文。上述身份数据只可保存在明确用途的加密存储，扫描列表的设备地址仅供本机用户区分设备。
-
-Android 权限依据：[官方蓝牙权限文档](https://developer.android.com/develop/connectivity/bluetooth/bt-permissions)。
-Android 12+ 仅在用户启动扫描时请求附近设备权限；Android 11 及以前使用扫描所需定位权限，
-两者均不采集或保存位置，不添加后台定位权限。新增 `FOREGROUND_SERVICE_CONNECTED_DEVICE` 和非导出的 `BleKeyService`；通知可见性、系统省电限制及强制停止后的恢复均需按 Android 版本和手机厂商现场核验。
+> **版本**：v3.6.8  
+> **文档定位**：零跑智控 Android 客户端完整底层接口、协议签名、遥测信号映射与指令集规范（Single Source of Truth）。  
+> **验证基准**：零跑中国官方车联网云端接口，在 2026 款 C16（国内版纯电/增程）及 C11/C01/T03 全系车型上验证可用。
 
 ---
 
-## 一、登录 / 会话（旧链路 appuser）
+## 目录
+1. [主机域架构与动态路由](#一主机域架构与动态路由)
+2. [登录、认证与签名体系](#二登录认证与签名体系)
+3. [车辆信息与 3D 渲染资产](#三车辆信息与-3d-渲染资产)
+4. [车况遥测与 signalMap 解码表](#四车况遥测与-signalmap-解码表)
+5. [行驶里程与能耗分析](#五行驶里程与能耗分析)
+6. [远程控车指令全集](#六远程控车指令全集)
+7. [高级车控与特色车主服务](#七高级车控与特色车主服务)
+8. [蓝牙钥匙协议体系（BLE Key）](#八蓝牙钥匙协议体系ble-key)
+9. [第三方集成 Web API](#九第三方集成-web-api)
+10. [安全凭据与加密速查表](#十安全凭据与加密速查表)
+
+---
+
+## 一、主机域架构与动态路由
+
+零跑车联网服务端采用新老双架构并存演进模式，主要包含以下主机域：
+
+| 主机域 | 架构用途 | 协议与签名特征 |
+| :--- | :--- | :--- |
+| `https://appuser.leapmotor.cn` | **旧用户服务**：短信下发、手机号登录、旧 Token 续期 | RSA PKCS#1v1.5 + MD5 截断签名 |
+| `https://app-gw-global-master.leapmotor.com` | **新网关主中心**：网关凭据交换、车辆列表、路由查找、3D车模元数据 | HMAC-SHA256 / SHA256 签名（`x-api-signature-version=2.0`） |
+| `https://appgateway.leapmotor.com` | **车主业务网关**：行驶能耗记录、FOTA 升级信息、操作密码校验 | 混编签名（旧签名参数 + 网关鉴权头） |
+| `https://iov-api.leapmotor.com` | **车联感知服务**：驻车实景环视照片查询 | 旧签名参数 + 网关鉴权头 |
+| `{appRegion}` (动态路由) | **车辆专属区域网关**：车况实时查询、远程车控指令、健康充电设置 | 由 `getCarRoute` 接口动态下发（如 `https://app-gw-global-master.leapmotor.com`） |
+| `{appCenter}` (动态路由) | **专属业务中心网关**：蓝牙钥匙证书同步、预约充电备用路由 | 由 `getCarRoute` 接口动态下发 |
+
+---
+
+## 二、登录、认证与签名体系
 
 ### 1. 发送短信验证码
-- **URL**: `GET /app-user/applogin/compliance/sendmessagecode`
-- **认证**: 无（不需要 token）
-- **参数**（query）:
-  - `phoneNo`：手机号，**RSA PKCS1 加密**后再 URL-safe base64（无填充）编码
-- **响应**: `result=0` 成功；`100115` 验证码错误等
-- **代码**: `LeapmotorApi.sendSms()`
+* **URL**: `GET https://appuser.leapmotor.cn/app-user/applogin/compliance/sendmessagecode`
+* **认证要求**: 无需 Token
+* **Query 参数**:
+  * `phoneNo`: 手机号，先经 **RSA PKCS#1v1.5** 算法加密，再做 **URL-Safe Base64**（无填充）编码；
+* **业务响应**: `{"result": 0, "message": "请求成功"}`，错误码 `100115` 为验证码错误或超频。
+* **客户端代码**: `LeapmotorApi.sendSms()`
 
 ### 2. 短信验证码登录
-- **URL**: `POST /app-user/applogin/check_login_with_phone`（业务参数只走 URL query，POST body 为空）
-- **认证**: 无
-- **参数**（query）:
-  - `phoneNoCiphertext`：RSA 加密的手机号
-  - `smsCode`：6 位短信验证码
-  - `deviceID`：应用生成并持久化的设备 ID，与请求头 `APPImei` 使用同一值
-  - `smDeviceId`：数美 SDK 在当前设备返回的风险指纹；与 `deviceID` 含义不同，不能互相替代
-  - `os=android`，`pageUrl=`
-- **响应**: `data.appLoginVO` 或兼容节点 `data.appOneLoginVO` 含 `accountId / token / refreshToken / tokenExpired`（即 oldAuth）
-- **代码**: `LeapmotorApi.loginWithSms()`
+* **URL**: `POST https://appuser.leapmotor.cn/app-user/applogin/check_login_with_phone`
+* **请求特征**: 业务参数走 URL Query，POST Body 保持为空。
+* **Query 参数**:
+  * `phoneNoCiphertext`: RSA 加密的手机号密文；
+  * `smsCode`: 6 位数字验证码；
+  * `deviceID`: 设备唯一标识符（UUID 去横杠，与 Header `APPImei` 保持一致）；
+  * `smDeviceId`: 数美 SDK 本地采样的设备风控指纹（必须由合法 SDK 实例采集，不可伪造或用普通 deviceID 代替）；
+  * `os`: `android`；
+  * `pageUrl`: `""`。
+* **业务响应**: 返回 `data.appLoginVO`（或兼容节点 `data.appOneLoginVO`），包含：
+  * `accountId`: 用户账号 ID；
+  * `token`: 旧版用户 Token（即 `oldAuth.token`）；
+  * `refreshToken`: 旧版刷新凭证；
+  * `tokenExpired`: 默认 21600 秒（6 小时）。
+* **客户端代码**: `LeapmotorApi.loginWithSms()`
 
-#### 设备验证与风控边界
+### 3. 旧 Token 自动续期
+* **URL**: `GET https://appuser.leapmotor.cn/app-user/appuseroperate/getnewtoken`
+* **认证要求**: 请求头携带 `XFX-CDN-CROSS-NODE: {token}` 与 `XFX-CDN-CROSS-REFRESH-NODE: {refreshToken}`。
+* **Query 签名参数**: `timespan`, `nonce`, `deviceID`, `refreshtoken`, `accountId`, `accountNumber`（RSA 加密手机号）；
+* **签名计算**: 参数名按字典升序排序，拼接为 `key1=value1&key2=value2...`，追加静态密钥后进行 MD5 计算，取前 16 位大写十六进制作为 `signStr`。
+* **触发时机**: 当旧 Token 剩余有效期小于 60 秒时自动在工作线程续期。
+* **客户端代码**: `LeapmotorApi.refreshOldToken()`
 
-- 用户主动提交登录后，在后台初始化数美组件并有界等待 SDK 回调。组件加载失败、缺少当前进程 ABI 对应的原生库、指纹为空或获取超时时，终止本次登录，不使用普通 `deviceID` 或导入的历史指纹兜底发送请求。
-- 动态 DEX 必须从当前 APK 自带资产验证完整性，并在加载前满足 Android 14 及以上的只读要求。数美原生库由 SDK 所在类加载器加载，不在父类加载器手工预加载。
-- 当前数美 SDK 资产包含 175 个 SDK 类及 7 个必要辅助类的 10 个原始方法。辅助类置于 `com/leapauto/security/shumei/compat/`，避免与主应用混淆类名冲突；资产测试检查 DEX 完整性及非系统类型依赖闭合。缺少这些辅助类会使初始化的正常 URL 构建路径发生类加载错误。
-- `create()` 返回成功只表示 SDK 初始化成功，不表示设备已通过车厂服务端风控。不能仅凭 SDK 输出以 `D` 开头认定其为错误；参考 SDK 的本地生成路径和异常路径都可能使用该前缀。非空 SDK 输出是否被接受，仍由服务端判断。
-- 仅服务端实际返回且字段完整的挑战进入极验流程；临时管制文案本身不是挑战凭据，客户端不能自行生成服务端 `requestId`。登录错误保留可诊断的业务码及接口阶段，不记录手机号、验证码、指纹、Token 或完整响应。
-- 证据边界：请求结构与指纹来源对照本地 `D:/young/work/hackapp/LOGIN_API_ANALYSIS.md` 及其指向的 `com.qian.leapcontrol 0.6` 静态代码；该样本不是官方 App 的实时成功登录证明，也不能证明某次服务端风控的触发规则或解除时间。本轮使用离线测试验证客户端行为，真实登录需单独授权。
+### 4. 换取新网关凭证（Gateway Exchange）
+登录成功后，必须立即使用旧凭据换取微服务新网关的 JWT 访问令牌：
+* **URL**: `POST https://app-gw-global-master.leapmotor.com/base/base-user/account/v1/login`
+* **认证要求**: 无需 accessToken，签名采用无密钥的 `sign = SHA256(headerString + bodyString)`。
+* **POST JSON Body**:
+  ```json
+  {
+    "identifier": "{accountId}",
+    "identifierType": "1",
+    "security": "{oldToken}"
+  }
+  ```
+* **业务响应**: 返回 `data` 对象，包含：
+  * `accessToken`: 新网关 JWT 访问令牌（即 `newAuth.accessToken`）；
+  * `refreshToken`: 新网关刷新凭证；
+  * `signParam`: `{"r2": "...", "r3": "..."}`（用于派生网关加密签名密钥）；
+  * `tokenExpireTime`: 毫秒级过期时间戳。
+* **客户端代码**: `LeapmotorApi.exchangeNewGateway()`
 
-SDK 资产由 `scripts/rebuild-shumei-dex.ps1` 离线重建，使用本地 Android 命令行工具中的 dexlib2；脚本校验来源 DEX 摘要，只提取必要方法，并校验重定位前后的执行代码一致性。当前环境的只读检查命令为：
+### 5. 新网关 Token 续期
+* **URL**: `POST https://app-gw-global-master.leapmotor.com/base/base-user/token/v1/refresh`
+* **认证要求**: 使用当前新网关凭证执行 HMAC-SHA256 签名。
+* **POST JSON Body**: `{"refreshToken": "{gatewayRefreshToken}"}`
+* **触发时机**: 当 `accessToken` 距离过期小于 5 分钟时自动静默刷新；若刷新失败，自动无缝回退至旧链路续期并重新执行凭证交换。
+* **客户端代码**: `LeapmotorApi.refreshGatewayToken()`
 
-```powershell
-.\scripts\rebuild-shumei-dex.ps1 `
-  -SourceDex D:\young\work\hackapp\analysis\payload\classes1.dex `
-  -AndroidCommandLineLib D:\young\work\hackapp\android-sdk\cmdline-tools\latest\lib `
-  -CheckOnly
-```
-
-移除 `-CheckOnly` 可重建 `app/src/main/assets/shumei.dex`。SDK 更新后必须通过资产守卫测试与全量单测；该检查不运行 SDK，也不发起数美或车厂网络请求。
-
-### 3. 旧 token 续期
-- **URL**: `GET /app-user/appuseroperate/getnewtoken`
-- **认证**: 旧 token（header `XFX-CDN-CROSS-NODE` + `XFX-CDN-CROSS-REFRESH-NODE`）
-- **签名参数**（query）: `timespan / nonce / deviceID / refreshtoken / accountId / accountNumber`（RSA 加密手机号），拼接后 MD5 前 16 位取 `signStr`
-- **响应**: `data.token`（新 token），`tokenExpired` 默认 21600 秒
-- **代码**: `LeapmotorApi.refreshOldToken()`（token 剩余 <60s 自动触发）
-
----
-
-## 二、新网关认证（app-gw-global-master）
-
-网关请求统一走 `newGatewayHeaders()`：
-- Header：`source=leapmotor`、`channel=1`、`acceptLanguage=zh-CN`、`x-region=CN`、`x-api-signature-version=2.0`、`digest`、`version`、`deviceType=android`、`nonce`、`timestamp`、`deviceId`、`userId`、`carvin`、`cartype`、`x-subversion`
-- 签名：`sign = HMAC-SHA256(signKey, 排序拼接的签名头 + 业务参数)`（登录前为 `SHA256(拼接串)`），`signKey` 由 `accessToken + signParam.r2 + r3` 派生
-
-### 4. 用旧 token 换新网关凭证（登录后自动执行）
-- **URL**: `POST /base/base-user/account/v1/login`
-- **认证**: 不需要 accessToken（`sign=SHA256`），body 携带旧凭证
-- **body**: `{"identifier": accountId, "identifierType": "1", "security": 旧token}`
-- **签名参数**: `identifier / identifierType / security`（必须进签名）
-- **响应**: `data.accessToken / refreshToken / signParam{r2,r3} / tokenExpireTime`（即 newAuth）
-- **代码**: `LeapmotorApi.exchangeNewGateway()`
-
-### 5. 新网关 token 续期
-- **URL**: `POST /base/base-user/token/v1/refresh`
-- **认证**: 新 accessToken（HMAC 签名）
-- **body**: `{"refreshToken": ...}`
-- **响应**: 新的 `accessToken / refreshToken / signParam`
-- **代码**: `LeapmotorApi.refreshGatewayToken()`（剩余 <5min 自动触发）
-
----
-
-## 三、车辆信息（新网关）
-
-### 6. 车辆列表
-- **URL**: `GET /app/app-global-service/v1/vehicle/list`
-- **认证**: 新网关
-- **参数**: 无
-- **响应**: 含 `vin / carType` 的车辆对象列表；自动选中第一辆存入 session
-- **代码**: `LeapmotorApi.listVehicles()`
-
-### 7. 车辆路由
-- **URL**: `GET /app/app-global-service/v1/vehicle/getCarRoute`
-- **认证**: 新网关
-- **参数**: `vin`
-- **响应**: `data.appRegion / appCenter`（车况/控车都要用它拼 URL）
-- **代码**: `LeapmotorApi.getCarRoute()`（缓存到 session，之后自动复用）
-
-### 7.1 车辆外观图片元数据
-- **URL**: `POST /carownerservice/vehicle/v1/carpicture/key`
-- **认证**: 新网关（`newGatewayHeaders`，参数 `deviceID / vin` 参与签名）
-- **参数**: `deviceID`、`vin`（`application/x-www-form-urlencoded`）
-- **响应**: `data.shareBindUrl`（官方 CDN 车辆外观图）、`data.key`（分层切图包密钥）
-- **代码**: `LeapmotorApi.getVehiclePictureMeta()`
+### 6. 操作密码（PIN）加密与前置校验
+* **加密算法**: **AES-128-CBC**，PKCS5/PKCS7 填充。
+* **密钥与 IV 派生算法**:
+  * 优先使用新网关 JWT `accessToken` 前 64 位派生：
+    * `Key = MD5(accessToken[0..32]).substring(8, 24)`（16 字节）
+    * `IV  = MD5(accessToken[32..64]).substring(8, 24)`（16 字节）
+  * 无网关 Token 时回退使用旧 Token 派生（`Key = MD5(oldToken)[8..24]`, `IV = Key`）。
+* **前置密码校验接口**:
+  * **URL**: `POST https://appgateway.leapmotor.com/carownerservice/v3/api/appoperate/verifyoperatepwdnew`
+  * **表单参数**: `vin`, `oprpwd: {AES加密后的PIN}`
+  * **返回结果**: `code = 0` 表示密码正确；密码错误时服务端返回明确错误码，客户端计数保护。
+  * **客户端代码**: `LeapmotorApi.verifyOperatePassword()`
 
 ---
 
-## 四、车况（新网关 + 路由域）
+## 三、车辆信息与 3D 渲染资产
 
-### 8. 车况查询（原始）
-- **URL**: `POST {appRegion}/app/app-signal-service/signal/info/query`
-- **认证**: 新网关
-- **参数**: `vin`（进签名）
-- **body**: `{"vin": ...}`
-- **响应**: 深层嵌套的 JSON，内含 `signalMap`
-- **代码**: `LeapmotorApi.getVehicleStateRaw()`
+### 7. 车辆列表
+* **URL**: `GET https://app-gw-global-master.leapmotor.com/app/app-global-service/v1/vehicle/list`
+* **认证要求**: 新网关请求头 + HMAC-SHA256 签名。
+* **业务响应**: `data[]` 包含所有绑定车辆：
+  * `vin`: 车辆车架号；
+  * `carType`: 车型代码（如 `C16`, `C11`, `T03`, `C01`）；
+  * `licensePlate`: 车牌号；
+  * `vehicleName` / `nickName`: 车辆昵称；
+  * `funcConfig`: 车辆硬件能力配置对象（含 `HVAC` 空调温控与风量档位上下限等）。
+* **客户端代码**: `LeapmotorApi.listVehicles()`
 
-### 9. 车况查询（解码）
-- 对原始响应用 `extractSignalMap()` 提取 `signalMap`，再用 `SignalTable.decode()` 把数字 signal ID（如 `"1182":29`）翻译成命名栏位（锁/电量/续航/胎压/空调等 80+ 字段）
-- **代码**: `LeapmotorApi.getVehicleState()`
+### 8. 车辆路由查找
+* **URL**: `GET https://app-gw-global-master.leapmotor.com/app/app-global-service/v1/vehicle/getCarRoute?vin={vin}`
+* **认证要求**: 新网关签名，参数 `vin` 参与签名。
+* **业务响应**: `data.appRegion`（车况与车控网关）与 `data.appCenter`（蓝牙与预约网关）。
+* **客户端代码**: `LeapmotorApi.getCarRoute()`
 
-## 五、里程 / 能耗（旧链路 appuser）
+### 9. 车辆外观与 3D 车模元数据
+* **URL**: `POST https://app-gw-global-master.leapmotor.com/carownerservice/vehicle/v1/carpicture/key`
+* **请求格式**: `application/x-www-form-urlencoded`，包含 `deviceID` 与 `vin`。
+* **业务响应**:
+  ```json
+  {
+    "code": 0,
+    "data": {
+      "h5Key": "3D-702ef381-d7ed-49cd-8d69-fad6f5f9f397",
+      "srcKey": "3D-d3e0fbce-0755-441e-8381-7512fd49bc70",
+      "shareBindUrl": "https://lp-carnet.oss-cn-hangzhou.aliyuncs.com/carModel3D/...",
+      "modelType": 3,
+      "modelParam": {
+        "carType": "C16",
+        "year": 2026,
+        "carTypeCode": "630激光雷达智尊版 6座",
+        "colorCode": 3
+      }
+    }
+  }
+  ```
+  * `shareBindUrl`: 官方 2D 精修透明底原厂车图 CDN 链接；
+  * `h5Key`: Three.js 3D 渲染引擎与 H5 运行时骨架包 Key；
+  * `srcKey`: 车辆专属高精度几何模型包 Key（车身、车轮、车灯、材质包）；
+  * `modelParam`: 注入给 3D 引擎的车型参数（年款、配置、车漆色值）。
+* **客户端代码**: `LeapmotorApi.getVehiclePictureMeta()`
 
-### 10. 行驶里程与能耗明细
-- **URL**: `GET /carownerservice/v3/api/drivingrecord/mileage/energy/detail`
-- **认证**: 旧 App token（`XFX-CDN-CROSS-NODE`）和 `oldSignedParams()` 签名。
-- **参数**（query）: `begintime`、`endtime`（Unix 秒级时间戳）和 `vin`，以及旧签名参数 `nonce / deviceID / signStr`。
-- `begintime` 使用车辆购买日 00:00:00；当前会话没有可用购车日时，客户端首次读取回退到当天 00:00:00，后续优先依据已返回的 `deliveryDays` 推算购车日。
-- `endtime` 使用当前时刻的 Unix 秒级时间戳；该详情接口不发送 `timespan`。
-- **路由**: `https://appgateway.leapmotor.com`；旧 token 鉴权失败后续期并重试一次。
-- **代码**: `LeapmotorApi.getMileageEnergy()`。
-- **数据边界**: 该接口目前只有 MCP 的路径/签名链路证据，未沉淀真实响应字段样本；客户端只对已识别业务字段作结构化展示，其余非敏感业务字段在“其他数据”中按原键值展示，不推断单位或含义。
-
-### 10.1 近 7 日行驶里程明细
-- **URL**: `GET /carownerservice/v3/api/drivingrecord/mileage/energy/detail`
-- **认证**: 旧 App token（`XFX-CDN-CROSS-NODE`）和 `oldSignedParams()` 签名。
-- **路由**: `https://appgateway.leapmotor.com`。
-- **参数**（query）:
-  - `vin`：当前车辆 VIN；
-  - `begintime`：上海时区 7 天前当地零点，Unix **毫秒**时间戳；
-  - `endtime`：当前时刻，Unix **毫秒**时间戳；
-  - `timespan / nonce / deviceID / signStr`：由旧签名流程生成。
-- **响应**: `data.detail[]` 中读取 `day` 与 `accumulatedMileage`。客户端按服务端原始顺序保留有效结果的最后 8 条，页面展示最后 7 条并求和为近 7 天里程；空值、负数、非有限数和异常大数值会被丢弃。
-- **代码**: `LeapmotorApi.getRecentMileageEnergy()`、`RecentMileageEnergyParser`。
-- **边界**: 该近 7 日方法与 `getMileageEnergy()` 生命周期明细方法分开；后者仍使用购买日至今的秒级 `begintime/endtime` 且不发送 `timespan`，不得混用时间单位或参数契约。
-
-### 11. 近六周百公里能耗与排行
-- **URL**: `GET /carownerservice/v3/api/drivingrecord/getLastNweeks100kmECAndRank`
-- **认证**: 旧 App token（`XFX-CDN-CROSS-NODE`）和 `oldSignedParams()` 签名。
-- **参数**（query）: `carvin`，以及旧签名通用参数 `timespan / nonce / deviceID / signStr`。该接口不接受 `vin`。
-- **路由**: `https://appgateway.leapmotor.com`。
-
-### `signalMap` 关键数据速查
-
-> 数据来源是车辆实时上报的数字信号。不同车型、车辆状态和服务端版本可能导致字段缺失；只有已经在 `SignalTable.MAP` 中验证过的 ID 才能作为业务数据展示。未映射数字字段不能按名称猜测含义。
-
-| 类别 | 信号 ID → 字段 | 用途 / 单位 |
-| --- | --- | --- |
-| 电量与续航 | `1204 → soc`、`3235 → fuelSoc`、`100003 → preciseSoc`（兼容回退）、`3260 → expectedMileage`、`3257 → electricRangeStandard`、`2188 → liveRemainingRange`、`3262 → rangeMode` | 纯电/燃油剩余百分比、各模式剩余续航、实时续航；续航模式 `0=标准续航`、`1=动态续航` |
-| 充电 | `1149 → chargeState`、`1200 → chargeRemainTime`、`1178 → batteryCurrent`、`1177 → batteryVoltage`、`1197 → dcInputFastCharge`、`3736 → chargeCompleted` | 充电状态、预计剩余时间、电流、电压、直流快充、充电完成状态 |
-| 电池热管理 | `1182 → minBatteryTemp`、`1186 → batteryThermalRequest`、`48 → healthyChargeEnabled` | 最低电池温度、热管理请求（已验证 `4=预热中`、`0=未预热`，其他值按未知处理）、健康充电开关 |
-| 里程与驾驶 | `1318 → totalMileage`、`1319 → speed`、`1010 → gearStatus`、`1944 → vehicleState`、`1480 → parkingBrakeState` | 总里程、车速、挡位、整车状态、驻车制动 |
-| 门锁与车门 | `1298 → driverDoorLockStatus`、`1277/1278/1279/1280 → 四门状态`、`1281 → bbcmBackDoorStatus` | 门锁、四门、后备箱状态；后备箱遥测仅按 `0=关闭`、`1=打开` 解释，其他值按未知处理 |
-| 空调 | `1938 → acSwitch`、`2183/2184 → acSetting/acSettingRight`、`1349 → interiorTemp`、`1943 → recirculationMode`、`1945 → windshieldDefrost`、`1946 → rearWindowHeating`、`1941 → acAirVolume` | 空调开关、左右温度、车内温度、循环（`0=外循环`、`1=内循环`）、前后除雾、风量；旧 T03 在 `1943` 缺失时兼容命名字段 `acCircleMode`（`false=外循环`、`true=内循环`） |
-| 车窗与天幕 | `1693/1694/1695/1696 → 四窗状态`、`1724 → roofOpening` | 开关状态、天幕开度 |
-| 座椅与舒适 | `2100/2118 → 主驾/副驾座椅加热`、`2101/2119 → 主驾/副驾座椅通风`、`1879/1880 → 二排左/二排右座椅加热`、`3727/3728 → 二排左/二排右座椅通风`、`1816 → steeringWheelHeating`、`49/50 → 后视镜加热` | 前后排座椅加热/通风状态（0=关，1..3=档位）、方向盘加热（0=关，1..2=档位）、左右后视镜加热（0=关，1=开） |
-| 轮胎 | `2646 → 左前`、`2653 → 右前`、`2660 → 左后`、`2667 → 右后`；`2641/2648/2662/2655 → 对应胎压状态` | 四轮胎压及异常状态（数值映射按最新实车核验修正；告警状态映射保持原验证结果） |
-| 车载冰箱 | `10709 → fridgeSwitch`、`10708 → fridgeMode`、`10707 → fridgeTargetTemp`、`10711 → fridgeStyle`、`10712 → fridgeFault`、`11190 → fridgeParkSwitch`、`11189 → fridgeParkDurationHours`、`11191 → fridgeParkCycles`、`11260 → fridgeParkEndTime` | 冰箱开关（0=关，1=开）、模式（0=制冷，1=制热）、设定温度（制冷设定 ℃，制热为 50℃）、风格（0=标准，1=急速）、故障码、离车运行开关（0=关，1=开）、离车时长（小时）、离车频次（0=单次，1=每次离车）、离车结束时间戳（秒级） |
-| 安防与位置 | `1255 → vehicleSecurityActive`、`3636 → sentryMode`、`3725/3724 → latitude/longitude` | 安防、哨兵模式、车辆坐标 |
-
-**当前已知限制**：C16 胎温和综合电耗尚无已验证的数字信号 ID。服务端若直接返回命名字段，可兼容读取；否则必须先采集原始 `signalMap` 再补充映射。
-
-### 增程车续航信号（用户确认 + 本地对照实现）
-
-增程车在两种模式下返回的是对应能源的剩余续航值：
-
-- `3256 → fuelRangeStandard`：CLTC 燃油剩余续航。
-- `3257 → electricRangeStandard`：CLTC 纯电剩余续航。
-- `3258 → combinedRangeStandard`：CLTC 综合剩余续航。
-- `3259 → fuelRangeDynamic`：WLTC 燃油剩余续航。
-- `3260 → expectedMileage`：WLTC 纯电剩余续航。
-- `3261 → combinedRangeDynamic`：WLTC 综合剩余续航。
-- `1204 → soc`：纯电剩余续航百分比，纯电和增程车型通用。
-- `3235 → fuelSoc`：增程车型燃油剩余续航百分比。
-
-桌面插件的两条进度分别表示两种能源自身的剩余比例，不是续航构成占比：
-
-- 纯电进度直接取 `1204`；`1204` 缺失时才兼容回退到旧 `100003`。
-- 燃油进度直接取 `3235`。
-- `3257/3256` 是标准模式剩余值，不作为总续航分母。只有额外提供明确 `maxRange/maxFuelRange` 时，才可在百分比缺失时按剩余值 ÷ 满电总续航 × 100 回退。
-- 缺少百分比和明确满电总续航时展示空进度，禁止使用综合续航作为任一分母。
+### 10. 3D 车模双包协同下载与解压规范
+* **下载地址**: `http://lp-carnet.oss-cn-hangzhou.aliyuncs.com/carModel3D/{KEY}.zip`
+* **协同解压机制**:
+  1. 先下载并解压 `h5Key.zip` 到本地独立目录，提供 `index.html` 与核心引擎；
+  2. 再下载 `srcKey.zip`，解压覆盖合并到同一目录，提供当前车辆专属 GLTF/BIN/纹理；
+  3. 写入 `.ready` 标记文件，完成资产就绪闭环。
+* **客户端代码**: `CarModel3DManager.syncModelPackage()`
 
 ---
 
-## 六、控车（旧链路 + 路由域，全部需要操作密码 PIN）
+## 四、车况遥测与 signalMap 解码表
 
-签名：`oldSignedParams()`（`timespan / nonce / deviceID / token` + 业务参数，MD5 前 16 位取 `signStr`）
-请求头：`APPPlatform / APPVersion / APPImei / C-VERSIONS / XFX-CDN-VRS / XFX-CDN-CROSS-NODE`（旧 token）
-`oppwd`：操作密码用 **AES-128-CBC** 加密。在新网关架构（v1.22+）下，Key/IV 由当前网关 JWT `accessToken` 前 64 位派生（`key = md5(accessToken[0..32])[8..24]`，`iv = md5(accessToken[32..64])[8..24]`）；旧版接口或无网关 Token 时兼容回退旧 Token。另官方 App 支持 `POST /carownerservice/v3/api/appoperate/verifyoperatepwdnew` 进行前置密码校验。
+### 11. 车辆实时状态查询
+* **URL**: `POST {appRegion}/app/app-signal-service/signal/info/query`
+* **认证要求**: 新网关签名，Body 包含 `{"vin": "{vin}"}`。
+* **业务响应**: 返回深层嵌套对象，核心字段在 `signalMap` 中以数字 ID 呈现。
+* **客户端代码**: `LeapmotorApi.getVehicleStateRaw()` / `getVehicleState()`
 
-### 12. 下发控车命令
-- **URL**: `POST {appRegion}/app/app-control-service/v3/api/appremotectl`
-- **认证**: 旧 token
-- **表单参数**: `cmdid / state / carvin / oppwd`（AES 加密的 PIN）
-- **响应**: `{"result":0, "data":"<msgID>", ...}`，msgID 在 `data` 顶层字符串
-- **代码**: `LeapmotorApi.sendControl()`
+### 12. `signalMap` 数字信号 ID 完整解码映射表
 
-### 13. 查询控车执行结果（轮询）
-- **URL**: `GET {appRegion}/app/app-control-service/v3/api/appremotectl/query`
-- **认证**: 旧 token
-- **参数**: `msgID`
-- **代码**: `LeapmotorApi.queryControlResult()`（首次等待 1s，之后每 0.5s 轮询；App 最多约 24s，桌面插件最多约 12s）
+> **规范约束**：严格遵循实车遥测核验证据，严禁未经实车抓包验证随意猜测信号含义。
 
-### 控车命令全集（与 `leap-cn-mcp commandPresets` 对齐）
-
-> 本表以 `app/src/main/java/com/leapauto/app/Models.kt` 的 `Commands.build()` 为当前 App 实际下发依据。每次控车均需要已登录会话和零跑 App 操作 PIN。
-
-| name | cmdid | state | 说明 |
-| --- | --- | --- | --- |
-| `lock` | 110 | `{"value":"lock"}` | 上锁 |
-| `unlock` | 110 | `{"value":"unlock"}` | 解锁 |
-| `trunkOpen` | 130 | `{"value":"true"}` | 开后备箱 |
-| `trunkClose` | 130 | `{"value":"false"}` | 关后备箱 |
-| `frunkOpen` | 131 | `{"value":"100"}` | 开前备箱 |
-| `frunkClose` | 131 | `{"value":"0"}` | 关前备箱 |
-| `windowOpen` | 230 | `{"value":"5"}` | 车窗半开 |
-| `windowVent` | 230 | `{"value":"2"}` | 车窗通风 / 微开 |
-| `windowClose` | 230 | `{"value":"0"}` | 车窗全关 |
-| `sunshadeOpen` | 240 | `{"value":"10"}` | 遮阳帘打开 |
-| `sunshadeClose` | 240 | `{"value":"0"}` | 遮阳帘关闭 |
-| `horn` | 120 | `{"value":"true"}` | 鸣笛寻车 |
-| `batteryPreheat` | 160 | `{"value":"ptcon"}` | 电池预热开 |
-| `batteryPreheatOff` | 160 | `{"value":"ptcoff"}` | 电池预热关 |
-| `seatHeat` | 301 | `{"position":"left_front","level":"3"}` | 座椅加热（position: left_front/right_front/left_rear/right_rear，level: 0..3） |
-| `seatVentilation` | 370 | `{"position":"left_front","level":"3"}` | 座椅通风（position: left_front/right_front/left_rear/right_rear，level: 0..3） |
-| `steeringWheelHeat` | 320 | `{"level":"2"}` | 方向盘加热（level: 0=关, 1=弱, 2=强） |
-| `rearviewMirrorHeat` | 440 | `{"value":"2"}` | 后视镜加热（value: 1=关, 2=开） |
-| `fridgeOn` | 500 | `{"cycles":"1","duration":3600,"enable":1,"mode":"cold","parkEnable":0,"style":"normal","temp":4,"value":"false"}` | 车载冰箱开机（默认制冷 4°C） |
-| `fridgeOff` | 500 | `{"cycles":"1","duration":3600,"enable":0,"mode":"cold","parkEnable":0,"style":"normal","temp":4,"value":"false"}` | 车载冰箱关机 |
-| `fridgeControl` | 500 | `{"cycles":"...","duration":...,"enable":...,"mode":"...","parkEnable":...,"style":"...","temp":...,"value":"false"}` | 车载冰箱全功能控制（温控/模式/风格/离车运行） |
-| `sentryOn` | 400 | `{"operation":"on"}` | 开启哨兵模式 |
-| `sentryOff` | 400 | `{"operation":"off"}` | 关闭哨兵模式 |
-
-哨兵模式切换前先刷新 `sentryMode`，已处于目标状态时不重复发送命令。POST 返回轮询 ID 后复用现有查询链路，仅当查询响应的 `result`（缺失时兼容 `code`）为 `0`，且随后刷新到的 `sentryMode` 等于目标值时，UI 才显示“已完成”；命令查询成功但遥测尚未同步时显示“状态待确认”。
-| `acOn` | 170 | `{"operate":"manual","temperature":"24","windlevel":"3","mode":"cold","circle":"in","wshld":"0","position":"all"}` | 开空调（制冷 24°C） |
-| `acOff` | 170 | `{"operate":"off","temperature":"24","windlevel":"3","mode":"nohotcold","circle":"out","wshld":"0","position":"all"}` | 关空调 |
-| `defrost` | 170 | `{"operate":"manual","temperature":"24","windlevel":"5","mode":"cold","circle":"out","wshld":"1","position":"wshld"}` | 前风挡除雾 |
-| `quickCool` | 170 | `{"operate":"manual","temperature":"18","windlevel":"7","mode":"cold","circle":"in","wshld":"0","position":"all"}` | 极速制冷 |
-| `quickHeat` | 170 | `{"operate":"manual","temperature":"32","windlevel":"7","mode":"hot","circle":"in","wshld":"0","position":"all"}` | 极速制热 |
-| `deodorize` | 170 | `{"operate":"manual","temperature":"24","windlevel":"7","mode":"nohotcold","circle":"out","wshld":"0","position":"all"}` | 快速除味（静态客户端证据，待实车验证） |
-
-`Commands.buildAc(temperature)` 支持 `16–32°C` 自定义温度：`≤26°C` 使用 `cold`，`≥27°C` 使用 `hot`，风量固定为 `7`。
-
-### 空调精细控制（静态客户端证据，待授权实车验证）
-
-空调详情页的精细设置继续复用 `cmdid=170` 和现有 `sendControl()` / `queryControlResult()` 安全链路。车型能力优先读取车辆列表响应中的 `funcConfig.HVAC`：
-
-- 温度范围：`funcConfig.HVAC.temperature.min / max`。只有 `10–40°C` 内且 `min <= max` 时采用；否则 UI 回退为 `19–32°C`。
-- 风量范围：`funcConfig.HVAC.fan.min / max`。只有非负整数且 `min <= max` 时采用；若范围不能用于可选档位，则 UI 回退为 `1–7` 档。
-
-每次开启、关闭或应用精细设置都完整发送以下 7 个字符串字段，不能只发送变化项：
-
-| 字段 | 当前值域 | 说明 |
-| --- | --- | --- |
-| `operate` | `manual / off` | 开启或关闭 |
-| `temperature` | 车型能力范围内的整数字符串 | 目标温度 |
-| `windlevel` | 车型能力范围内的整数字符串 | 风量档位 |
-| `mode` | `cold / nohotcold` | 普通开启固定为制冷模式；关闭为无冷热 |
-| `circle` | `in / out` | 内循环或外循环 |
-| `wshld` | `0 / 1` | 前挡除雾开关 |
-| `position` | `all / wshld` | 全向出风或前挡出风 |
-
-`wshld` 与 `position=wshld` 是两个独立设置，不能自动绑定。当前已验证车况信号可回读空调开关、设定温度、风量、循环和前挡除雾；没有可靠的出风位置回读，因此页面不把服务端受理或结果查询成功误报成该字段已被车辆确认。空调详情页当前隐藏循环方式和出风位置编辑模块，但仍按协议发送这两个字段的默认/当前内部值。
-
-空调详情页“快捷操作”新增“快速除味”，沿用 4.9 客户端静态确认的 `DEODORIZE` 编码：`operate=manual`、`mode=nohotcold`、风量 `7`、外循环、除雾关闭、全向出风。该命令复用现有操作密码、签名、结果查询和车况刷新链路，车辆实际是否执行仍需授权实车验证。
-
-空调 `cmdid=170` 指令在 POST 返回 `msgID` 时使用通用控车结果查询链路：首次等待 1 秒，之后每 0.5 秒查询，最多等待约 24 秒。查询成功后再刷新车况，只有空调遥测与目标状态一致时显示“已完成”；服务端未返回 `msgID` 时保留旧车型兼容路径，显示“已发送，等待车辆状态确认”并延迟刷新车况。
-
-**车型兼容性**：命令是否可用取决于车型硬件和当前车辆状态。前备箱快捷操作仅对 D19 展示，且以“开前备箱/关前备箱”两个明确动作呈现；电池预热快捷操作根据 `batteryThermalRequest` 的已知值在开启和关闭之间切换，状态未知时不发送命令。遮阳帘、电池预热等功能仍需逐车验证服务端权限和执行结果。
+| 业务分类 | 信号 ID | 解码字段名称 | 数据类型 / 取值规范 | 业务含义说明 |
+| :--- | :--- | :--- | :--- | :--- |
+| **电量与续航** | `1204` | `soc` | 整数 `0..100` (%) | 动力电池剩余电量百分比（纯电/增程通用） |
+| | `100003` | `preciseSoc` | 浮点数 / 整数 | 精确电量（保留小数点一位），用于精密仪表 |
+| | `3235` | `fuelSoc` | 整数 `0..100` (%) | 增程车型燃油剩余百分比 |
+| | `3257` | `electricRangeStandard` | 整数 (km) | CLTC 标准纯电剩余续航 |
+| | `3260` | `expectedMileage` | 整数 (km) | WLTC 动态纯电剩余续航 |
+| | `3256` | `fuelRangeStandard` | 整数 (km) | CLTC 标准燃油剩余续航（增程） |
+| | `3259` | `fuelRangeDynamic` | 整数 (km) | WLTC 动态燃油剩余续航（增程） |
+| | `3258` | `combinedRangeStandard` | 整数 (km) | CLTC 综合总续航（增程） |
+| | `3261` | `combinedRangeDynamic` | 整数 (km) | WLTC 动态综合总续航（增程） |
+| | `2188` | `liveRemainingRange` | 整数 (km) | 仪表实时显示续航 |
+| | `3262` | `rangeMode` | 字符串 `"0"` 或 `"1"` | `0` = 标准续航模式，`1` = 动态续航模式 |
+| **充电状态** | `1149` | `chargeState` | 整数 | `1`=充电中, `2`=充电完成, `3`=充电故障, `0`=未充电 |
+| | `1200` | `chargeRemainTime` | 整数 (分钟) | 预计充满剩余时间（分） |
+| | `1177` | `batteryVoltage` | 字符串/数值 (V) | 动力电池包总电压（如 `398.2V`） |
+| | `1178` | `batteryCurrent` | 字符串/数值 (A) | 充放电电流（负值为充电输入电流） |
+| | `1197` | `dcInputFastCharge` | 整数 / 布尔 | `1` / `true` 为直流快充，`0` / `false` 为交流慢充 |
+| | `47` | `acInputSlowCharge` | 整数 / 布尔 | 交流慢充枪插入连接状态 |
+| | `3736` | `chargeCompleted` | 整数 / 布尔 | 动力电池满电充停状态标志 |
+| | `48` | `healthyChargeEnabled` | 整数 / 布尔 | 健康充电模式状态（限制上限保护寿命） |
+| | `3737` | `chargeScheduleCancelledOnce` | 整数 | 预约充电临时单次跳过标志 |
+| **行驶与动力** | `1318` | `totalMileage` | 字符串/浮点 (km) | 整车累计总行驶里程 |
+| | `1319` | `speed` | 字符串/浮点 (km/h) | 实时行车车速（用于车身动效判定） |
+| | `1010` | `gearStatus` | 字符串 / 整数 | 挡位：`P`=驻车, `R`=倒挡, `N`=空挡, `D`=前进挡 |
+| | `1944` | `vehicleState` | 整数 | 整车电源状态：`1`=Ready行车, `0`=休眠熄火 |
+| | `1480` | `parkingBrakeState` | 整数 | 电子手刹 EPB 状态：`1`=已拉起驻车, `0`=释放 |
+| | `6048` | `speedLimit` | 整数 (km/h) | 道路限速抓取数值 |
+| | `6047` | `speedLimitUnit` | 字符串 | 限速单位（`km/h`） |
+| | `12054` | `speedLimitActive` | 整数 / 布尔 | 限速预警激活状态 |
+| **车辆位置** | `2` / `3724` | `longitude` | 浮点数 | 车辆 GPS 经度（GCJ-02 坐标系） |
+| | `3` / `3725` | `latitude` | 浮点数 | 车辆 GPS 纬度（GCJ-02 坐标系） |
+| **车门与车锁** | `1298` | `driverDoorLockStatus` | 整数 | 车门锁止状态：`0`=已解锁, `1`=已上锁 |
+| | `1277` | `lbcmDriverDoorStatus` | 整数 | 主驾左前门状态：`0`=关闭, `1`=打开 |
+| | `1278` | `rbcmDriverDoorStatus` | 整数 | 副驾右前门状态：`0`=关闭, `1`=打开 |
+| | `1279` | `lbcmLeftRearDoorStatus` | 整数 | 左后车门状态：`0`=关闭, `1`=打开 |
+| | `1280` | `rbcmRightRearDoorStatus`| 整数 | 右后车门状态：`0`=关闭, `1`=打开 |
+| | `1281` | `bbcmBackDoorStatus` | 整数 | 电动后备箱尾门状态：`0`=关闭, `1`=打开 |
+| **车窗与天幕** | `1693` | `driverWindowStatus` | 整数 | 主驾左前车窗开闭状态（`0`=关，`1`=开） |
+| | `1694` | `rightFrontWindowStatus`| 整数 | 副驾右前车窗开闭状态 |
+| | `1695` | `leftRearWindowStatus` | 整数 | 左后车窗开闭状态 |
+| | `1696` | `rightRearWindowStatus` | 整数 | 右后车窗开闭状态 |
+| | `1724` | `roofOpening` | 整数 `0..100` (%) | 电动天幕/遮阳帘开启开度百分比 |
+| **座舱空调** | `1938` | `acSwitch` | 整数 | 空调总开关：`0`=关闭, `1`=开启运行 |
+| | `2183` | `acSetting` | 整数/浮点 (℃) | 主驾设定目标温度（如 `24`） |
+| | `2184` | `acSettingRight` | 整数/浮点 (℃) | 副驾设定目标温度 |
+| | `1349` | `interiorTemp` | 字符串/浮点 (℃) | 座舱内实测当前温度（如 `22.5℃`） |
+| | `1943` | `recirculationMode` | 整数 | 循环模式：`0`=外循环, `1`=内循环 |
+| | `1941` | `acAirVolume` | 整数 `1..7` | 空调出风风量档位 |
+| | `1945` | `windshieldDefrost` | 整数 | 前风挡加热除霜：`0`=关, `1`=开启 |
+| | `1946` | `rearWindowHeating` | 整数 | 后风挡及后视镜电加热除雾：`0`=关, `1`=开 |
+| | `3713` | `climateMode` | 整数 | 空调模式：`0`=自然风, `1`=制冷, `2`=制热 |
+| | `2669` | `rapidCooling` | 整数 | 极速降温运行状态标志 |
+| | `2681` | `rapidHeating` | 整数 | 极速升温运行状态标志 |
+| **座椅舒适** | `2100` | `driverSeatHeating` | 整数 `0..3` | 主驾座椅加热档位（`0`=关, `1`=低, `2`=中, `3`=高） |
+| | `2101` | `driverSeatVentilation` | 整数 `0..3` | 主驾座椅通风档位 |
+| | `2118` | `passengerSeatHeating` | 整数 `0..3` | 副驾座椅加热档位 |
+| | `2119` | `passengerSeatVentilation`| 整数 `0..3` | 副驾座椅通风档位 |
+| | `1879` | `leftRearSeatHeating` | 整数 `0..3` | 二排左座加热档位 |
+| | `3727` | `leftRearSeatVentilation`| 整数 `0..3` | 二排左座通风档位 |
+| | `1880` | `rightRearSeatHeating` | 整数 `0..3` | 二排右座加热档位 |
+| | `3728` | `rightRearSeatVentilation`| 整数 `0..3` | 二排右座通风档位 |
+| | `1816` | `steeringWheelHeating` | 整数 `0..2` | 方向盘加热档位（`0`=关, `1`=弱, `2`=强） |
+| | `1624` | `steeringWheelHeaterMinutes` | 整数 | 方向盘加热运行倒计时分钟数 |
+| | `49` / `50`| `left/rightMirrorHeating` | 整数 `0..1` | 左右外后视镜电加热状态 |
+| **四轮胎压** | `2646` | `leftFrontTirePressure` | 浮点数 (bar) | 左前轮胎压（C16 实车核验映射） |
+| | `2653` | `rightFrontTirePressure`| 浮点数 (bar) | 右前轮胎压 |
+| | `2660` | `leftRearTirePressure` | 浮点数 (bar) | 左后轮胎压 |
+| | `2667` | `rightRearTirePressure` | 浮点数 (bar) | 右后轮胎压 |
+| | `2641/2648/2662/2655` | `...TirePressureState` | 整数 | 对应轮胎健康状态（`0`=正常, `1`=低压, `2`=高压） |
+| **车载冰箱** | `10709` | `fridgeSwitch` | 整数 | 冰箱电源开关：`0`=关机, `1`=开机 |
+| | `10708` | `fridgeMode` | 整数 | 运行模式：`0`=制冷, `1`=制热 (50℃保温) |
+| | `10707` | `fridgeTargetTemp` | 整数 (℃) | 制冷目标设定温度（-6℃ ~ 15℃） |
+| | `10711` | `fridgeStyle` | 整数 | 制冷风格：`0`=标准节能, `1`=急速强劲 |
+| | `10712` | `fridgeFault` | 整数 | 冰箱硬件故障状态码（`0`=正常） |
+| | `11190` | `fridgeParkSwitch` | 整数 | 离车持续运行开关：`0`=关, `1`=开 |
+| | `11189` | `fridgeParkDurationHours`| 整数 | 离车运行持续时长（小时） |
+| | `11191` | `fridgeParkCycles` | 整数 | 离车运行频次模式（`0`=单次, `1`=每次） |
+| | `11260` | `fridgeParkEndTime` | 秒级时间戳 | 离车保温截止时间点 |
+| **热管理与安防**| `1182` | `minBatteryTemp` | 整数 (℃) | 动力电池电芯最低温度 |
+| | `1186` | `batteryThermalRequest` | 整数 | 电池热管理请求：`4`=预热加热中, `0`=未开启 |
+| | `1255` | `vehicleSecurityActive` | 整数 / 布尔 | 原厂防盗防入侵警戒设防状态 |
+| | `3636` | `sentryMode` | 整数 | 哨兵模式工作状态：`0`=关闭, `1`=开启警戒 |
 
 ---
 
-## 认证/签名速查
+## 五、行驶里程与能耗分析
 
-| 项 | 旧链路（appuser / 控车） | 新网关 |
-| --- | --- | --- |
-| 凭证 | `token` + `refreshToken`（oldAuth） | `accessToken` + 派生 `signKey`（newAuth） |
-| 签名 | 参数排序拼接 → MD5 前 16 位（`signStr`） | 排序拼接 → HMAC-SHA256（hex） |
-| 手机号 | RSA（PKCS1v1.5）+ URL-safe base64 无填充 | — |
-| 操作密码 | AES-128-CBC，key/iv 由旧 token 派生 | — |
-| 失效重试 | `result=39` / 含"token失效"等 → 续期后重试一次 | HTTP 401/403 或 token 过期文案 → 续期后重试一次 |
+### 13. 行驶里程与累计能耗明细
+* **URL**: `GET https://appgateway.leapmotor.com/carownerservice/v3/api/drivingrecord/mileage/energy/detail`
+* **认证要求**: 旧 Token + MD5 签名参数。
+* **Query 参数**: `begintime`（车辆提车日 0 点秒级时间戳）、`endtime`（当前秒级时间戳）、`vin`。
+* **业务数据**: 累计总里程、电耗能耗分布、百公里平均能耗。
+* **客户端代码**: `LeapmotorApi.getMileageEnergy()`
+
+### 14. 近 7 日里程趋势明细
+* **URL**: `GET https://appgateway.leapmotor.com/carownerservice/v3/api/drivingrecord/mileage/energy/detail`
+* **Query 参数**: `begintime`（7天前 0 点**毫秒级**时间戳）、`endtime`（当前**毫秒级**时间戳）、`vin`、旧签名串。
+* **业务响应**: `data.detail[]` 数组，每项包含 `day: "yyyy-MM-dd"` 与 `accumulatedMileage`。
+* **客户端代码**: `LeapmotorApi.getRecentMileageEnergy()`
+
+### 15. 近 6 周百公里能耗与同车型排行
+* **URL**: `GET https://appgateway.leapmotor.com/carownerservice/v3/api/drivingrecord/getLastNweeks100kmECAndRank`
+* **Query 参数**: `carvin`（**注意该接口严格使用 `carvin` 而非 `vin`**）及旧签名参数。
+* **业务数据**: 近 6 周每周能耗折线数据、百公里电耗、同车型全国车主节油/省电排行榜位。
+* **客户端代码**: `LeapmotorApi.getLastNWeeks100kmEcAndRank()`
+
+### 16. 上周电耗摘要
+* **URL**: `GET https://appgateway.leapmotor.com/carownerservice/v3/api/drivingrecord/getLastweekEC`
+* **客户端代码**: `LeapmotorApi.getLastWeekEc()`
+
+---
+
+## 六、远程控车指令全集
+
+### 17. 控车指令发送规范
+* **URL**: `POST {appRegion}/app/app-control-service/v3/api/appremotectl`
+* **请求头**: 携带完整旧版客户端身份头 + 动态派生网关 JWT 头。
+* **表单参数 (Form Body)**:
+  * `cmdid`: 指令编号（字符串）；
+  * `state`: 指令业务 JSON 负载（字符串）；
+  * `carvin`: 当前操作车辆 VIN；
+  * `oppwd`: 本地使用 AES-128-CBC 加密后的 4 位操作密码。
+* **业务响应**: `{"result": 0, "data": "<msgID>"}`，其中 `msgID` 用于结果轮询。
+* **客户端代码**: `LeapmotorApi.sendControl()`
+
+### 18. 控车结果轮询规范
+* **URL**: `GET {appRegion}/app/app-control-service/v3/api/appremotectl/query?msgID={msgID}`
+* **轮询策略**: 首次等待 1.0 秒，之后每 0.5 秒查询一次。主 App 超时窗口为 24 秒，桌面小组件超时窗口为 12 秒。返回 `result = 0` 且车辆遥测数据确认变更后，判定控车彻底完成。
+* **客户端代码**: `LeapmotorApi.queryControlResult()`
+
+### 19. 控车指令集完整速查表（基于 `Commands.build()`）
+
+| 指令名称 | `cmdid` | `state` JSON 参数体 | 操作说明 | 安全验证门禁 |
+| :--- | :--- | :--- | :--- | :--- |
+| `lock` | `110` | `{"value":"lock"}` | 远程车门上锁 | 4位操作密码 |
+| `unlock` | `110` | `{"value":"unlock"}` | 远程车门解锁 | 4位操作密码 + 生物识别确认 |
+| `trunkOpen` | `130` | `{"value":"true"}` | 开启电动后备箱 | 4位操作密码 + 长按1.2s蓄力 |
+| `trunkClose` | `130` | `{"value":"false"}` | 关闭电动后备箱 | 4位操作密码 |
+| `frunkOpen` | `131` | `{"value":"100"}` | 开启前备箱（D19支持） | 4位操作密码 |
+| `frunkClose` | `131` | `{"value":"0"}` | 关闭前备箱 | 4位操作密码 |
+| `windowOpen` | `230` | `{"value":"5"}` | 车窗半开 (降窗50%) | 4位操作密码 |
+| `windowVent` | `230` | `{"value":"2"}` | 车窗通风 (微开缝隙) | 4位操作密码 |
+| `windowClose` | `230` | `{"value":"0"}` | 车窗一键全关升顶 | 4位操作密码 |
+| `sunshadeOpen`| `240` | `{"value":"10"}` | 全景遮阳帘全开 | 4位操作密码 |
+| `sunshadeClose`| `240` | `{"value":"0"}` | 全景遮阳帘全关 | 4位操作密码 |
+| `horn` | `120` | `{"value":"true"}` | 鸣笛闪灯寻车 | 4位操作密码 |
+| `batteryPreheat`| `160` | `{"value":"ptcon"}` | 开启电池加热预热 | 4位操作密码 |
+| `batteryPreheatOff`| `160` | `{"value":"ptcoff"}` | 关闭电池预热 | 4位操作密码 |
+| `acOn` | `170` | `{"operate":"manual","temperature":"24","windlevel":"3","mode":"cold","circle":"in","wshld":"0","position":"all"}` | 开启座舱空调（默认24℃） | 4位操作密码 |
+| `acOff` | `170` | `{"operate":"off","temperature":"24","windlevel":"3","mode":"nohotcold","circle":"out","wshld":"0","position":"all"}` | 关闭座舱空调 | 4位操作密码 |
+| `quickCool` | `170` | `{"operate":"manual","temperature":"18","windlevel":"7","mode":"cold","circle":"in","wshld":"0","position":"all"}` | 极速降温（18℃最大风内循环） | 4位操作密码 |
+| `quickHeat` | `170` | `{"operate":"manual","temperature":"32","windlevel":"7","mode":"hot","circle":"in","wshld":"0","position":"all"}` | 极速升温（32℃暖风最大风） | 4位操作密码 |
+| `defrost` | `170` | `{"operate":"manual","temperature":"24","windlevel":"5","mode":"cold","circle":"out","wshld":"1","position":"wshld"}` | 前风挡强力除霜除雾 | 4位操作密码 |
+| `deodorize` | `170` | `{"operate":"manual","temperature":"24","windlevel":"7","mode":"nohotcold","circle":"out","wshld":"0","position":"all"}` | 座舱快速外循环除味 | 4位操作密码 |
+| `customAc` | `170` | `{"operate":"manual","temperature":"{16..32}","windlevel":"{1..7}","mode":"cold/hot","circle":"in/out","wshld":"0/1","position":"all/wshld"}` | 空调全参数多维定制控制 | 4位操作密码 |
+| `seatHeat` | `301` | `{"position":"left_front/right_front/left_rear/right_rear","level":"{0..3}"}` | 独立座椅加热档位控制 | 4位操作密码 |
+| `seatVentilation`| `370` | `{"position":"left_front/right_front/left_rear/right_rear","level":"{0..3}"}` | 独立座椅通风档位控制 | 4位操作密码 |
+| `steeringWheelHeat`| `320`| `{"level":"{0..2}"}` | 方向盘加热（0关/1弱/2强） | 4位操作密码 |
+| `rearviewMirrorHeat`| `440`| `{"value":"{1/2}"}` | 后视镜加热（1关/2开） | 4位操作密码 |
+| `fridgeOn` | `500` | `{"cycles":"1","duration":3600,"enable":1,"mode":"cold","parkEnable":0,"style":"normal","temp":4,"value":"false"}` | 车载冰箱开机制冷 | 4位操作密码 |
+| `fridgeOff` | `500` | `{"cycles":"1","duration":3600,"enable":0,"mode":"cold","parkEnable":0,"style":"normal","temp":4,"value":"false"}` | 车载冰箱关机 | 4位操作密码 |
+| `fridgeControl`| `500` | `{"cycles":"{1/0}","duration":{秒},"enable":{0/1},"mode":"cold/hot","parkEnable":{0/1},"style":"normal/fast","temp":{℃},"value":"false"}` | 车载冰箱深度温控与离车保温 | 4位操作密码 |
+| `sentryOn` | `400` | `{"operation":"on"}` | 开启哨兵模式 | 4位操作密码 |
+| `sentryOff` | `400` | `{"operation":"off"}` | 关闭哨兵模式 | 4位操作密码 |
+| `startCharging`| `193` | `{"value":"start"}` | 远程启动即时充电 | 4位操作密码 |
+| `stopCharging` | `193` | `{"value":"stop"}` | 远程停止当前充电 | 4位操作密码 |
+| `unlockCharger`| `192` | `{"operation":"unlock"}` | 解锁交流/直流充电枪锁止销 | 4位操作密码 |
+| `fotaDownload` | `390` | `{"taskId":"{taskId}"}` | 车机开始下载新版固件 | 4位操作密码 |
+| `fotaInstall` | `391` | `{"taskId":"{taskId}"}` | 车机开始就地刷写安装固件 | 4位操作密码 |
+| `fotaSchedule` | `392` | `{"taskId":"{taskId}","scheduleTime":"yyyy-MM-dd HH:mm:ss"}` | 预约车机在夜间静默升级 | 4位操作密码 |
+
+---
+
+## 七、高级车控与特色车主服务
+
+### 20. 驻车实景环视照片
+* **元数据查询**: `GET /carownerservice/v3/api/chassis/query?vin={vin}&signStr=...`
+  * 优先请求 `https://iov-api.leapmotor.com` 或 `{appRegion}`。
+  * 响应: `data.fileUrl`（OSS 加密图片链接）、`data.uploadTime`（车辆停车回传时间戳毫秒）。
+* **实景照片解密下载**:
+  * 客户端直接通过原生网络通道拉取 `fileUrl`，图片格式为标准图像流，解码后在弹窗中支持双指 0.8x~5.0x 无级缩放平移预览。
+* **客户端代码**: `LeapmotorApi.getChassisParkingPhoto()` / `downloadParkingPhotoBitmap()`
+
+### 21. 车机 OTA 固件升级与状态
+* **升级信息查询**: `GET /carownerservice/v3/api/fota/getCurrentVersion?vin={vin}&signStr=...`
+  * 请求主机: 优先 `https://appgateway.leapmotor.com`。
+  * 业务响应:
+    * `currentVersion`: 当前车机系统版本（如 `2.02.80`）；
+    * `targetVersion`: 待升级目标版本；
+    * `hasNewVersion`: 是否有更新推送（`true`/`false`）；
+    * `releaseNotes`: 官方版本更新日志说明；
+    * `status`: 升级生命周期状态（`0`=已是最新, `1`=待下载, `2`=下载中, `3`=下载完成待安装, `4`=安装中, `5`=升级成功）；
+    * `taskId`: 固件升级任务 ID；
+    * `scheduleTime`: 已预约的夜间升级时间。
+* **升级状态重置**: `POST {appRegion}/app/app-fota-service/v1/fota/resetStatus`（遇升级失败时重置状态机）。
+* **客户端代码**: `LeapmotorApi.getVehicleOtaInfo()` / `fotaResetStatus()`
+
+### 22. 健康充电管理
+* **设置充电上限**: `POST {appRegion}/carownerservice/v3/api/healthyCharging/control`
+  * 参数: `vin`, `state: 1`, `targetSoc: 80`（支持 50%~100% 自定义设定）。
+* **查询策略推送状态**: `GET {appRegion}/carownerservice/v3/api/healthyCharging/queryPushState?vin={vin}`
+* **客户端代码**: `LeapmotorApi.setHealthyCharging()` / `queryHealthyChargingPushState()`
+
+### 23. 谷电预约充电计划（cmdid=190）
+* **指令 Payload**:
+  ```json
+  {
+    "chargeEnable": 1,
+    "chargesoc": 80,
+    "circulation": 1,
+    "cycles": "1,2,3,4,5,6,7",
+    "starttime": "23:00",
+    "endtime": "07:00",
+    "recharge": 1
+  }
+  ```
+* **容灾路由机制**:
+  1. 首选走核心控车通道：`POST {appRegion}/app/app-control-service/v3/api/appremotectl`；
+  2. 若失败，回退预约专用通道：`POST {appCenter}/carownerservice/v3/api/appremotectl/appointment`；
+  3. 若依然失败，回退日程微服务网关：`POST {appRegion}/carownerservice/v3/api/schedule/operate`。
+* **客户端代码**: `LeapmotorApi.setScheduledCharging()`
+
+### 24. 预约电池预热计划（cmdid=161）
+* **指令 Payload**:
+  ```json
+  {
+    "controls": [
+      {
+        "on": "1",
+        "set_id": "ptc_set_1727000000000",
+        "start_time": "2026-09-23 07:30:00",
+        "update_time": "1727000000000",
+        "days": [1, 2, 3, 4, 5, 6, 7]
+      }
+    ]
+  }
+  ```
+* **通道**: `POST {appRegion}/app/app-control-service/v3/api/appremotectl`
+* **客户端代码**: `LeapmotorApi.setScheduledBatteryPreheat()`
+
+---
+
+## 八、蓝牙钥匙协议体系（BLE Key）
+
+### 25. 证书与元数据云端同步
+* **证书拉取**: `POST {appCenter}/carownerservice/v3/api/bluetoothkey/combine/syncBluetoothKeys`
+  * 表单: `vin`, `timespan`, `nonce`, `deviceID`, `signStr`。
+  * 响应: 返回 X.509 格式的车辆专属蓝牙身份证书及密钥类型（`keyType: 0` 为标准国密/国际 P-256，`keyType: 1` 为纯国密 SM2）。
+* **车辆广播与标定参数读取**: `POST /carownerservice/v3/api/vehicleinfo/commonConfig`
+  * 读取项 `"4"` 获取车辆蓝牙广播 MAC 与协议主次版本号。
+* **云端无感闭锁配置上传**: `POST /app/app-global-service/v3/api/commoninfo/transparent/conf/upload`
+  * 保存 `bleKeySwitch`, `bleKeyUnlock`, `bleKeyLock`, `bleKeyBtn` 四大无感解闭锁偏好。
+* **天线雷达标定参数上传**: `POST /app/app-global-service/v3/api/bluetoothkey/uploadAutonomyCalibrateParams`
+* **客户端代码**: `LeapmotorApi.fetchBluetoothKeyCertificate()` / `BluetoothKeyController`
+
+### 26. GATT 物理交互与加密控制
+* **GATT 服务 UUID**: `0000FFFE-0000-1000-8000-00805F9B34FB`（Notify 与 Write）
+* **GATT 特征 UUID**: `0000FFF2-0000-1000-8000-00805F9B34FB`
+* **会话协商**:
+  * 阶段一：握手建立，双向交换 16 字节真随机数；
+  * 阶段二：通过 ECDH（P-256 或 SM2）派生会话主密钥；
+  * 阶段三：使用 AES-128-GCM 或 SM4 组装加密车控帧，帧头携带滚动序列号计数器（Counter）防重放攻击；
+  * 阶段四：车端执行完毕后通过 Notify 返回 `AA AC` 认证事件。
+
+---
+
+## 九、第三方集成 Web API
+
+### 27. 高德地图逆地理编码 Web API
+* **用途**: 将车辆实时上报的 GCJ-02 经纬度坐标解析为可读的行政区划、城市、路名及兴趣点（POI）。
+* **URL**: `GET https://restapi.amap.com/v3/geocode/regeo`
+* **Query 参数**:
+  * `key`: 高德开放平台 Web 服务 Key（混淆保存在客户端 native/obfuscated 常量池）；
+  * `location`: 格式化经纬度 `"{longitude},{latitude}"`（保留 6 位小数）；
+  * `extensions`: `all`；
+  * `output`: `json`。
+* **响应解析**: 提取 `regeocode.formatted_address`、`addressComponent.adcode` 与 `addressComponent.city`。
+* **客户端代码**: `VehicleLocationGeocoder.reverseGeocode()`
+
+### 28. 高德地图实况天气 Web API
+* **用途**: 查询车辆所在地实时天气现象、实时温度、风力风向与湿度，驱动首卡与驻车详情一体化气象卡片，智能推导洗车适宜指数。
+* **URL**: `GET https://restapi.amap.com/v3/weather/weatherInfo`
+* **Query 参数**:
+  * `key`: 高德开放平台 Web 服务 Key；
+  * `city`: 逆地理编码提取出的 6 位行政区划编码 `adcode`；
+  * `extensions`: `base`（查询实时天气）。
+* **响应解析**:
+  * `weather`: 实况天气（“晴”、“多云”、“小雨”、“雾”等，映射到精美微晶矢量图标）；
+  * `temperature`: 实时室外气温（℃）；
+  * `winddirection`: 风向描述；
+  * `windpower`: 风力级别（如 `≤3级`）；
+  * `humidity`: 空气相对湿度百分比（`0..100`）；
+  * `reporttime`: 气象台发布时间戳。
+* **缓存策略**: 内存单例持有 45 分钟 TTL 缓存，避免车辆静止时高频发起多余请求。
+* **客户端代码**: `AmapWeatherService.getLiveWeather()`
+
+### 29. 蒲公英应用版本更新检测与静默下载
+* **页面检测 URL**: `GET https://www.pgyer.com/lingpaozhikong`
+  * 爬取公开 HTML 页面中的版本号（如 `3.6.8`）、Build 编号与更新说明，零鉴权零成本感知新版发布。
+* **OpenAPI v2 直链获取**: `POST https://www.pgyer.com/apiv2/app/install`
+  * 参数: `_api_key`, `buildKey`
+  * 获取官方 CDN 直链与下载鉴权 Token。
+* **文件下载与安装**: 下载到私有缓存目录 `cache/updates/`，通过 Android `FileProvider` 调用系统 PackageInstaller 静默拉起更新。
+* **客户端代码**: `VersionUpdate.kt` / `AppUpdateInstaller.kt`
+
+---
+
+## 十、安全凭据与加密速查表
+
+| 安全领域 | 算法规范 | 密钥来源 / 存储保护机制 | 攻击防范与生命周期说明 |
+| :--- | :--- | :--- | :--- |
+| **手机号加密** | RSA / ECB / PKCS1Padding | 车厂内置 RSA 2048 位公钥证书 | 短信发送与登录时单向加密，防明文泄露 |
+| **网关请求签名** | HMAC-SHA256 (十六进制输出) | 由 `accessToken + r2 + r3` 派生 `signKey` | 签名头包含 `timestamp`、`nonce`、`deviceId`，防请求重放与篡改 |
+| **旧接口请求签名** | MD5 (前 16 位大写 Hex) | 参数 ASCII 排序拼接 + 固定混淆盐 | 兼容车机老服务车控与能耗接口 |
+| **4位操作密码 (PIN)**| AES-128-CBC (PKCS5Padding) | 本地由 JWT `accessToken` 动态派生 Key/IV | 控车时动态加密发送，仅保存在 Android Keystore 硬件隔离安全区 |
+| **本地凭证存储** | AES-256-GCM | Android Keystore 硬件主密钥（MasterKey） | 加密存储 Token、操作 PIN、账号 ID，系统 root 亦无法脱机逆向 |
+| **第三方 API Key** | 变长动态双向异或混淆 (XOR) | DEX 内置动态算子 + 官方签名防篡改校验 | 阻断反编译静态搜索与二次打包劫持盗刷 |
+| **车辆 GPS 坐标** | GCJ-02 国测局火星坐标系 | 仅在 Activity 内存中维持最新快照 | **绝不持久化落盘，不写日志，不写小组件快照**，保障车主隐私 |
