@@ -48,6 +48,7 @@ object PhoneLocationHelper {
         }
     }
 
+    @Suppress("DEPRECATION")
     fun requestCurrentLocation(
         context: Context,
         onLocation: (Double, Double) -> Unit

@@ -175,7 +175,7 @@ fun SimpleTimePickerDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val formatted = String.format("%02d:%02d", selectedHour, selectedMinute)
+                    val formatted = String.format(java.util.Locale.ROOT, "%02d:%02d", selectedHour, selectedMinute)
                     onConfirm(formatted)
                 },
                 shape = RoundedCornerShape(10.dp),
@@ -213,7 +213,7 @@ private fun TimeStepperColumn(
             Text("▲", fontSize = 14.sp, color = MaterialTheme.statusGood, fontWeight = FontWeight.Bold)
         }
         Text(
-            text = String.format("%02d", value),
+            text = String.format(java.util.Locale.ROOT, "%02d", value),
             fontSize = 36.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface

@@ -3,18 +3,30 @@
     <item android:state_pressed="true">
         <inset android:insetLeft="4dp" android:insetTop="4dp" android:insetRight="4dp" android:insetBottom="4dp">
             <shape android:shape="rectangle">
-                <solid android:color="#E6E2E8F0" />
-                <stroke android:width="0.8dp" android:color="#F2FFFFFF" />
-                <corners android:radius="14dp" />
+                <gradient
+                    android:type="linear"
+                    android:angle="315"
+                    android:startColor="#B3E2E8F0"
+                    android:endColor="#99CBD5E1" />
+                <stroke
+                    android:width="0.5dp"
+                    android:color="#B3FFFFFF" />
+                <corners android:radius="18dp" />
             </shape>
         </inset>
     </item>
     <item>
         <inset android:insetLeft="4dp" android:insetTop="4dp" android:insetRight="4dp" android:insetBottom="4dp">
             <shape android:shape="rectangle">
-                <solid android:color="#C2FFFFFF" />
-                <stroke android:width="0.8dp" android:color="#D1FFFFFF" />
-                <corners android:radius="14dp" />
+                <gradient
+                    android:type="linear"
+                    android:angle="315"
+                    android:startColor="#59FFFFFF"
+                    android:endColor="#33EDF2F7" />
+                <stroke
+                    android:width="0.5dp"
+                    android:color="#80FFFFFF" />
+                <corners android:radius="18dp" />
             </shape>
         </inset>
     </item>

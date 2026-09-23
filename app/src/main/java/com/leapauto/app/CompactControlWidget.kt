@@ -39,6 +39,7 @@ class CompactControlWidget : AppWidgetProvider() {
                 setVehicleImage(this, appearance, session.selectedVin, context)
                 applyStaticAppearance(themeContext, this, opacity)
                 setTextViewText(R.id.txtWCTitle, ControlWidget.widgetTitle(config, appearance))
+                setTextViewText(R.id.txtWCUpdated, snapshot?.updated?.removePrefix("今天")?.trim().orEmpty())
                 val resolvedPowerType = VehiclePowerTypeResolver.resolve(
                     configuredPowerType = config.powerType,
                     carType = snapshot?.carType?.ifBlank { session.selectedCarType } ?: session.selectedCarType,
@@ -147,10 +148,12 @@ class CompactControlWidget : AppWidgetProvider() {
                     WidgetPureRangeTone.CRITICAL -> R.color.widget_range_critical
                 }
             }
-            val color = ContextCompat.getColor(context, highContrastRangeColorResource(colorResource, highContrast))
+            val themeCtx = ControlWidget.widgetThemeContext(context)
+            val onSurface = ContextCompat.getColor(themeCtx, R.color.widget_on_surface)
+            val color = ContextCompat.getColor(themeCtx, highContrastRangeColorResource(colorResource, highContrast))
+            views.setTextColor(R.id.txtWCRange, onSurface)
             views.setTextColor(R.id.txtWCSocValue, color)
             views.setTextColor(R.id.txtWCSocUnit, color)
-            views.setTextColor(R.id.txtWCRange, color)
             views.setContentDescription(
                 R.id.compactRangeContainer,
                 "剩余电量 ${presentation.socLabel}%，续航 ${presentation.rangeLabel}"
@@ -288,7 +291,8 @@ class CompactControlWidget : AppWidgetProvider() {
             listOf(R.id.txtWCTitle, R.id.txtWCSocValue, R.id.txtWCSocUnit).forEach { id ->
                 views.setTextColor(id, onSurface)
             }
-            views.setTextColor(R.id.txtWCRange, onSurfaceVariant)
+            views.setTextColor(R.id.txtWCRange, onSurface)
+            views.setTextColor(R.id.txtWCUpdated, onSurfaceVariant)
             views.setViewVisibility(R.id.txtWCLock, View.GONE)
             views.setViewVisibility(R.id.txtWCAc, View.GONE)
             ControlWidget.setImageTint(views, R.id.imgWCLock, actionIcon)

@@ -19,6 +19,7 @@ object BluetoothVehicleTripMatcher {
      * @param targetVinMac 从零跑云端配置接口获取到的该 VIN 对应蓝牙 MAC 地址
      * @param selectedCarType 当前车主选择的车型名称（如 "零跑C16", "C11" 等）
      */
+    @android.annotation.SuppressLint("MissingPermission")
     fun isMatchingVehicle(
         device: BluetoothDevice,
         targetVinMac: String?,
@@ -68,6 +69,7 @@ object BluetoothVehicleTripMatcher {
     }
 
     /** 是否属于车载音频系统（车载多媒体或车载免提） */
+    @android.annotation.SuppressLint("MissingPermission")
     fun isCarAudioClass(device: BluetoothDevice): Boolean {
         return runCatching {
             val btClass = device.bluetoothClass ?: return@runCatching false

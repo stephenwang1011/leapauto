@@ -10,6 +10,7 @@ import com.leapauto.app.SessionStore
 /** 监听系统车载蓝牙连接与断开，实现后台 0 触碰自动行程闭环 */
 class BluetoothTripReceiver : BroadcastReceiver() {
 
+    @android.annotation.SuppressLint("MissingPermission")
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
         if (action != BluetoothDevice.ACTION_ACL_CONNECTED && action != BluetoothDevice.ACTION_ACL_DISCONNECTED) {

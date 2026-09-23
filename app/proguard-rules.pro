@@ -1,3 +1,7 @@
+# Code shrinking & DEX optimizations
+-repackageclasses ''
+-allowaccessmodification
+
 # WorkManager creates this worker by class name at runtime.
 -keep class com.leapauto.app.WidgetSyncWorker {
     public <init>(android.content.Context, androidx.work.WorkerParameters);

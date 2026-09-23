@@ -955,6 +955,8 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
     }
 
+    @Deprecated("Deprecated in Java")
+    @Suppress("DEPRECATION")
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != BLUETOOTH_PERMISSION_REQUEST) return

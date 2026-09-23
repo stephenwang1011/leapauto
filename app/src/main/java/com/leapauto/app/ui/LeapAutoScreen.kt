@@ -775,7 +775,11 @@ fun LeapAutoScreen(
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
-                if (destination != ScreenDestination.HOME && destination != ScreenDestination.LOGIN) {
+                AnimatedVisibility(
+                    visible = destination != ScreenDestination.HOME && destination != ScreenDestination.LOGIN,
+                    enter = fadeIn(animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)),
+                    exit = fadeOut(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing))
+                ) {
                     TopAppBar(
                         navigationIcon = if (showVehicleLocation || showClimateControl ||
                             selectedTab == MainNavigationTabs.ACCOUNT
@@ -850,11 +854,12 @@ fun LeapAutoScreen(
                 onLoginWithRawAuth = onLoginWithRawAuth
             )
         } else {
-            val homeAlpha by animateFloatAsState(
-                targetValue = if (destination == ScreenDestination.HOME) 1f else 0f,
-                animationSpec = tween(durationMillis = 160, easing = FastOutSlowInEasing),
+            val homeParallaxProgress by animateFloatAsState(
+                targetValue = if (destination == ScreenDestination.HOME) 0f else 1f,
+                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
                 label = "home_keepalive_alpha"
             )
+            val homeAlpha = (1f - homeParallaxProgress).coerceIn(0f, 1f)
 
             // 保持主页顶部状态栏安全边距，避免顶到物理状态栏，同时在切到有 TopAppBar 的子页面时主页不发生纵向跳变
             var homeTopPadding by remember { mutableStateOf(0.dp) }
@@ -878,7 +883,11 @@ fun LeapAutoScreen(
                         )
                         .graphicsLayer {
                             alpha = homeAlpha
-                            translationX = if (destination == ScreenDestination.HOME || homeAlpha > 0.05f) 0f else -50000f
+                            translationX = if (destination == ScreenDestination.HOME || homeAlpha > 0.05f) {
+                                -size.width * 0.10f * homeParallaxProgress
+                            } else {
+                                -50000f
+                            }
                         }
                 ) {
                     HomeContent(
@@ -946,8 +955,8 @@ fun LeapAutoScreen(
                         } else {
                             val moveForward = targetState.navigationOrder > initialState.navigationOrder
                             val enterOffset = if (moveForward) 1 else -1
-                            val animation = tween<IntOffset>(durationMillis = 160, easing = FastOutSlowInEasing)
-                            val alphaAnimation = tween<Float>(durationMillis = 160, easing = FastOutSlowInEasing)
+                            val animation = tween<IntOffset>(durationMillis = 260, easing = FastOutSlowInEasing)
+                            val alphaAnimation = tween<Float>(durationMillis = 220, easing = FastOutSlowInEasing)
                             (slideInHorizontally(animationSpec = animation) { width -> width * enterOffset } +
                                 fadeIn(animationSpec = alphaAnimation)).togetherWith(
                                 slideOutHorizontally(animationSpec = animation) { width -> -width * enterOffset } +

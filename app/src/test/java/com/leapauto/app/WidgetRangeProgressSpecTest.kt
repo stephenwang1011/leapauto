@@ -44,7 +44,7 @@ class WidgetRangeProgressSpecTest {
         assertTrue(layout.contains("android:paddingBottom=\"4dp\""))
         assertEquals("42dp", actionRow.getAttribute("android:layout_height"))
         assertEquals("0dp", actionRow.getAttribute("android:layout_marginTop"))
-        assertEquals("2dp", actionRow.getAttribute("android:layout_marginBottom"))
+        assertEquals("2.5dp", actionRow.getAttribute("android:layout_marginBottom"))
         assertTrue(layout.contains("android:id=\"@+id/widgetStatusContainer\""))
         assertTrue(layout.contains("android:id=\"@+id/imgWChargingStatus\""))
         assertTrue(layout.contains("android:src=\"@drawable/ic_widget_charging_bolt\""))

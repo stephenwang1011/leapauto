@@ -17,7 +17,7 @@
         android:paddingEnd="10dp"
         android:paddingBottom="8dp">
 
-        <!-- 1. 顶部栏：车辆昵称/车型 (C16) -->
+        <!-- 1. 顶部栏：车辆昵称/车型 (C16) + 右侧更新时间 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -39,6 +39,18 @@
                 android:textColor="@color/widget_on_surface"
                 android:textSize="13sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/txtWCUpdated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="none"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text=""
+                android:textColor="@color/widget_on_surface_variant"
+                android:textSize="10.5sp"
+                android:gravity="end|center_vertical" />
         </LinearLayout>
 
         <!-- 2. 上半部：精致微缩车模展厅 (C16) -->
@@ -182,18 +194,18 @@
                 android:shadowDy="0"
                 android:shadowRadius="1.5"
                 android:text="-- km"
-                android:textColor="@color/widget_range_good"
-                android:textSize="13sp"
+                android:textColor="@color/widget_on_surface"
+                android:textSize="15sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:layout_marginEnd="4dp"
+                android:layout_marginStart="3dp"
+                android:layout_marginEnd="3dp"
                 android:text="·"
                 android:textColor="@color/widget_on_surface_variant"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
 
             <TextView
                 android:id="@+id/txtWCSocValue"
@@ -218,7 +230,8 @@
                 android:maxLines="1"
                 android:text="%"
                 android:textColor="@color/widget_range_good"
-                android:textSize="11sp" />
+                android:textSize="11sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
         <!-- 4. 底部控车按钮（车锁 + 空调） -->

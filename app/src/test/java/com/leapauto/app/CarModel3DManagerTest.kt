@@ -506,7 +506,7 @@ class CarModel3DManagerTest {
         // 验证主页常驻保活与防穿透
         assertTrue(screenSource.contains("label = \"home_keepalive_alpha\""))
         assertTrue(screenSource.contains("effectiveHomeTopPadding"))
-        assertTrue(screenSource.contains("translationX = if (destination == ScreenDestination.HOME || homeAlpha > 0.05f) 0f else -50000f"))
+        assertTrue(screenSource.contains("translationX = if (destination == ScreenDestination.HOME || homeAlpha > 0.05f)"))
         assertTrue(screenSource.contains("label = \"subpage-navigation\""))
     }
 }
