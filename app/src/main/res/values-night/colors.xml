@@ -11,12 +11,13 @@
     <color name="widget_on_surface_variant">#A3ADBB</color>
     <color name="widget_action_pressed">#334A5568</color>
     <color name="widget_action_icon">#E6EAF2</color>
-    <color name="widget_range_track">#34443A</color>
+    <color name="widget_range_track">#1FFFFFFF</color>
+    <color name="widget_range_track_border">#2EFFFFFF</color>
     <color name="widget_range_good">#4ADE80</color>
     <color name="widget_range_warning">#FFB74D</color>
     <color name="widget_range_critical">#FF8A80</color>
     <color name="widget_fuel_range">#FFB74D</color>
-    <color name="widget_fuel_range_track">#59452B</color>
+    <color name="widget_fuel_range_track">#1FFFFFFF</color>
     <color name="widget_on_surface_high_contrast">#FFFFFF</color>
     <color name="widget_range_track_high_contrast">#667085</color>
     <color name="widget_range_good_high_contrast">#69F59C</color>

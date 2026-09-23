@@ -3,6 +3,7 @@
     <item android:id="@android:id/background">
         <shape android:shape="rectangle">
             <solid android:color="@color/widget_range_track" />
+            <stroke android:width="0.5dp" android:color="@color/widget_range_track_border" />
             <corners android:radius="2dp" />
         </shape>
     </item>

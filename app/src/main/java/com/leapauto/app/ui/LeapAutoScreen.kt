@@ -775,11 +775,7 @@ fun LeapAutoScreen(
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
-                AnimatedVisibility(
-                    visible = destination != ScreenDestination.HOME && destination != ScreenDestination.LOGIN,
-                    enter = fadeIn(animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)),
-                    exit = fadeOut(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing))
-                ) {
+                if (destination != ScreenDestination.HOME && destination != ScreenDestination.LOGIN) {
                     TopAppBar(
                         navigationIcon = if (showVehicleLocation || showClimateControl ||
                             selectedTab == MainNavigationTabs.ACCOUNT
@@ -854,12 +850,11 @@ fun LeapAutoScreen(
                 onLoginWithRawAuth = onLoginWithRawAuth
             )
         } else {
-            val homeParallaxProgress by animateFloatAsState(
-                targetValue = if (destination == ScreenDestination.HOME) 0f else 1f,
-                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+            val homeAlpha by animateFloatAsState(
+                targetValue = if (destination == ScreenDestination.HOME) 1f else 0f,
+                animationSpec = tween(durationMillis = 180),
                 label = "home_keepalive_alpha"
             )
-            val homeAlpha = (1f - homeParallaxProgress).coerceIn(0f, 1f)
 
             // 保持主页顶部状态栏安全边距，避免顶到物理状态栏，同时在切到有 TopAppBar 的子页面时主页不发生纵向跳变
             var homeTopPadding by remember { mutableStateOf(0.dp) }
@@ -883,11 +878,7 @@ fun LeapAutoScreen(
                         )
                         .graphicsLayer {
                             alpha = homeAlpha
-                            translationX = if (destination == ScreenDestination.HOME || homeAlpha > 0.05f) {
-                                -size.width * 0.10f * homeParallaxProgress
-                            } else {
-                                -50000f
-                            }
+                            translationX = if (destination == ScreenDestination.HOME || homeAlpha > 0.05f) 0f else -50000f
                         }
                 ) {
                     HomeContent(
@@ -948,21 +939,8 @@ fun LeapAutoScreen(
                         .fillMaxSize()
                         .padding(padding),
                     transitionSpec = {
-                        if (initialState == ScreenDestination.LOCATION_DETAIL ||
-                            targetState == ScreenDestination.LOCATION_DETAIL
-                        ) {
-                            EnterTransition.None togetherWith ExitTransition.None
-                        } else {
-                            val moveForward = targetState.navigationOrder > initialState.navigationOrder
-                            val enterOffset = if (moveForward) 1 else -1
-                            val animation = tween<IntOffset>(durationMillis = 260, easing = FastOutSlowInEasing)
-                            val alphaAnimation = tween<Float>(durationMillis = 220, easing = FastOutSlowInEasing)
-                            (slideInHorizontally(animationSpec = animation) { width -> width * enterOffset } +
-                                fadeIn(animationSpec = alphaAnimation)).togetherWith(
-                                slideOutHorizontally(animationSpec = animation) { width -> -width * enterOffset } +
-                                    fadeOut(animationSpec = alphaAnimation)
-                            )
-                        }
+                        fadeIn(animationSpec = tween(durationMillis = 180)) togetherWith
+                            fadeOut(animationSpec = tween(durationMillis = 150))
                     },
                     label = "subpage-navigation"
                 ) { target ->
@@ -3764,9 +3742,17 @@ fun VehicleHero(
                         }
                     }
 
-                    // 状态更新时间
+                    // 状态更新时间与实况气象文字 (加点连接，样式保持完全一致，无图标)
+                    val updatedBaseText = VehicleHomeStatus.updatedLabel(statusUpdatedAtEpochMs)
+                    val weatherSummary = liveWeather?.summaryText?.takeIf { it.isNotBlank() }
+                    val statusTextWithWeather = if (weatherSummary != null) {
+                        "$updatedBaseText · $weatherSummary"
+                    } else {
+                        updatedBaseText
+                    }
+
                     Text(
-                        text = VehicleHomeStatus.updatedLabel(statusUpdatedAtEpochMs),
+                        text = statusTextWithWeather,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.80f),
                         maxLines = 1
