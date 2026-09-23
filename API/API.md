@@ -496,8 +496,8 @@
 | `horn` | `120` | `{"value":"true"}` | 鸣笛闪灯寻车 | 4位操作密码 |
 | `batteryPreheat` | `160` | `{"value":"ptcon"}` | 开启电池电芯加热预热 | 4位操作密码 |
 | `batteryPreheatOff`| `160` | `{"value":"ptcoff"}` | 停止电池加热预热 | 4位操作密码 |
-| `acOn` | `170` | `{"operate":"manual","temperature":"24","windlevel":"3","mode":"cold","circle":"in","wshld":"0","position":"all"}` | 开启空调（默认24℃制冷3挡内循环） | 4位操作密码 |
-| `acOff` | `170` | `{"operate":"off","temperature":"24","windlevel":"3","mode":"nohotcold","circle":"out","wshld":"0","position":"all"}` | 关闭座舱空调系统 | 4位操作密码 |
+| `acOn` | `170` | `{"operate":"auto","temperature":"24","windlevel":"3","mode":"cold","circle":"in","wshld":"1","position":"all"}` | 开启空调（自动温控 24℃ 制冷内循环） | 4位操作密码 |
+| `acOff` | `170` | `{"operate":"off","temperature":"24","windlevel":"3","mode":"nohotcold","circle":"in","wshld":"1","position":"all"}` | 关闭座舱空调系统 | 4位操作密码 |
 | `quickCool` | `170` | `{"operate":"manual","temperature":"18","windlevel":"7","mode":"cold","circle":"in","wshld":"0","position":"all"}` | 极速降温（18℃最大风内循环） | 4位操作密码 |
 | `quickHeat` | `170` | `{"operate":"manual","temperature":"32","windlevel":"7","mode":"hot","circle":"in","wshld":"0","position":"all"}` | 极速升温（32℃暖气最大风） | 4位操作密码 |
 | `defrost` | `170` | `{"operate":"manual","temperature":"24","windlevel":"5","mode":"cold","circle":"out","wshld":"1","position":"wshld"}` | 前挡风玻璃强效加热除霜 | 4位操作密码 |
