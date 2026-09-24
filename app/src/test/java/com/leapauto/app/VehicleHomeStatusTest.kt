@@ -19,6 +19,41 @@ class VehicleHomeStatusTest {
     }
 
     @Test
+    fun `has any window open detects list or percent presence`() {
+        assertFalse(VehicleHomeStatus.hasAnyWindowOpen(false, listOf("左前")))
+        assertFalse(VehicleHomeStatus.hasAnyWindowOpen(true, emptyList(), listOf(0, 0, 0, 0)))
+        assertTrue(VehicleHomeStatus.hasAnyWindowOpen(true, listOf("左前"), listOf(0, 0, 0, 0)))
+        assertTrue(VehicleHomeStatus.hasAnyWindowOpen(true, emptyList(), listOf(15, 0, 0, 0)))
+    }
+
+    @Test
+    fun `resolve window item returns closed vent and open descriptions`() {
+        val closed = VehicleHomeStatus.resolveWindowItem("lf", "左前", "主驾", emptyList(), 0)
+        assertFalse(closed.isOpen)
+        assertEquals("已完全关闭", closed.statusText)
+
+        val vent = VehicleHomeStatus.resolveWindowItem("rf", "右前", "副驾", listOf("右前"), 15)
+        assertTrue(vent.isOpen)
+        assertEquals("微开通风 15%", vent.statusText)
+
+        val opened = VehicleHomeStatus.resolveWindowItem("lr", "左后", "左后", emptyList(), 50)
+        assertTrue(opened.isOpen)
+        assertEquals("已开启 50%", opened.statusText)
+
+        val unclosedWithoutPercent = VehicleHomeStatus.resolveWindowItem("rr", "右后", "右后", listOf("右后"), null)
+        assertTrue(unclosedWithoutPercent.isOpen)
+        assertEquals("车窗未关", unclosedWithoutPercent.statusText)
+    }
+
+    @Test
+    fun `roof opening summary handles closed vent and opened states`() {
+        assertEquals("天窗已关闭", VehicleHomeStatus.roofOpeningSummary(null))
+        assertEquals("天窗已关闭", VehicleHomeStatus.roofOpeningSummary(0))
+        assertEquals("天窗微开 15%", VehicleHomeStatus.roofOpeningSummary(15))
+        assertEquals("天窗开启 60%", VehicleHomeStatus.roofOpeningSummary(60))
+    }
+
+    @Test
     fun `soc band follows normalized percentage thresholds`() {
         assertEquals(VehicleHomeStatus.SocBand.NORMAL, VehicleHomeStatus.socBand("40.1%"))
         assertEquals(VehicleHomeStatus.SocBand.WARNING, VehicleHomeStatus.socBand("40%"))

@@ -1551,6 +1551,7 @@ private fun HomeContent(
                             status = status,
                             todayMileage = EnergyHomeCardPolicy.todayMileage((energyState as? EnergyAnalyticsState.Success)?.data),
                             onOpenHealthyCharging = onOpenHealthyCharging,
+                            onControl = onControl,
                             modifier = Modifier
                                 .weight(1f)
                                 .height(120.dp),
@@ -4857,37 +4858,387 @@ private fun rangeColorForSoc(
 }
 
 @Composable
-private fun WindowStatusDialog(
+fun WindowStatusDialog(
+    status: VehicleStatus?,
+    onControl: ((String) -> Unit)? = null,
+    onDismiss: () -> Unit
+) {
+    WindowStatusDialog(
+        available = status?.windowStatusAvailable == true,
+        openWindows = status?.openWindows.orEmpty(),
+        leftFrontPercent = status?.leftFrontWindowPercent,
+        rightFrontPercent = status?.rightFrontWindowPercent,
+        leftRearPercent = status?.leftRearWindowPercent,
+        rightRearPercent = status?.rightRearWindowPercent,
+        roofOpeningPercent = status?.roofOpeningPercent,
+        onCloseAllWindows = onControl?.let { ctrl -> { ctrl("windowClose") } },
+        onVentWindows = onControl?.let { ctrl -> { ctrl("windowVent") } },
+        onDismiss = onDismiss
+    )
+}
+
+@Composable
+fun WindowStatusDialog(
     available: Boolean,
     openWindows: List<String>,
     onDismiss: () -> Unit
 ) {
+    WindowStatusDialog(
+        available = available,
+        openWindows = openWindows,
+        leftFrontPercent = null,
+        rightFrontPercent = null,
+        leftRearPercent = null,
+        rightRearPercent = null,
+        roofOpeningPercent = null,
+        onCloseAllWindows = null,
+        onVentWindows = null,
+        onDismiss = onDismiss
+    )
+}
+
+@Composable
+fun WindowStatusDialog(
+    available: Boolean,
+    openWindows: List<String>,
+    leftFrontPercent: Int? = null,
+    rightFrontPercent: Int? = null,
+    leftRearPercent: Int? = null,
+    rightRearPercent: Int? = null,
+    roofOpeningPercent: Int? = null,
+    onCloseAllWindows: (() -> Unit)? = null,
+    onVentWindows: (() -> Unit)? = null,
+    onDismiss: () -> Unit
+) {
+    val anyOpen = VehicleHomeStatus.hasAnyWindowOpen(
+        available = available,
+        openWindows = openWindows,
+        percents = listOf(leftFrontPercent, rightFrontPercent, leftRearPercent, rightRearPercent)
+    )
+
+    val lfItem = VehicleHomeStatus.resolveWindowItem("lf", "左前", "主驾", openWindows, leftFrontPercent)
+    val rfItem = VehicleHomeStatus.resolveWindowItem("rf", "右前", "副驾", openWindows, rightFrontPercent)
+    val lrItem = VehicleHomeStatus.resolveWindowItem("lr", "左后", "后左", openWindows, leftRearPercent)
+    val rrItem = VehicleHomeStatus.resolveWindowItem("rr", "右后", "后右", openWindows, rightRearPercent)
+
+    val openCount = listOf(lfItem, rfItem, lrItem, rrItem).count { it.isOpen }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("车窗状态") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                when {
-                    !available -> Text(
-                        "当前车型或本次车况未返回可用的车窗信号。",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+        modifier = solidDialogModifier(shape = RoundedCornerShape(24.dp)),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (anyOpen) MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(
+                                if (anyOpen) R.drawable.ic_window_half else R.drawable.ic_phosphor_wind
+                            ),
+                            contentDescription = null,
+                            tint = if (anyOpen) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Text(
+                        text = "车窗状态",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    openWindows.isEmpty() -> Text("四个车窗均已关闭")
-                    else -> openWindows.forEach { position ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier.size(7.dp).clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.error)
-                            )
-                            Spacer(Modifier.width(9.dp))
-                            Text("$position 车窗未关闭")
-                        }
+                }
+                if (available) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (anyOpen) MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                        else MaterialTheme.statusGood.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            text = if (anyOpen) "$openCount 扇未关" else "全部已关",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (anyOpen) MaterialTheme.colorScheme.error else MaterialTheme.statusGood,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        )
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("知道了") } }
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (!available) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "当前车型或本次车况未返回可用的车窗信号。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    // 2x2 四车窗网格卡片
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // 第一行：前排（左前·主驾 / 右前·副驾）
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            WindowGridCell(
+                                item = lfItem,
+                                modifier = Modifier.weight(1f)
+                            )
+                            WindowGridCell(
+                                item = rfItem,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        // 第二行：后排（左后 / 右后）
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            WindowGridCell(
+                                item = lrItem,
+                                modifier = Modifier.weight(1f)
+                            )
+                            WindowGridCell(
+                                item = rrItem,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    // 全景天窗状态条（如果车型返回了天窗信号）
+                    if (roofOpeningPercent != null) {
+                        val roofOpen = roofOpeningPercent > 0
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            border = BorderStroke(
+                                0.8.dp,
+                                if (roofOpen) MaterialTheme.colorScheme.error.copy(alpha = 0.40f)
+                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_phosphor_sun),
+                                        contentDescription = null,
+                                        tint = if (roofOpen) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = "全景天窗",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Text(
+                                    text = VehicleHomeStatus.roofOpeningSummary(roofOpeningPercent),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (roofOpen) MaterialTheme.colorScheme.error else MaterialTheme.statusGood
+                                )
+                            }
+                        }
+                    }
+
+                    // 底部安全说明
+                    Text(
+                        text = if (anyOpen) "提示：雨天或离车驻车时请确认车窗关闭，以防进水与财产损失。"
+                        else "全部车窗已完全关闭，车内密闭安全。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+        },
+        dismissButton = {
+            if (anyOpen && onCloseAllWindows != null) {
+                TextButton(onClick = onDismiss) {
+                    Text(
+                        "暂不关闭",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else if (!anyOpen && onVentWindows != null) {
+                OutlinedButton(
+                    onClick = {
+                        onVentWindows.invoke()
+                        onDismiss()
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_window_vent),
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "微开通风",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (anyOpen && onCloseAllWindows != null) {
+                Button(
+                    onClick = {
+                        onCloseAllWindows.invoke()
+                        onDismiss()
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    ),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_phosphor_wind),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "一键全关车窗",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text("知道了", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
     )
+}
+
+@Composable
+private fun WindowGridCell(
+    item: VehicleHomeStatus.WindowItemPresentation,
+    modifier: Modifier = Modifier
+) {
+    val borderColor = if (item.isOpen) {
+        MaterialTheme.colorScheme.error.copy(alpha = 0.45f)
+    } else {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    }
+
+    val bgColor = if (item.isOpen) {
+        MaterialTheme.colorScheme.error.copy(alpha = 0.06f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = bgColor,
+        border = BorderStroke(0.8.dp, borderColor),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${item.positionLabel} · ${item.roleLabel}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (item.isOpen) MaterialTheme.colorScheme.error
+                            else MaterialTheme.statusGood
+                        )
+                )
+            }
+            Text(
+                text = item.statusText,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (item.isOpen) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
+            )
+            if (item.isOpen) {
+                val progressFraction = ((item.percent ?: 100).coerceIn(5, 100)) / 100f
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(1.5.dp))
+                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progressFraction)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(1.5.dp))
+                            .background(MaterialTheme.colorScheme.error)
+                    )
+                }
+            }
+        }
+    }
 }
 
 private fun formatVehicleModel(carType: String): String {
@@ -6186,7 +6537,8 @@ fun VehicleStatusCard(
     modifier: Modifier = Modifier,
     powerAutoPlayEnabled: Boolean = false,
     onOpenHealthyCharging: () -> Unit = {},
-    seamless: Boolean = false
+    seamless: Boolean = false,
+    onControl: ((String) -> Unit)? = null
 ) {
     val powerSummary = VehicleHomeStatus.powerSummary(
         chargeState = status?.chargeState,
@@ -6470,7 +6822,7 @@ fun VehicleStatusCard(
                         .weight(1f)
                         .fillMaxHeight(),
                     warning = windowAvailable && openWindows.isNotEmpty(),
-                    onClick = if (windowAvailable && openWindows.isNotEmpty()) {
+                    onClick = if (windowAvailable) {
                         { showWindowDetails = true }
                     } else {
                         null
@@ -6482,8 +6834,8 @@ fun VehicleStatusCard(
 
     if (showWindowDetails) {
         WindowStatusDialog(
-            available = windowAvailable,
-            openWindows = openWindows,
+            status = status,
+            onControl = onControl,
             onDismiss = { showWindowDetails = false }
         )
     }

@@ -23,6 +23,15 @@ object VehicleHomeStatus {
         val speed: String? = null
     )
 
+    data class WindowItemPresentation(
+        val positionKey: String,
+        val positionLabel: String,
+        val roleLabel: String,
+        val isOpen: Boolean,
+        val percent: Int?,
+        val statusText: String
+    )
+
     fun lockButtonPresentation(locked: Boolean?): LockButtonPresentation =
         LockButtonPresentation(
             unlockActive = locked == false,
@@ -34,6 +43,46 @@ object VehicleHomeStatus {
 
     fun windowSummary(available: Boolean, openWindows: List<String>): String =
         if (windowWarningVisible(available, openWindows)) "车窗未关闭" else ""
+
+    fun hasAnyWindowOpen(
+        available: Boolean,
+        openWindows: List<String>,
+        percents: List<Int?> = emptyList()
+    ): Boolean {
+        if (!available) return false
+        if (openWindows.isNotEmpty()) return true
+        return percents.any { it != null && it > 0 }
+    }
+
+    fun resolveWindowItem(
+        positionKey: String,
+        positionLabel: String,
+        roleLabel: String,
+        openWindows: List<String>,
+        percent: Int?
+    ): WindowItemPresentation {
+        val isOpen = openWindows.contains(positionLabel) || (percent != null && percent > 0)
+        val statusText = when {
+            !isOpen -> "已完全关闭"
+            percent != null && percent in 1..25 -> "微开通风 ${percent}%"
+            percent != null && percent > 25 -> "已开启 ${percent}%"
+            else -> "车窗未关"
+        }
+        return WindowItemPresentation(
+            positionKey = positionKey,
+            positionLabel = positionLabel,
+            roleLabel = roleLabel,
+            isOpen = isOpen,
+            percent = percent,
+            statusText = statusText
+        )
+    }
+
+    fun roofOpeningSummary(percent: Int?): String = when {
+        percent == null || percent <= 0 -> "天窗已关闭"
+        percent in 1..25 -> "天窗微开 ${percent}%"
+        else -> "天窗开启 ${percent}%"
+    }
 
     /** preciseSoc (100003) is preferred for high-precision battery percentage; retain 1204/soc as fallback. */
     fun resolvedSoc(preciseSoc: String?, soc: String?): String? =
