@@ -25,6 +25,10 @@ class ClimateTileService : TileService() {
     override fun onStartListening() {
         super.onStartListening()
         updateTileState(inProgress = false)
+        val snapshot = SessionStore(applicationContext).loadSelectedWidgetSnapshot()
+        if (snapshot == null || System.currentTimeMillis() - snapshot.lastSuccessAt > 60_000L) {
+            com.leapauto.app.ControlWidget.enqueueSync(applicationContext)
+        }
     }
 
     override fun onClick() {

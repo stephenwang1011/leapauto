@@ -560,6 +560,8 @@ class SessionStore(context: Context) {
             }
             .remove(WIDGET_AUTH_INVALID)
             .apply()
+
+        com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(appContext)
     }
 
     fun loadWidgetSnapshot(vin: String): WidgetSnapshot? {
