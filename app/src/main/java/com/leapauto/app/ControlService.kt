@@ -189,12 +189,10 @@ class ControlService : Service() {
                 }
                 ControlWidget.showControlStatus(this, text, confirmedAcState)
                 notifyResult(text)
-                com.leapauto.app.lockscreen.LockscreenControlNotificationManager.updateNotification(this, statusText = text)
             } catch (e: Exception) {
                 val error = e.message ?: "控车失败"
                 ControlWidget.showControlStatus(this, error)
                 notifyResult(error)
-                com.leapauto.app.lockscreen.LockscreenControlNotificationManager.updateNotification(this, statusText = error)
             } finally {
                 commandInFlight.set(false)
                 stopForeground(STOP_FOREGROUND_REMOVE)

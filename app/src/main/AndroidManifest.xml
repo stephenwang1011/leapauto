@@ -88,14 +88,6 @@
             </intent-filter>
         </receiver>
 
-        <receiver
-            android:name=".lockscreen.LockscreenActionReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.leapauto.app.action.LOCKSCREEN_CONTROL" />
-            </intent-filter>
-        </receiver>
-
         <service
             android:name=".bluetooth.BleKeyService"
             android:foregroundServiceType="connectedDevice"
