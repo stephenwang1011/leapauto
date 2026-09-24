@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 1. 悬浮微晶六边形外框 (微晶切边高光) -->
+    <path
+        android:pathData="M54,23.5 L80.5,38.8 L80.5,69.2 L54,84.5 L27.5,69.2 L27.5,38.8 Z"
+        android:strokeWidth="2.0"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="27.5"
+                android:startY="23.5"
+                android:endX="80.5"
+                android:endY="84.5">
+                <item android:offset="0.00" android:color="#E6FFFFFF" />
+                <item android:offset="0.50" android:color="#4DFFFFFF" />
+                <item android:offset="1.00" android:color="#1AFFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 2. 左翼「L」图腾：高透微晶霜白 + 晶体顶面 -->
+    <!-- 2.1「L」竖立主干正面 -->
+    <path
+        android:pathData="M35,42.5 L46,36 L46,69.5 L35,76 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- 2.2「L」顶部菱形水晶切面 (45°高光反射) -->
+    <path
+        android:pathData="M35,42.5 L46,36 L52,39.5 L41,46 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="35"
+                android:startY="36"
+                android:endX="52"
+                android:endY="46">
+                <item android:offset="0.00" android:color="#FFFFFF" />
+                <item android:offset="1.00" android:color="#CBD5E1" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 2.3「L」底座横向出挑部 -->
+    <path
+        android:pathData="M35,69.5 L46,63 L52,66.5 L41,73 Z"
+        android:fillColor="#E2E8F0" />
+
+    <!-- 3. 右翼「P」图腾：智能座舱极光能量绿 (#00C853 至 #69F0AE) -->
+    <!-- 3.1「P」顶层斜切面 (微晶能量反射角) -->
+    <path
+        android:pathData="M54,34.5 L73,45.5 L67.5,48.5 L48.5,37.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="48.5"
+                android:startY="34.5"
+                android:endX="73"
+                android:endY="48.5">
+                <item android:offset="0.00" android:color="#69F0AE" />
+                <item android:offset="1.00" android:color="#00E676" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 3.2「P」竖直支撑侧面 -->
+    <path
+        android:pathData="M48.5,37.5 L54,34.5 L54,76 L48.5,73 Z"
+        android:fillColor="#00A844" />
+
+    <!-- 3.3「P」右侧环抱回路正面 (能量晶体主干) -->
+    <path
+        android:pathData="M54,48 L73,37 L73,61 L62,67.5 L62,56.5 L67.5,53 L67.5,43 L54,51 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54"
+                android:startY="37"
+                android:endX="73"
+                android:endY="67.5">
+                <item android:offset="0.00" android:color="#00E676" />
+                <item android:offset="0.45" android:color="#00C853" />
+                <item android:offset="1.00" android:color="#00963C" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 3.4「P」环抱下部倒角 -->
+    <path
+        android:pathData="M54,58 L62,53.5 L62,67.5 L54,72 Z"
+        android:fillColor="#00B849" />
+
+    <!-- 4. 高光水切晶线 (0.6dp 晶透高光锋刃) -->
+    <path
+        android:pathData="M54,23.5 L80.5,38.8"
+        android:strokeWidth="1.2"
+        android:strokeColor="#80FFFFFF"
+        android:strokeLineCap="round" />
+</vector>
