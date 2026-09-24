@@ -140,6 +140,7 @@ class SessionStore(context: Context) {
             editor.putString("deviceId", savedDeviceId)
         }
         editor.commit()
+        com.leapauto.app.lockscreen.LockscreenControlNotificationManager.cancelNotification(appContext)
     }
 
     fun saveVehicles(vehicles: List<Vehicle>) = synchronized(SESSION_LOCK) {
@@ -437,6 +438,14 @@ class SessionStore(context: Context) {
         ControlWidget.refreshData(appContext)
     }
 
+    fun loadLockscreenControlEnabled(): Boolean =
+        appPrefs.getBoolean(LOCKSCREEN_CONTROL_ENABLED, false)
+
+    fun saveLockscreenControlEnabled(enabled: Boolean) {
+        appPrefs.edit().putBoolean(LOCKSCREEN_CONTROL_ENABLED, enabled).apply()
+        com.leapauto.app.lockscreen.LockscreenControlNotificationManager.updateNotification(appContext)
+    }
+
     /** 最近一次成功同步的小组件数据，用于网络短暂失败时保留可读状态。 */
     fun saveWidgetSnapshot(vin: String, carType: String, range: String, soc: Int, updated: String) {
         saveWidgetSnapshot(
@@ -562,6 +571,7 @@ class SessionStore(context: Context) {
             .apply()
 
         com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(appContext)
+        com.leapauto.app.lockscreen.LockscreenControlNotificationManager.updateNotification(appContext)
     }
 
     fun loadWidgetSnapshot(vin: String): WidgetSnapshot? {
@@ -889,6 +899,7 @@ class SessionStore(context: Context) {
         const val APPEARANCE_MODE = "appearance_mode"
         const val WIDGET_SENSITIVE_ACTION_VERIFICATION_ENABLED =
             "widget_sensitive_action_verification_enabled"
+        const val LOCKSCREEN_CONTROL_ENABLED = "lockscreen_control_enabled"
         const val LAST_CHARGE_STATE = "last_charge_state"
         const val WIDGET_OPACITY_OPAQUE = 100
         const val WIDGET_BACKGROUND_STYLE = "widget_background_style"

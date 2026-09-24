@@ -258,6 +258,7 @@ class MainActivity : ComponentActivity() {
     private val tripStore by lazy { TripStore(this) }
     private var tripRecords by mutableStateOf<List<TripRecord>>(emptyList())
     private var tripRecordEnabled by mutableStateOf(false)
+    private var lockscreenControlEnabled by mutableStateOf(false)
     private var availableVehicles by mutableStateOf<List<Vehicle>>(emptyList())
     private var vehicleImageVersion by mutableIntStateOf(0)
     private var activeGeetestChallenge by mutableStateOf<GeetestChallenge?>(null)
@@ -355,10 +356,12 @@ class MainActivity : ComponentActivity() {
         scheduledPreheatStartTime = sessionStore.loadScheduledPreheatStartTime(session.selectedVin)
         scheduledPreheatDays = sessionStore.loadScheduledPreheatDays(session.selectedVin)
         tripRecordEnabled = tripStore.isTripRecordEnabled()
+        lockscreenControlEnabled = sessionStore.loadLockscreenControlEnabled()
         tripStore.removeLegacyMockTripsIfPresent(session.selectedVin)
         tripRecords = tripStore.getTrips(session.selectedVin)
         ChargeNotificationManager.ensureChannel(this)
         ParkingAnomalyNotificationManager.ensureChannel(this)
+        com.leapauto.app.lockscreen.LockscreenControlNotificationManager.ensureChannel(this)
 
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
@@ -481,6 +484,8 @@ class MainActivity : ComponentActivity() {
                     onRetryDownload3D = ::retryDownload3DModel,
                     bluetoothSettingsRequestId = bluetoothSettingsRequestId,
                     tripJournalRequestId = tripJournalRequestId,
+                    lockscreenControlEnabled = lockscreenControlEnabled,
+                    onLockscreenControlEnabledChange = ::saveLockscreenControlEnabled,
                     tripRecordEnabled = tripRecordEnabled,
                     onTripRecordEnabledChange = ::saveTripRecordEnabled,
                     onPowerTypeChange = ::savePowerType
@@ -1187,6 +1192,7 @@ class MainActivity : ComponentActivity() {
         ErrorLogs.repository.clear()
         energyCacheStore.clearAll()
         operationGeneration += 1L
+        com.leapauto.app.lockscreen.LockscreenControlNotificationManager.cancelNotification(this)
         sessionStore.clear()
         sessionStore.saveOpPassword("")
         session = sessionStore.load()
@@ -1313,6 +1319,16 @@ class MainActivity : ComponentActivity() {
             val hasBtConnect = checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
             if (!hasBtConnect) {
                 requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), BLUETOOTH_PERMISSION_REQUEST)
+            }
+        }
+    }
+
+    private fun saveLockscreenControlEnabled(enabled: Boolean) {
+        lockscreenControlEnabled = enabled
+        sessionStore.saveLockscreenControlEnabled(enabled)
+        if (enabled && Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
             }
         }
     }

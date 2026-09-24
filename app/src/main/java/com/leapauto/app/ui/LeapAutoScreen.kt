@@ -400,6 +400,8 @@ fun LeapAutoScreen(
     onUpdateNickname: (String) -> Unit = {},
     bluetoothSettingsRequestId: Long = 0,
     tripJournalRequestId: Long = 0,
+    lockscreenControlEnabled: Boolean = false,
+    onLockscreenControlEnabledChange: (Boolean) -> Unit = {},
     tripRecordEnabled: Boolean = false,
     onTripRecordEnabledChange: (Boolean) -> Unit = {},
     onPowerTypeChange: (SessionStore.VehiclePowerType) -> Unit = {},
@@ -1012,6 +1014,8 @@ fun LeapAutoScreen(
                                 onResetCustomVehicleImage = onResetCustomVehicleImage,
                                 showBluetoothKeyEntry = settingsTitleTapCount >= 5,
                                 onOpenBluetoothKey = onOpenBluetoothKey,
+                                lockscreenControlEnabled = lockscreenControlEnabled,
+                                onLockscreenControlEnabledChange = onLockscreenControlEnabledChange,
                                 tripRecordEnabled = tripRecordEnabled,
                                 onTripRecordEnabledChange = onTripRecordEnabledChange,
                                 onPowerTypeChange = onPowerTypeChange,
@@ -1785,6 +1789,8 @@ private fun MyContent(
     onResetCustomVehicleImage: () -> Unit = {},
     showBluetoothKeyEntry: Boolean = false,
     onOpenBluetoothKey: () -> Unit = {},
+    lockscreenControlEnabled: Boolean = false,
+    onLockscreenControlEnabledChange: (Boolean) -> Unit = {},
     tripRecordEnabled: Boolean = false,
     onTripRecordEnabledChange: (Boolean) -> Unit = {},
     onPowerTypeChange: (SessionStore.VehiclePowerType) -> Unit = {},
@@ -1870,6 +1876,10 @@ private fun MyContent(
             onActionsChange = onWidget4x2ActionsChange
         )
         QuickSettingsTileCard()
+        LockscreenControlCard(
+            enabled = lockscreenControlEnabled,
+            onEnabledChange = onLockscreenControlEnabledChange
+        )
         TripRecordSettingCard(
             enabled = tripRecordEnabled,
             onEnabledChange = onTripRecordEnabledChange
@@ -3080,6 +3090,53 @@ private fun QuickSettingsTileCard() {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LockscreenControlCard(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = glassCardBorder(),
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    "锁屏常驻控制",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "在手机锁屏常驻控制条与实时续航，免解锁一键开关车门锁、寻车鸣笛与空调",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = enabled,
+                onCheckedChange = onEnabledChange
+            )
         }
     }
 }
