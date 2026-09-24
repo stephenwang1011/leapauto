@@ -700,11 +700,22 @@
 * **GATT 服务 UUID**: `0000FFFE-0000-1000-8000-00805F9B34FB`
 * **GATT 特征 UUID**: `0000FFF2-0000-1000-8000-00805F9B34FB`（具备 Write 与 Notify 属性）
 * **会话交互流**:
-  1. **广播扫描**: 过滤包含 Leapmotor 特征的 BLE 广播帧，比对车辆 MAC；
-  2. **双向协商**: 手机与车机交换 16 字节真随机数，通过 ECDH 协商主密钥；
-  3. **密文控车**: 组装 `cmdid=1`（锁控）数据包，使用协商密钥通过 AES-128-GCM / SM4 加密发送；
-  4. **事件回执**: 车机通过 Notify 回传 `AA AC` 事件帧，验证成功则向用户提示“锁止成功”。
+  1. **广播扫描**: 读取包含 Leapmotor 服务 UUID 的 BLE 广播并按 MAC 合并设备；协议小版本仅在广播携带时采用，否则使用默认值 8；
+  2. **会话派生**: P-256 证书使用 ECDH，SM2 证书使用 SM2 密钥协商，再由 sessionId、VIN 反转值、passwordCard 片段和共享秘密派生 16 字节会话密钥与 IV；
+  3. **密文控车**: 组装 `cmdid=1`（锁控）数据包，P-256 路线使用 AES-CBC/PKCS5Padding，SM2 路线使用应用内 SM4 实现；
+  4. **事件回执**: 车机通过 Notify/Indicate 回传 `AA AC` 事件帧，只有触发来源和动作匹配时才确认锁止或解锁。
 * **代码实现**: `BluetoothKeyController.kt` / `BleKeyProtocol.kt`
+
+### 9.2 1PAO 0.10 兼容协议（静态证据，未经当前车辆确认）
+
+当前连接路径使用显式 `ONE_PAO_V010` 兼容策略，旧的 `LEGACY_VERSIONED` 编码仍保留为纯协议回退选项。两者不能根据广播小版本直接混用。
+
+* **AA AE 完整认证文本**：`timestamp;空字段;accountId;deviceId;证书字段[3];证书字段[4];证书字段[5];标定与配置字段`，外层尾部固定 `01 09`；
+* **配置命令 `cmdId=3`**：1PAO 兼容策略固定发送 9 字节：4 项标定值加 `enabled`、`enabled&&autoLock`、`enabled&&autoUnlock`、`supportsButton`；用户的微动开关偏好不直接冒充车辆能力位，当前没有能力数据时按协议版本保守编码；
+* **分片**：MTU 200 在连接后先协商，再发现服务和订阅 CCCD；1PAO 兼容策略的写入分片上限为 `min(MTU-3,197)`，MTU 协商失败时回退到 MTU 23；
+* **AA EE 快速重连**：重连明文为 `timestamp(UInt64LE)+token+9字节配置+account长度(UInt16LE)+account`，外层包含 sessionId、65 字节临时公钥、尾部 `01 09` 和摘要前 16 字节；P-256 使用 SHA-256，SM2 使用 SM3；
+* **凭证安全**：车辆回包 `1;<hexToken>` 仅接受非空、偶数长度、最多 1024 个十六进制字符，并按账号、VIN、deviceId、证书指纹和兼容策略使用 Android Keystore 加密存储；车辆返回 3、4、7 或快速认证超时会清除凭证并回退完整认证；
+* **证据边界**：以上格式来自 `D:/young/work/hackapp/1PAO_0.10_BLUETOOTH_ANALYSIS_2026-09-24.md` 与反编译静态源码对照，尚不能证明特定 C10/C16 车辆一定接受该格式；实车日志仍需确认。
 
 ---
 

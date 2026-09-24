@@ -213,8 +213,9 @@ class BleSm2ProtocolTest {
             assertEquals("00", (command as BleResponse.CommandResult).result)
             assertEquals(BleResponse.Unknown,
                 session.decodeResponse(frame("aaab18000000726e6b436878633845583564777443465767634e52673d3d")))
-            assertEquals(BleResponse.ReconnectCredential,
-                session.decodeResponse(frame("aaab18000000523555335a59674c6961396c477564472b577a3070773d3d")))
+            assertTrue(session.decodeResponse(
+                frame("aaab18000000523555335a59674c6961396c477564472b577a3070773d3d")) is
+                BleResponse.ReconnectCredential)
             assertThrows(CharacterCodingException::class.java) {
                 session.decodeResponse(frame("aaab1800000042366f694b4c7473546a6744764231564770684141773d3d"))
             }

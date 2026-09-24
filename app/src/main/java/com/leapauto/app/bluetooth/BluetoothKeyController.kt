@@ -41,6 +41,13 @@ class BluetoothKeyController(
     private val scanDevices = BleScanDeviceCache()
     private var protocolSession: BleKeySession? = null
     private var authenticationFrame: (() -> ByteArray)? = null
+    private var fullAuthenticationFrame: (() -> ByteArray)? = null
+    private var compatibilityProfile = BleCompatibilityProfile.forConnection()
+    private var usingReconnectAuthentication = false
+    private var reconnectFallbackRequested = false
+    private var reconnectFallbackAttempted = false
+    private var pendingReconnectCredential: BleReconnectCredential? = null
+    private var onReconnectCredential: (BleReconnectCredential?) -> Unit = {}
     private val decoder = BleFrameDecoder()
     private val diagnostics = BleDiagnostics()
     private val chunks = ArrayDeque<ByteArray>()
@@ -50,6 +57,7 @@ class BluetoothKeyController(
     private var authenticatedReceived = false
     private var descriptorReady = false
     private var awaitingMtu = false
+    private var skipMtuOnce = false
     private var confirmedEvent: BleLockAction? = null
     private var timeout: Runnable? = null
     private var configurationTracker = BleConfigurationTracker()
@@ -128,6 +136,8 @@ class BluetoothKeyController(
         deviceId: String,
         configuration: BlePassiveConfiguration,
         trustedBinding: Boolean,
+        reconnectCredential: BleReconnectCredential? = null,
+        onReconnectCredential: (BleReconnectCredential?) -> Unit = {},
         isSessionCurrent: () -> Boolean
     ) {
         if (state.isBusy) return
@@ -140,7 +150,12 @@ class BluetoothKeyController(
         diagnostics.record(BleDiagnosticEvent.CONNECT_STARTED, certificate.keyType, device.protocolMinor)
         diagnostics.record(BleDiagnosticEvent.PROTOCOL_SELECTED,
             device.protocolMinor ?: BleKeyProtocol.DEFAULT_PROTOCOL_MINOR, device.protocolMinorSource.diagnosticCode)
-        diagnostics.record(BleDiagnosticEvent.AUTH_MODE, 0)
+        compatibilityProfile = BleCompatibilityProfile.forConnection()
+        this.onReconnectCredential = onReconnectCredential
+        usingReconnectAuthentication = reconnectCredential != null
+        diagnostics.record(BleDiagnosticEvent.AUTH_MODE, if (usingReconnectAuthentication) 1 else 0)
+        diagnostics.record(BleDiagnosticEvent.AUTH_PROFILE, compatibilityProfile.diagnosticCode)
+        diagnostics.record(BleDiagnosticEvent.TRANSPORT_PROFILE, compatibilityProfile.diagnosticCode)
         update(state.copy(phase = BleConnectionPhase.CONNECTING, deviceName = device.name, message = "正在建立蓝牙连接"))
         armTimeout(if (trustedBinding) 60_000L else 15_000L) { fail("蓝牙连接超时，请靠近车辆后重试") }
         lifecycleScope.launch {
@@ -165,12 +180,27 @@ class BluetoothKeyController(
             }
             protocolSession = created
             recordDiagnostic(BleDiagnosticEvent.KEY_DERIVED, certificate.keyType)
-            authenticationFrame = {
+            val supportsButton = device.protocolMinor?.let { it >= 9 } == true
+            fullAuthenticationFrame = {
                 check(sessionIsCurrent()) { "BLE authentication identity changed during the connection" }
                 created.buildAuthentication(certificate, accountId, deviceId,
                     device.protocolMinor ?: BleKeyProtocol.DEFAULT_PROTOCOL_MINOR, System.currentTimeMillis() / 1_000L,
-                    configuration, onPrepared = diagnostics::recordAuthentication)
+                    configuration, compatibilityProfile.authenticationText,
+                    supportsButton = supportsButton,
+                    onPrepared = diagnostics::recordAuthentication)
             }
+            authenticationFrame = reconnectCredential?.let { credential ->
+                {
+                    check(sessionIsCurrent()) { "BLE authentication identity changed during the connection" }
+                    created.buildReconnectAuthentication(
+                        credential,
+                        accountId,
+                        System.currentTimeMillis() / 1_000L,
+                        configuration,
+                        supportsButton
+                    )
+                }
+            } ?: fullAuthenticationFrame
             connectGatt(device, current, autoConnect = trustedBinding)
         }
     }
@@ -202,7 +232,7 @@ class BluetoothKeyController(
         armTimeout(BleConfigurationTracker.CONFIRMATION_TIMEOUT_MS) { fail("车辆尚未确认钥匙设置") }
         try {
             beginWrite(requireNotNull(protocolSession).buildConfiguration(configuration, protocolMinor,
-                System.currentTimeMillis() / 1_000L))
+                System.currentTimeMillis() / 1_000L, compatibilityProfile, supportsButton = protocolMinor >= 9))
         } catch (_: Exception) {
             fail("钥匙设置同步失败")
         }
@@ -295,9 +325,7 @@ class BluetoothKeyController(
                 if (status != BluetoothGatt.GATT_SUCCESS || newState == BluetoothProfile.STATE_DISCONNECTED) {
                     fail("蓝牙连接已断开")
                 } else if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    update(state.copy(phase = BleConnectionPhase.DISCOVERING, message = "正在识别车辆蓝牙服务"))
-                    armTimeout(10_000L) { fail("蓝牙服务发现超时") }
-                    check(client.discoverServices())
+                    initializeGatt(client)
                 }
             }
         }
@@ -316,24 +344,18 @@ class BluetoothKeyController(
                 recordDiagnostic(BleDiagnosticEvent.NOTIFICATIONS_RESULT, status)
                 check(status == BluetoothGatt.GATT_SUCCESS)
                 descriptorReady = true
-                awaitingMtu = true
-                armTimeout(8_000L) { fail("蓝牙数据通道初始化超时") }
-                recordDiagnostic(BleDiagnosticEvent.MTU_REQUESTED, detail = 200)
-                if (!client.requestMtu(200)) {
-                    awaitingMtu = false
-                    recordDiagnostic(BleDiagnosticEvent.MTU_RESULT, -1, 23)
-                    authenticate()
-                }
+                authenticate()
             }
         }
 
         override fun onMtuChanged(client: BluetoothGatt, newMtu: Int, status: Int) {
             dispatch(current, client) {
-                if (state.phase != BleConnectionPhase.SUBSCRIBING || !descriptorReady || !awaitingMtu) return@dispatch
+                if (!awaitingMtu || descriptorReady) return@dispatch
                 awaitingMtu = false
+                skipMtuOnce = false
                 mtu = if (status == BluetoothGatt.GATT_SUCCESS) newMtu.coerceAtLeast(23) else 23
                 recordDiagnostic(BleDiagnosticEvent.MTU_RESULT, status, mtu)
-                authenticate()
+                discoverServices(client)
             }
         }
 
@@ -386,20 +408,72 @@ class BluetoothKeyController(
         check(accepted)
     }
 
+    private fun initializeGatt(client: BluetoothGatt) {
+        when (BleGattInitializationPolicy.initialStep(skipMtuOnce)) {
+            BleGattInitializationStep.REQUEST_MTU -> requestMtu(client)
+            BleGattInitializationStep.DISCOVER_SERVICES -> {
+                skipMtuOnce = false
+                mtu = 23
+                recordDiagnostic(BleDiagnosticEvent.MTU_RESULT, -2, mtu)
+                discoverServices(client)
+            }
+            BleGattInitializationStep.WAIT_FOR_MTU -> error("Invalid initial GATT step")
+        }
+    }
+
+    private fun requestMtu(client: BluetoothGatt) {
+        awaitingMtu = true
+        update(state.copy(phase = BleConnectionPhase.DISCOVERING, message = "正在协商蓝牙传输长度"))
+        recordDiagnostic(BleDiagnosticEvent.MTU_REQUESTED, detail = BleGattInitializationPolicy.requestedMtu)
+        when (BleGattInitializationPolicy.afterMtuRequest(client.requestMtu(BleGattInitializationPolicy.requestedMtu))) {
+            BleGattInitializationStep.WAIT_FOR_MTU -> armTimeout(BleGattInitializationPolicy.mtuCallbackTimeoutMs) {
+                if (awaitingMtu) {
+                    skipMtuOnce = true
+                    fail("蓝牙传输长度协商无响应，请重新连接")
+                }
+            }
+            BleGattInitializationStep.DISCOVER_SERVICES -> {
+                awaitingMtu = false
+                mtu = 23
+                recordDiagnostic(BleDiagnosticEvent.MTU_RESULT, -1, mtu)
+                discoverServices(client)
+            }
+            BleGattInitializationStep.REQUEST_MTU -> error("Invalid MTU request result")
+        }
+    }
+
+    private fun discoverServices(client: BluetoothGatt) {
+        cancelTimeout()
+        update(state.copy(phase = BleConnectionPhase.DISCOVERING, message = "正在识别车辆蓝牙服务"))
+        armTimeout(10_000L) { fail("蓝牙服务发现超时") }
+        check(client.discoverServices())
+    }
+
     private fun authenticate() {
         check(descriptorReady && !awaitingMtu)
         diagnostics.record(BleDiagnosticEvent.AUTHENTICATION_STARTED)
         update(state.copy(phase = BleConnectionPhase.AUTHENTICATING, message = "正在验证蓝牙钥匙"))
-        armTimeout(12_000L) { fail("车辆未确认蓝牙钥匙，请重新同步或连接") }
+        armAuthenticationTimeout()
         beginWrite(requireNotNull(authenticationFrame).invoke())
         authenticationFrame = null
+    }
+
+    private fun armAuthenticationTimeout() {
+        armTimeout(12_000L) {
+            if (usingReconnectAuthentication) {
+                clearReconnectCredential()
+                fail("快速认证未响应，下次将使用完整认证")
+            } else {
+                fail("车辆未确认蓝牙钥匙，请重新同步或连接")
+            }
+        }
     }
 
     private fun beginWrite(frame: ByteArray) {
         check(chunks.isEmpty())
         recordDiagnostic(BleDiagnosticEvent.TX_FRAME, frame[1].toInt() and 0xFF, frame.size)
         writesComplete = false
-        BleKeyProtocol.chunks(frame, mtu).forEach(chunks::addLast)
+        BleKeyProtocol.chunks(frame, mtu, compatibilityProfile.chunkProfile).forEach(chunks::addLast)
         frame.fill(0)
         writeNext()
     }
@@ -408,6 +482,10 @@ class BluetoothKeyController(
         if (!ensureCurrentSession()) return
         if (chunks.isEmpty()) {
             writesComplete = true
+            if (reconnectFallbackRequested && state.phase == BleConnectionPhase.AUTHENTICATING) {
+                fallbackToFullAuthentication()
+                return
+            }
             finishAuthentication()
             finishConfiguration()
             finishCommand()
@@ -443,6 +521,15 @@ class BluetoothKeyController(
                         authenticatedReceived = true
                         finishAuthentication()
                     }
+                    if (response is BleResponse.ReconnectCredential &&
+                        state.phase in setOf(BleConnectionPhase.AUTHENTICATING, BleConnectionPhase.READY)) {
+                        pendingReconnectCredential = response.credential
+                        recordDiagnostic(BleDiagnosticEvent.RECONNECT_CREDENTIAL_RECEIVED)
+                        if (state.phase == BleConnectionPhase.READY) {
+                            onReconnectCredential(response.credential)
+                            pendingReconnectCredential = null
+                        }
+                    }
                     if (response is BleResponse.CommandResult && state.phase == BleConnectionPhase.CONFIGURING) {
                         when (configurationTracker.receive(response, SystemClock.elapsedRealtime())) {
                             BleConfigurationReply.ACCEPTED -> finishConfiguration()
@@ -463,7 +550,12 @@ class BluetoothKeyController(
                     }
                     is BleEvent.Rejected -> {
                         recordDiagnostic(BleDiagnosticEvent.VEHICLE_REJECTED, event.resultCode, state.phase.ordinal)
-                        if (state.isBusy || state.canControl) {
+                        if (state.phase == BleConnectionPhase.AUTHENTICATING && usingReconnectAuthentication &&
+                            event.resultCode in RECONNECT_INVALID_RESULT_CODES && !reconnectFallbackAttempted) {
+                            reconnectFallbackRequested = true
+                            clearReconnectCredential()
+                            if (chunks.isEmpty() && writesComplete) fallbackToFullAuthentication()
+                        } else if (state.isBusy || state.canControl) {
                             fail(state.rejectionMessage(event.resultCode))
                         }
                     }
@@ -477,8 +569,29 @@ class BluetoothKeyController(
     private fun finishAuthentication() {
         if (!authenticatedReceived || !writesComplete || state.phase != BleConnectionPhase.AUTHENTICATING) return
         cancelTimeout()
+        pendingReconnectCredential?.let(onReconnectCredential)
+        pendingReconnectCredential = null
         diagnostics.record(BleDiagnosticEvent.AUTHENTICATED)
         update(state.copy(phase = BleConnectionPhase.READY, message = "蓝牙钥匙已认证"))
+    }
+
+    private fun fallbackToFullAuthentication() {
+        check(usingReconnectAuthentication && !reconnectFallbackAttempted)
+        reconnectFallbackRequested = false
+        reconnectFallbackAttempted = true
+        usingReconnectAuthentication = false
+        writesComplete = false
+        authenticatedReceived = false
+        pendingReconnectCredential = null
+        diagnostics.record(BleDiagnosticEvent.RECONNECT_FALLBACK)
+        diagnostics.record(BleDiagnosticEvent.AUTH_MODE, 0)
+        armAuthenticationTimeout()
+        beginWrite(requireNotNull(fullAuthenticationFrame).invoke())
+    }
+
+    private fun clearReconnectCredential() {
+        pendingReconnectCredential = null
+        onReconnectCredential(null)
     }
 
     private fun finishConfiguration() {
@@ -555,6 +668,12 @@ class BluetoothKeyController(
         runCatching { client?.close() }
         characteristic = null
         authenticationFrame = null
+        fullAuthenticationFrame = null
+        onReconnectCredential = {}
+        usingReconnectAuthentication = false
+        reconnectFallbackRequested = false
+        reconnectFallbackAttempted = false
+        pendingReconnectCredential = null
         sessionIsCurrent = { true }
         protocolSession?.close()
         protocolSession = null
@@ -586,5 +705,9 @@ class BluetoothKeyController(
     private fun update(next: BleConnectionState) {
         state = next.copy(diagnostics = diagnostics.snapshot())
         onState(state)
+    }
+
+    private companion object {
+        val RECONNECT_INVALID_RESULT_CODES = setOf(3, 4, 7)
     }
 }

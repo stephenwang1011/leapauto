@@ -14,13 +14,17 @@ class BleDiagnosticsTest {
         val entries = listOf(
             BleDiagnosticEntry(0, BleDiagnosticEvent.TARGET_MATCH, 2, 1),
             BleDiagnosticEntry(1, BleDiagnosticEvent.AUTH_MODE, 0),
-            BleDiagnosticEntry(2, BleDiagnosticEvent.AUTH_IDENTITY_PLACEHOLDERS, 3),
-            BleDiagnosticEntry(3, BleDiagnosticEvent.CALIBRATION_SOURCE, 1),
-            BleDiagnosticEntry(4, BleDiagnosticEvent.CLOUD_SAVE_RESULT, 1, 1)
+            BleDiagnosticEntry(2, BleDiagnosticEvent.AUTH_PROFILE, 1),
+            BleDiagnosticEntry(3, BleDiagnosticEvent.TRANSPORT_PROFILE, 1),
+            BleDiagnosticEntry(4, BleDiagnosticEvent.AUTH_IDENTITY_PLACEHOLDERS, 3),
+            BleDiagnosticEntry(5, BleDiagnosticEvent.CALIBRATION_SOURCE, 1),
+            BleDiagnosticEntry(6, BleDiagnosticEvent.CLOUD_SAVE_RESULT, 1, 1)
         )
         val report = BleDiagnostics.formatReport(entries, "test", BleConnectionPhase.FAILED)
-        for (meaning in listOf("云端=不一致", "绑定=一致", "完整认证 AAAE", "空占位不代表身份错误",
-                "本机自定义", "不代表车辆已应用")) assertTrue(report.contains(meaning))
+        for (meaning in listOf("云端=不一致", "绑定=一致", "完整认证 AAAE", "1PAO 0.10 固定字段",
+                "MTU优先", "分片上限197", "空占位不代表身份错误", "本机自定义", "不代表车辆已应用")) {
+            assertTrue(report.contains(meaning))
+        }
         assertFalse(report.contains("00:11:22"))
         assertTrue(entries.none { it.event == BleDiagnosticEvent.AUTHENTICATED })
     }

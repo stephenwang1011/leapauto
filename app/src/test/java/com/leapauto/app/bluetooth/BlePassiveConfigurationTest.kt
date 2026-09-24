@@ -70,6 +70,28 @@ class BlePassiveConfigurationTest {
     }
 
     @Test
+    fun onePaoAuthenticationAlwaysUsesFourFlagsAndSeparatesButtonCapability() {
+        val calibration = BleCalibration(61, 175, 12, 24)
+        val disabledButCapable = BlePassiveConfiguration(
+            enabled = false, buttonEnabled = true, calibration = calibration
+        )
+        val enabled = BlePassiveConfiguration(
+            enabled = true, autoUnlock = true, autoLock = true, buttonEnabled = true,
+            calibration = calibration
+        )
+        for (minor in listOf(0, 8, 9, 255)) {
+            assertEquals("61;1.75;12;24;0;0;0;0;", disabledButCapable.authenticationFields(
+                minor, BleAuthenticationTextProfile.ONE_PAO_V010))
+            assertEquals("61;1.75;12;24;1;1;1;0;", enabled.authenticationFields(
+                minor, BleAuthenticationTextProfile.ONE_PAO_V010))
+        }
+        assertArrayEquals(byteArrayOf(61, 175.toByte(), 0, 12, 24, 0, 0, 0, 0),
+            disabledButCapable.reconnectFields())
+        assertArrayEquals(byteArrayOf(61, 175.toByte(), 0, 12, 24, 0, 0, 0, 1),
+            disabledButCapable.reconnectFields(supportsButton = true))
+    }
+
+    @Test
     fun legacyVehiclesRejectEnabledButtonButCanAlwaysReceiveMasterOff() {
         for (keyType in listOf(0, 1)) {
             session(keyType).use { session ->

@@ -33,6 +33,28 @@ enum class BleFrameType(val code: Int, val headerSize: Int) {
     RECONNECT(0xEE, 4)
 }
 
+enum class BleChunkProfile(val maximum: Int) {
+    LEGACY_160(160),
+    ONE_PAO_V010(197)
+}
+
+@JvmInline
+value class BleReconnectCredential private constructor(val hex: String) {
+    fun bytes(): ByteArray = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+
+    override fun toString(): String = "BleReconnectCredential(redacted)"
+
+    companion object {
+        fun parse(value: String): BleReconnectCredential {
+            require(value.isNotEmpty() && value.length % 2 == 0 && value.length <= 1_024 &&
+                value.all { it in '0'..'9' || it.lowercaseChar() in 'a'..'f' }) {
+                "Invalid BLE reconnect credential"
+            }
+            return BleReconnectCredential(value.lowercase())
+        }
+    }
+}
+
 class BleFrame internal constructor(val type: BleFrameType, bytes: ByteArray) {
     internal val bytes = bytes.copyOf()
     val payload: ByteArray get() = bytes.copyOfRange(type.headerSize, bytes.size)
@@ -40,7 +62,7 @@ class BleFrame internal constructor(val type: BleFrameType, bytes: ByteArray) {
 
 sealed interface BleResponse {
     class Authenticated(val lockState: String) : BleResponse
-    data object ReconnectCredential : BleResponse
+    data class ReconnectCredential(val credential: BleReconnectCredential) : BleResponse
     class CommandResult(val identifier: String, val result: String?) : BleResponse {
         fun confirmsConfiguration(): Boolean = identifier == "3" && (result == "0" || result == "00")
     }
@@ -143,10 +165,15 @@ object BleKeyProtocol {
     fun protocolMinor(serviceUuids: Iterable<UUID>): Int =
         advertisedProtocolMinor(serviceUuids) ?: DEFAULT_PROTOCOL_MINOR
 
-    fun chunkLimit(mtu: Int): Int = (mtu.coerceAtLeast(23) - 3).coerceIn(20, 160)
+    fun chunkLimit(mtu: Int, profile: BleChunkProfile = BleChunkProfile.LEGACY_160): Int =
+        (mtu.coerceAtLeast(23) - 3).coerceIn(20, profile.maximum)
 
-    fun chunks(frame: ByteArray, mtu: Int): List<ByteArray> {
-        val limit = chunkLimit(mtu)
+    fun chunks(
+        frame: ByteArray,
+        mtu: Int,
+        profile: BleChunkProfile = BleChunkProfile.LEGACY_160
+    ): List<ByteArray> {
+        val limit = chunkLimit(mtu, profile)
         return frame.indices.step(limit).map { frame.copyOfRange(it, minOf(it + limit, frame.size)) }
     }
 
@@ -240,6 +267,8 @@ class BleKeySession internal constructor(
         protocolMinor: Int,
         epochSeconds: Long,
         configuration: BlePassiveConfiguration = BlePassiveConfiguration.MANUAL,
+        textProfile: BleAuthenticationTextProfile = BleAuthenticationTextProfile.LEGACY_VERSIONED,
+        supportsButton: Boolean = false,
         onPrepared: ((BleAuthenticationStructure) -> Unit)? = null
     ): ByteArray {
         check(!closed) { "BLE session is closed" }
@@ -256,10 +285,22 @@ class BleKeySession internal constructor(
             (if (fields[2] == deviceId) 2 else 0)
         val identityEmptyMask = (if (fields[1].isEmpty()) 1 else 0) or
             (if (fields[2].isEmpty()) 2 else 0)
-        fields[1] = accountId
-        fields[2] = deviceId
-        val settings = configuration.authenticationFields(protocolMinor)
-        val text = "$epochSeconds;${fields.joinToString(";")};$settings".toByteArray(Charsets.UTF_8)
+        val authenticationFields = when (textProfile) {
+            BleAuthenticationTextProfile.LEGACY_VERSIONED -> fields.also {
+                it[1] = accountId
+                it[2] = deviceId
+            }
+            BleAuthenticationTextProfile.ONE_PAO_V010 -> mutableListOf(
+                "", accountId, deviceId, fields[3], fields[4], fields[5]
+            )
+        }
+        val settings = if (textProfile == BleAuthenticationTextProfile.ONE_PAO_V010) {
+            "${configuration.calibration.toProtocolText()};${configuration.reconnectFields(supportsButton)
+                .drop(5).joinToString(";")};"
+        } else {
+            configuration.authenticationFields(protocolMinor, textProfile)
+        }
+        val text = "$epochSeconds;${authenticationFields.joinToString(";")};$settings".toByteArray(Charsets.UTF_8)
         val signature = decodeBase64(certificate.signResult, "Invalid BLE certificate signature")
         require(signature.isNotEmpty()) { "Invalid BLE certificate signature" }
         val plain = littleEndian(text.size.toLong(), 4) + text + signature
@@ -275,7 +316,7 @@ class BleKeySession internal constructor(
             val flagsMask = settings.split(';').drop(4).dropLast(1).foldIndexed(0) { index, mask, value ->
                 mask or (value.toInt() shl index)
             }
-            prepared(BleAuthenticationStructure(fields.size, identityMatchMask, text.size, signature.size,
+            prepared(BleAuthenticationStructure(authenticationFields.size, identityMatchMask, text.size, signature.size,
                 plain.size, ciphertext.size, protocolMinor, flagsMask, identityEmptyMask))
         }
         return frame
@@ -287,8 +328,55 @@ class BleKeySession internal constructor(
     fun buildConfiguration(
         configuration: BlePassiveConfiguration,
         protocolMinor: Int,
-        epochSeconds: Long
-    ): ByteArray = buildEncryptedCommand(3, configuration.encoded(protocolMinor), epochSeconds)
+        epochSeconds: Long,
+        compatibilityProfile: BleCompatibilityProfile = BleCompatibilityProfile.LEGACY,
+        supportsButton: Boolean = false
+    ): ByteArray = buildEncryptedCommand(
+        3,
+        compatibilityProfile.encodeConfiguration(configuration, protocolMinor, supportsButton),
+        epochSeconds
+    )
+
+    fun buildReconnectAuthentication(
+        credential: BleReconnectCredential,
+        accountId: String,
+        epochSeconds: Long,
+        configuration: BlePassiveConfiguration = BlePassiveConfiguration.MANUAL,
+        supportsButton: Boolean = false
+    ): ByteArray {
+        check(!closed) { "BLE session is closed" }
+        require(epochSeconds >= 0 && accountId.isNotBlank() && ';' !in accountId) {
+            "Invalid BLE reconnect parameters"
+        }
+        require(publicKey.size == 65 && publicKey[0] == 4.toByte()) {
+            "BLE reconnect public key must be an uncompressed 65-byte point"
+        }
+        val credentialBytes = credential.bytes()
+        val accountBytes = accountId.toByteArray(Charsets.UTF_8)
+        var plain = byteArrayOf()
+        var ciphertext = byteArrayOf()
+        var encrypted = byteArrayOf()
+        var frame = byteArrayOf()
+        var digest = byteArrayOf()
+        try {
+            require(accountBytes.isNotEmpty() && accountBytes.size <= 0xFFFF) {
+                "Invalid BLE reconnect account identifier"
+            }
+            plain = littleEndian(epochSeconds, 8) + credentialBytes + configuration.reconnectFields(supportsButton) +
+                littleEndian(accountBytes.size.toLong(), 2) + accountBytes
+            ciphertext = crypt(plain, Cipher.ENCRYPT_MODE)
+            encrypted = Base64.getEncoder().encode(ciphertext)
+            val payloadLength = encrypted.size + 87
+            require(payloadLength <= 0xFFFF) { "BLE reconnect payload is too large" }
+            frame = byteArrayOf(0xAA.toByte(), 0xEE.toByte()) + littleEndian(payloadLength.toLong(), 2) +
+                littleEndian(sessionId, 4) + publicKey + encrypted + byteArrayOf(1, 9)
+            digest = sessionHash(keyType, frame)
+            require(digest.size >= 16) { "BLE reconnect digest is too short" }
+            return frame + digest.copyOfRange(0, 16)
+        } finally {
+            listOf(credentialBytes, accountBytes, plain, ciphertext, encrypted, frame, digest).forEach { it.fill(0) }
+        }
+    }
 
     private fun buildEncryptedCommand(commandId: Int, parameters: ByteArray, epochSeconds: Long): ByteArray {
         require(epochSeconds >= 0) { "Invalid BLE command timestamp" }
@@ -314,7 +402,9 @@ class BleKeySession internal constructor(
         if (fields.size < 2) return BleResponse.Unknown
         return when (fields[0]) {
             "0" -> if (fields[1].isNotEmpty()) BleResponse.Authenticated(fields[1]) else BleResponse.Unknown
-            "1" -> BleResponse.ReconnectCredential
+            "1" -> fields.getOrNull(1)?.let {
+                runCatching { BleResponse.ReconnectCredential(BleReconnectCredential.parse(it)) }.getOrNull()
+            } ?: BleResponse.Unknown
             "2" -> BleResponse.CommandResult(fields[1], fields.getOrNull(2))
             else -> BleResponse.Unknown
         }

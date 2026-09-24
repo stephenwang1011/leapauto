@@ -17,6 +17,7 @@ class BleKeyRuntime private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val sessions = SessionStore(appContext)
     private val keys = BleManagedKeyStore(appContext)
+    private val reconnectCredentials = BleReconnectCredentialStore(appContext)
     private val profiles = BleVehicleProfileStore(appContext)
     private val handler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -68,10 +69,12 @@ class BleKeyRuntime private constructor(context: Context) {
         val profile = profiles.load(current)
         recordTarget(normalized, profile)
         candidate = normalized to certificate
+        val credentialScope = reconnectScope(current, certificate)
         controller.connect(normalized, certificate, current.accountId, current.deviceId,
-            BlePassiveConfiguration.MANUAL.copy(calibration = profile.effectiveCalibration), trustedBinding = false) {
-                identity == current && validSession()
-            }
+            BlePassiveConfiguration.MANUAL.copy(calibration = profile.effectiveCalibration), trustedBinding = false,
+            reconnectCredential = reconnectCredentials.load(credentialScope),
+            onReconnectCredential = reconnectCredentialHandler(current, credentialScope)
+        ) { identity == current && validSession() }
     }
 
     fun applyConfiguration(configuration: BlePassiveConfiguration) {
@@ -145,7 +148,9 @@ class BleKeyRuntime private constructor(context: Context) {
     fun endSession() {
         stopBackground()
         val suspended = keys.suspendAll()
+        val credentialsCleared = reconnectCredentials.clearAll()
         if (!suspended) blockedGeneration = identity?.generation
+        if (!credentialsCleared) blockedGeneration = identity?.generation
         identity = null
         keyValue.value = null
     }
@@ -180,8 +185,12 @@ class BleKeyRuntime private constructor(context: Context) {
         stopping = false
         val current = requireNotNull(identity)
         recordTarget(bound.device, profiles.load(current))
+        val credentialScope = reconnectScope(current, certificate)
         controller.connect(bound.device.copy(protocolMinorSource = BleProtocolMinorSource.SAVED), certificate, bound.accountId, current.deviceId,
-            bound.desired, trustedBinding = true) { identity == current && validSession() }
+            bound.desired, trustedBinding = true,
+            reconnectCredential = reconnectCredentials.load(credentialScope),
+            onReconnectCredential = reconnectCredentialHandler(current, credentialScope)
+        ) { identity == current && validSession() }
     }
 
     private fun onConnection(state: BleConnectionState) {
@@ -256,6 +265,32 @@ class BleKeyRuntime private constructor(context: Context) {
     private fun cancelRetry() {
         retry?.let(handler::removeCallbacks)
         retry = null
+    }
+
+    private fun reconnectScope(
+        current: BleSessionIdentity,
+        certificate: BleKeyCertificate
+    ): BleReconnectCredentialScope = BleReconnectCredentialScope(
+        current.accountId,
+        current.vin,
+        current.deviceId,
+        BleKeyProtocol.certificateFingerprint(certificate),
+        BleCompatibilityProfile.forConnection()
+    )
+
+    private fun reconnectCredentialHandler(
+        current: BleSessionIdentity,
+        scope: BleReconnectCredentialScope
+    ): (BleReconnectCredential?) -> Unit = { credential ->
+        if (identity == current && validSession()) {
+            val saved = if (credential == null) reconnectCredentials.clear(scope)
+            else reconnectCredentials.save(scope, credential)
+            controller.recordDiagnostic(
+                BleDiagnosticEvent.RECONNECT_CREDENTIAL_STORE,
+                if (credential == null) 2 else 1,
+                if (saved) 1 else 0
+            )
+        }
     }
 
     companion object {

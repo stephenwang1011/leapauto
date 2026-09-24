@@ -53,6 +53,26 @@ class BleKeyProtocolTest {
     }
 
     @Test
+    fun onePaoAuthenticationProfileIsExplicitAndDoesNotChangeLegacyDefault() {
+        session().use { session ->
+            val legacy = session.buildAuthentication(certificate, "test-account", "test-device", 8, timestamp)
+            val summaries = mutableListOf<BleAuthenticationStructure>()
+            val compatible = session.buildAuthentication(
+                certificate, "test-account", "test-device", 8, timestamp,
+                BlePassiveConfiguration(enabled = false, buttonEnabled = true),
+                BleAuthenticationTextProfile.ONE_PAO_V010,
+                supportsButton = true,
+                onPrepared = { summaries += it }
+            )
+            assertFalse(legacy.contentEquals(compatible))
+            assertEquals(6, summaries.single().certificateFieldCount)
+            assertEquals(8, summaries.single().flagsMask)
+            assertArrayEquals(legacy,
+                session.buildAuthentication(certificate, "test-account", "test-device", 8, timestamp))
+        }
+    }
+
+    @Test
     fun authenticationDiagnosticsPreserveFrameForEveryIdentityMatchCombination() {
         for (mask in 0..3) {
             val accountId = if (mask and 1 != 0) "old-account" else "new-account"
@@ -256,8 +276,41 @@ class BleKeyProtocolTest {
             assertTrue(response is BleResponse.CommandResult)
             assertEquals("3", (response as BleResponse.CommandResult).identifier)
             assertEquals("00", response.result)
-            assertEquals(BleResponse.ReconnectCredential,
-                session.decodeResponse(frame("aaab18000000654d3438483268744f75494743562f474666707469513d3d")))
+            assertTrue(session.decodeResponse(
+                frame("aaab18000000654d3438483268744f75494743562f474666707469513d3d")) is
+                BleResponse.ReconnectCredential)
+        }
+    }
+
+
+    @Test
+    fun reconnectCredentialAndAuthenticationFrameFollowOnePaoStructure() {
+        val credential = BleReconnectCredential.parse("00Aa10ff")
+        assertEquals("00aa10ff", credential.hex)
+        assertArrayEquals(hex("00aa10ff"), credential.bytes())
+        session().use { session ->
+            val frame = session.buildReconnectAuthentication(
+                credential, "test-account", timestamp,
+                BlePassiveConfiguration(enabled = false, buttonEnabled = true),
+                supportsButton = true
+            )
+            val decoded = BleFrameDecoder().append(frame).single()
+            assertEquals(BleFrameType.RECONNECT, decoded.type)
+            assertEquals(frame.size - 4, decoded.payload.size)
+            assertEquals(0x12, frame[4].toInt() and 0xFF)
+            assertEquals(0x34, frame[5].toInt() and 0xFF)
+            assertEquals(0x56, frame[6].toInt() and 0xFF)
+            assertEquals(0x78, frame[7].toInt() and 0xFF)
+            assertArrayEquals(hex("046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296" +
+                "4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5"),
+                frame.copyOfRange(8, 73))
+            assertEquals(1, frame[frame.size - 18].toInt())
+            assertEquals(9, frame[frame.size - 17].toInt())
+            assertEquals(frame.size - 4, (frame[2].toInt() and 0xFF) or
+                ((frame[3].toInt() and 0xFF) shl 8))
+        }
+        for (invalid in listOf("", "0", "0x", "gg", "１２", "aa".repeat(513))) {
+            assertThrows(IllegalArgumentException::class.java) { BleReconnectCredential.parse(invalid) }
         }
     }
 
@@ -359,8 +412,12 @@ class BleKeyProtocolTest {
         assertEquals(20, BleKeyProtocol.chunkLimit(0))
         assertEquals(160, BleKeyProtocol.chunkLimit(200))
         assertEquals(160, BleKeyProtocol.chunkLimit(Int.MAX_VALUE))
+        assertEquals(197, BleKeyProtocol.chunkLimit(200, BleChunkProfile.ONE_PAO_V010))
+        assertEquals(197, BleKeyProtocol.chunkLimit(Int.MAX_VALUE, BleChunkProfile.ONE_PAO_V010))
         assertEquals(listOf(20, 20, 1), BleKeyProtocol.chunks(ByteArray(41), 23).map { it.size })
         assertEquals(listOf(160, 1), BleKeyProtocol.chunks(ByteArray(161), 200).map { it.size })
+        assertEquals(listOf(197, 114), BleKeyProtocol.chunks(
+            ByteArray(311), 247, BleChunkProfile.ONE_PAO_V010).map { it.size })
         assertTrue(BleKeyProtocol.chunks(byteArrayOf(), 23).isEmpty())
     }
 

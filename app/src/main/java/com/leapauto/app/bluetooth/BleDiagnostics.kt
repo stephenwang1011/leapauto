@@ -20,6 +20,11 @@ enum class BleDiagnosticEvent(val label: String) {
     VEHICLE_METADATA_RESULT("车辆蓝牙信息结果"),
     TARGET_MATCH("连接目标核对"),
     AUTH_MODE("认证方式"),
+    AUTH_PROFILE("认证文本格式"),
+    TRANSPORT_PROFILE("蓝牙传输策略"),
+    RECONNECT_CREDENTIAL_RECEIVED("收到快速认证凭证"),
+    RECONNECT_CREDENTIAL_STORE("快速认证凭证存储"),
+    RECONNECT_FALLBACK("快速认证回退完整认证"),
     AUTH_IDENTITY_PLACEHOLDERS("证书身份占位"),
     CALIBRATION_SOURCE("标定参数来源"),
     CALIBRATION_SAVED("本机标定已保存"),
@@ -71,7 +76,24 @@ data class BleDiagnosticEntry(
                 append(" · 云端=").append(targetLabel(code))
                 append(" · 绑定=").append(targetLabel(detail))
             }
-            BleDiagnosticEvent.AUTH_MODE -> append(if (code == 0) " · 完整认证 AAAE" else " · 方式未知")
+            BleDiagnosticEvent.AUTH_MODE -> append(when (code) {
+                0 -> " · 完整认证 AAAE"
+                1 -> " · 快速认证 AAEE"
+                else -> " · 方式未知"
+            })
+            BleDiagnosticEvent.AUTH_PROFILE -> append(
+                if (code == BleCompatibilityProfile.ONE_PAO_V010.diagnosticCode)
+                    " · 1PAO 0.10 固定字段" else " · 旧版动态字段"
+            )
+            BleDiagnosticEvent.TRANSPORT_PROFILE -> append(
+                if (code == BleCompatibilityProfile.ONE_PAO_V010.diagnosticCode)
+                    " · MTU优先 · 分片上限197" else " · 旧版分片上限160"
+            )
+            BleDiagnosticEvent.RECONNECT_CREDENTIAL_STORE -> append(when (code) {
+                1 -> if (detail == 1) " · 已加密保存" else " · 保存失败"
+                2 -> if (detail == 1) " · 已清除" else " · 清除失败"
+                else -> " · 未知操作"
+            })
             BleDiagnosticEvent.AUTH_IDENTITY_PLACEHOLDERS -> {
                 append(" · 空字段位=").append(code)
                 append("（1=原账号为空，2=原设备为空；空占位不代表身份错误）")
