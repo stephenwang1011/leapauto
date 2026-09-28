@@ -22,7 +22,7 @@ class BleDiagnosticsTest {
         )
         val report = BleDiagnostics.formatReport(entries, "test", BleConnectionPhase.FAILED)
         for (meaning in listOf("云端=不一致", "绑定=一致", "完整认证 AAAE", "1PAO 0.10 固定字段",
-                "MTU优先", "分片上限197", "空占位不代表身份错误", "本机自定义", "不代表车辆已应用")) {
+                "MTU优先", "官方分片上限160", "空占位不代表身份错误", "本机自定义", "不代表车辆已应用")) {
             assertTrue(report.contains(meaning))
         }
         assertFalse(report.contains("00:11:22"))
@@ -114,5 +114,32 @@ class BleDiagnosticsTest {
         for (field in listOf("VIN:", "MAC:", "passwordCard", "ecdhPublicKey", "token=")) {
             assertFalse(report.contains(field))
         }
+    }
+
+    @Test
+    fun enhancedDiagnosticsTranslateGattStatusesVehicleRejectionsAndMaskMac() {
+        assertEquals("GATT_SUCCESS", gattStatusLabel(0))
+        assertEquals("GATT_ERROR(133/未检测到广播或信号中断)", gattStatusLabel(133))
+        assertEquals("PEER_TERMINATE(车机主动挂断)", gattStatusLabel(19))
+        assertEquals("CONN_TIMEOUT(距离过远/超时)", gattStatusLabel(8))
+
+        assertEquals("CONNECTED", gattStateLabel(2))
+        assertEquals("DISCONNECTED", gattStateLabel(0))
+
+        assertEquals("钥匙未授权/验签不匹配", vehicleResultCodeLabel(9))
+        assertEquals("凭证失效", vehicleResultCodeLabel(3))
+        assertEquals("车机拒绝", vehicleResultCodeLabel(7))
+
+        assertEquals("**:*:AA:BB", maskAddress("00:11:22:33:AA:BB"))
+        assertEquals("--", maskAddress(null))
+
+        val entryWithExtra = BleDiagnosticEntry(
+            elapsedMillis = 50L,
+            event = BleDiagnosticEvent.GATT_STATE,
+            code = 0,
+            detail = 2,
+            extra = "GATT_SUCCESS · CONNECTED"
+        )
+        assertTrue(entryWithExtra.description.contains("GATT_SUCCESS · CONNECTED"))
     }
 }

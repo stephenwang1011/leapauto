@@ -10,11 +10,13 @@
     <item android:id="@android:id/progress">
         <clip>
             <shape android:shape="rectangle">
+                <!-- 智能座舱暖阳微晶流光渐变：暖橙 #FF9800 ➔ 预警金 @color/widget_range_warning ➔ #FFB74D -->
                 <gradient
                     android:type="linear"
                     android:angle="0"
-                    android:startColor="@color/widget_range_warning"
-                    android:endColor="#FFB340" />
+                    android:startColor="#FF9800"
+                    android:centerColor="@color/widget_range_warning"
+                    android:endColor="#FFB74D" />
                 <corners android:radius="2dp" />
             </shape>
         </clip>

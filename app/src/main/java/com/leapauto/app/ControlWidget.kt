@@ -34,25 +34,33 @@ class ControlWidget : AppWidgetProvider() {
 
     companion object {
         /** 在不重建布局的前提下，把控车进度回写到所有桌面插件实例。 */
-        fun showControlStatus(context: Context, text: String, acEnabled: Boolean? = null, acTone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT) {
-            CompactControlWidget.showControlStatus(context, acEnabled, acTone)
+        fun showControlStatus(
+            context: Context,
+            text: String,
+            acEnabled: Boolean? = null,
+            acTone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT,
+            locked: Boolean? = null
+        ) {
+            CompactControlWidget.showControlStatus(context, acEnabled, acTone, locked)
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, ControlWidget::class.java))
             if (ids.isEmpty()) return
             val themeContext = widgetThemeContext(context)
             val update = baseViews(context).apply {
                 setTextViewText(R.id.txtWUpdated, text)
-                if (acEnabled != null) {
+                val shouldUpdateSlots = acEnabled != null || locked != null
+                if (shouldUpdateSlots) {
                     val store = SessionStore(context)
                     val snapshot = store.loadWidgetSnapshot(store.load().selectedVin)
+                    val effectiveLocked = locked ?: snapshot?.locked
                     applyActionSlots(
                         context = themeContext,
                         views = this,
                         actions = store.loadWidget4x2Actions(),
-                        locked = snapshot?.locked,
+                        locked = effectiveLocked,
                         trunkState = snapshot?.trunkState ?: TrunkState.UNKNOWN,
                         sentryEnabled = snapshot?.sentryEnabled,
-                        acEnabled = acEnabled,
+                        acEnabled = acEnabled ?: snapshot?.acEnabled,
                         acTone = acTone,
                         windowOpen = snapshot?.windowOpen
                     )
@@ -168,9 +176,9 @@ class ControlWidget : AppWidgetProvider() {
         internal fun baseViews(context: Context): RemoteViews = RemoteViews(context.packageName, R.layout.widget_layout).apply {
             val store = SessionStore(context)
             val themeContext = widgetThemeContext(context)
-            val opacity = store.loadWidgetOpacity()
-            applyWidgetOpacity(context, this, opacity, widgetUsesDarkAppearance(context))
-            applyStaticAppearance(themeContext, this, opacity)
+            val darkTheme = widgetUsesDarkAppearance(context)
+            applyWidgetBackground(context, this, darkTheme)
+            applyStaticAppearance(themeContext, this)
             val snapshot = store.loadSelectedWidgetSnapshot()
             val session = store.load()
             val config = store.loadVehicleConfig(session.selectedVin, session.selectedCarType)
@@ -243,11 +251,10 @@ class ControlWidget : AppWidgetProvider() {
 
         internal fun renderStatus(context: Context, views: RemoteViews, status: JSONObject, carType: String) {
             val store = SessionStore(context)
-            val opacity = store.loadWidgetOpacity()
             val themeContext = widgetThemeContext(context)
             val darkTheme = widgetUsesDarkAppearance(context)
-            applyWidgetOpacity(context, views, opacity, darkTheme)
-            applyStaticAppearance(themeContext, views, opacity)
+            applyWidgetBackground(context, views, darkTheme)
+            applyStaticAppearance(themeContext, views)
             val session = store.load()
             val config = store.loadVehicleConfig(session.selectedVin, carType)
             val displayStatus = status
@@ -305,11 +312,10 @@ class ControlWidget : AppWidgetProvider() {
 
         internal fun renderSnapshot(context: Context, views: RemoteViews, snapshot: SessionStore.WidgetSnapshot) {
             val store = SessionStore(context)
-            val opacity = store.loadWidgetOpacity()
             val themeContext = widgetThemeContext(context)
             val darkTheme = widgetUsesDarkAppearance(context)
-            applyWidgetOpacity(context, views, opacity, darkTheme)
-            applyStaticAppearance(themeContext, views, opacity)
+            applyWidgetBackground(context, views, darkTheme)
+            applyStaticAppearance(themeContext, views)
             val session = store.load()
             val configVin = session.selectedVin.ifBlank { snapshot.vin }
             val config = store.loadVehicleConfig(configVin, snapshot.carType)
@@ -631,7 +637,7 @@ class ControlWidget : AppWidgetProvider() {
             val electricColor = hybridRangeColorResource(presentation.electricProgress, presentation.electricProgressKnown)
             val fuelColor = hybridRangeColorResource(presentation.fuelProgress, presentation.fuelProgressKnown)
             val themeContext = widgetThemeContext(context)
-            val highContrast = SessionStore(context).loadWidgetOpacity() == 25
+            val highContrast = false
             val electricColorValue = ContextCompat.getColor(
                 themeContext,
                 highContrastRangeColorResource(electricColor, highContrast)
@@ -728,7 +734,7 @@ class ControlWidget : AppWidgetProvider() {
                 themeCtx,
                 highContrastRangeColorResource(
                     colorResource,
-                    SessionStore(context).loadWidgetOpacity() == 25
+                    false
                 )
             )
             // 与主界面严格对齐：公里数大字为沉稳白/炭黑，单位为次级文字灰，仅百分比显示当前状态能量色
@@ -851,24 +857,6 @@ class ControlWidget : AppWidgetProvider() {
             return PendingIntent.getForegroundService(context, command.hashCode(), intent, flags)
         }
 
-        internal fun widgetBackgroundResource(opacity: Int): Int = when (opacity) {
-            75 -> R.drawable.widget_card_background_75
-            50 -> R.drawable.widget_card_background_50
-            25 -> R.drawable.widget_card_background_25
-            else -> R.drawable.widget_card_background
-        }
-
-        internal fun widgetBackgroundResource(opacity: Int, darkTheme: Boolean): Int = when {
-            darkTheme && opacity == 75 -> R.drawable.widget_card_background_75_dark
-            darkTheme && opacity == 50 -> R.drawable.widget_card_background_50_dark
-            darkTheme && opacity == 25 -> R.drawable.widget_card_background_25_dark
-            darkTheme -> R.drawable.widget_card_background_dark
-            opacity == 75 -> R.drawable.widget_card_background_75_light
-            opacity == 50 -> R.drawable.widget_card_background_50_light
-            opacity == 25 -> R.drawable.widget_card_background_25_light
-            else -> R.drawable.widget_card_background_light
-        }
-
         internal fun widgetUsesDarkAppearance(context: Context): Boolean {
             val systemDark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
                 Configuration.UI_MODE_NIGHT_YES
@@ -890,14 +878,13 @@ class ControlWidget : AppWidgetProvider() {
         internal fun resolveWidgetActionBackground(context: Context, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int =
             widgetActionBackgroundResource(darkTheme)
 
-        internal fun resolveWidgetCardBackground(context: Context, opacity: Int, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int {
-            val bgStyle = SessionStore(context).loadWidgetBackgroundStyle()
-            if (bgStyle == SessionStore.WIDGET_BG_STYLE_LANDSCAPE) {
-                return if (darkTheme) R.drawable.widget_card_background_landscape_dark
-                else R.drawable.widget_card_background_landscape_light
-            }
-            return widgetBackgroundResource(opacity, darkTheme)
-        }
+        // 默认底层写死：智能座舱·官方山河背景风格 (SessionStore.WIDGET_BG_STYLE_LANDSCAPE，深色/浅色自适应)
+        internal fun resolveWidgetCardBackground(context: Context, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int =
+            if (darkTheme) R.drawable.widget_card_background_landscape_dark
+            else R.drawable.widget_card_background_landscape_light
+
+        internal fun resolveWidgetCardBackground(context: Context, opacity: Int, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int =
+            resolveWidgetCardBackground(context, darkTheme)
 
         /** Uses the standard RemoteViews tint operation where supported, with a legacy fallback. */
         internal fun setImageTint(views: RemoteViews, viewId: Int, color: Int) {
@@ -907,11 +894,11 @@ class ControlWidget : AppWidgetProvider() {
             }
         }
 
-        private fun applyWidgetOpacity(context: Context, views: RemoteViews, opacity: Int, darkTheme: Boolean) {
-            views.setInt(R.id.widgetRoot, "setBackgroundResource", resolveWidgetCardBackground(context, opacity, darkTheme))
+        private fun applyWidgetBackground(context: Context, views: RemoteViews, darkTheme: Boolean) {
+            views.setInt(R.id.widgetRoot, "setBackgroundResource", resolveWidgetCardBackground(context, darkTheme))
         }
 
-        private fun applyStaticAppearance(context: Context, views: RemoteViews, opacity: Int) {
+        private fun applyStaticAppearance(context: Context, views: RemoteViews) {
             val onSurface = ContextCompat.getColor(context, R.color.widget_on_surface)
             val onSurfaceVariant = ContextCompat.getColor(context, R.color.widget_on_surface_variant)
             val actionIcon = ContextCompat.getColor(context, R.color.widget_action_icon)
@@ -933,7 +920,7 @@ class ControlWidget : AppWidgetProvider() {
             btnBgIds.forEach { id ->
                 views.setInt(id, "setBackgroundResource", actionBackground)
             }
-            applyProgressAppearance(context, views, opacity == 25)
+            applyProgressAppearance(context, views, false)
         }
 
         private fun applyProgressAppearance(context: Context, views: RemoteViews, highContrast: Boolean) {

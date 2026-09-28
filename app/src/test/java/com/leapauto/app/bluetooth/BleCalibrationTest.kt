@@ -16,6 +16,18 @@ class BleCalibrationTest {
     }
 
     @Test
+    fun `c16 default calibration matches leap3 verified protocol format`() {
+        assertEquals("69;1.00;04;21", BleCalibration.C16_DEFAULT.toProtocolText())
+        assertArrayEquals(byteArrayOf(69, 100, 0, 4, 21), BleCalibration.C16_DEFAULT.encoded())
+        assertEquals(BleCalibration.C16_DEFAULT, BleCalibration.defaultForModel("C16"))
+        assertEquals(BleCalibration.C16_DEFAULT, BleCalibration.defaultForModel("零跑C16"))
+        assertEquals(BleCalibration.C16_DEFAULT, BleCalibration.defaultForModel("C10"))
+        assertEquals(BleCalibration.DEFAULT, BleCalibration.defaultForModel("T03"))
+        assertEquals(BleCalibration.DEFAULT, BleCalibration.defaultForModel("C11"))
+        assertEquals(BleCalibration.DEFAULT, BleCalibration.defaultForModel(null))
+    }
+
+    @Test
     fun `protocol widths reject truncation and include the full unsigned boundaries`() {
         val zero = BleCalibration(0, 0, 0, 0)
         val maximum = BleCalibration(255, 65_535, 255, 255)

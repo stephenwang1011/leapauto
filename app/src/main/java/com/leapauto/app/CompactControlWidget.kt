@@ -21,7 +21,6 @@ class CompactControlWidget : AppWidgetProvider() {
         internal fun baseViews(context: Context): RemoteViews =
             RemoteViews(context.packageName, R.layout.widget_compact_layout).apply {
                 val store = SessionStore(context)
-                val opacity = store.loadWidgetOpacity()
                 val themeContext = ControlWidget.widgetThemeContext(context)
                 val darkTheme = ControlWidget.widgetUsesDarkAppearance(context)
                 val session = store.load()
@@ -34,10 +33,10 @@ class CompactControlWidget : AppWidgetProvider() {
                 setInt(
                     R.id.compactWidgetRoot,
                     "setBackgroundResource",
-                    ControlWidget.resolveWidgetCardBackground(context, opacity, darkTheme)
+                    ControlWidget.resolveWidgetCardBackground(context, darkTheme)
                 )
                 setVehicleImage(this, appearance, session.selectedVin, context)
-                applyStaticAppearance(themeContext, this, opacity)
+                applyStaticAppearance(themeContext, this)
                 setTextViewText(R.id.txtWCTitle, ControlWidget.widgetTitle(config, appearance))
                 setTextViewText(R.id.txtWCUpdated, snapshot?.updated?.removePrefix("今天")?.trim().orEmpty())
                 val resolvedPowerType = VehiclePowerTypeResolver.resolve(
@@ -60,7 +59,7 @@ class CompactControlWidget : AppWidgetProvider() {
                         electricTotalRange = snapshot?.electricTotalRange,
                         fuelTotalRange = snapshot?.fuelTotalRange
                     ),
-                    highContrast = opacity == 25
+                    highContrast = false
                 )
                 applyLockPresentation(themeContext, this, snapshot?.locked)
                 applyAcPresentation(themeContext, this, snapshot?.acEnabled, snapshot?.acTone ?: ClimateTemperatureTone.DEFAULT)
@@ -82,13 +81,21 @@ class CompactControlWidget : AppWidgetProvider() {
             manager.updateAppWidget(ids, baseViews(context))
         }
 
-        fun showControlStatus(context: Context, acEnabled: Boolean?, acTone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT) {
+        fun showControlStatus(
+            context: Context,
+            acEnabled: Boolean? = null,
+            acTone: ClimateTemperatureTone = ClimateTemperatureTone.DEFAULT,
+            locked: Boolean? = null
+        ) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, CompactControlWidget::class.java))
             if (ids.isEmpty()) return
             val views = baseViews(context)
             if (acEnabled != null) {
                 applyAcPresentation(context, views, acEnabled, acTone)
+            }
+            if (locked != null) {
+                applyLockPresentation(context, views, locked)
             }
             manager.partiallyUpdateAppWidget(ids, views)
         }
@@ -220,9 +227,10 @@ class CompactControlWidget : AppWidgetProvider() {
         private fun applyLockPresentation(context: Context, views: RemoteViews, locked: Boolean?) {
             val presentation = CompactWidgetLockPresentationMapper.fromState(locked)
             val themeContext = ControlWidget.widgetThemeContext(context)
+            // 动作导向交互：车辆处于锁车状态时显示【解锁】按键；车辆处于解锁状态时显示【锁车】按键
             val iconResource = when (presentation.locked) {
-                true -> R.drawable.ic_phosphor_lock
-                false -> R.drawable.ic_phosphor_lock_open
+                true -> R.drawable.ic_phosphor_lock_open
+                false -> R.drawable.ic_phosphor_lock
                 null -> R.drawable.ic_phosphor_lock
             }
             val iconColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
@@ -284,7 +292,7 @@ class CompactControlWidget : AppWidgetProvider() {
             )
         }
 
-        private fun applyStaticAppearance(context: Context, views: RemoteViews, opacity: Int) {
+        private fun applyStaticAppearance(context: Context, views: RemoteViews) {
             val onSurface = ContextCompat.getColor(context, R.color.widget_on_surface)
             val onSurfaceVariant = ContextCompat.getColor(context, R.color.widget_on_surface_variant)
             val actionIcon = ContextCompat.getColor(context, R.color.widget_action_icon)
@@ -307,7 +315,7 @@ class CompactControlWidget : AppWidgetProvider() {
                 "setBackgroundResource",
                 compactActionBackgroundResource(context, CompactActionTone.NEUTRAL)
             )
-            applyProgressAppearance(context, views, opacity == 25)
+            applyProgressAppearance(context, views, false)
         }
 
         private fun applyProgressAppearance(context: Context, views: RemoteViews, highContrast: Boolean) {

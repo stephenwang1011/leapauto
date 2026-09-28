@@ -27,6 +27,9 @@ data class BleVehicleProfile(
 
     val effectiveCalibration: BleCalibration get() = calibration ?: BleCalibration.DEFAULT
 
+    fun effectiveCalibration(carType: String?): BleCalibration =
+        calibration ?: BleCalibration.defaultForModel(carType)
+
     fun interrupted(): BleVehicleProfile = copy(cloudState = BleCloudSyncState(
         cloudState.configuration.recovered(), cloudState.calibration.recovered()
     ))

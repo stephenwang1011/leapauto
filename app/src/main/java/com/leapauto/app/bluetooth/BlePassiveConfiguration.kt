@@ -62,6 +62,18 @@ data class BlePassiveConfiguration(
 
     companion object {
         val MANUAL = BlePassiveConfiguration(enabled = true)
+
+        fun defaultForModel(carType: String? = null, protocolMinor: Int? = null): BlePassiveConfiguration {
+            val model = carType.orEmpty().uppercase()
+            val isLeap3 = model.contains("C16") || model.contains("C10") || (protocolMinor ?: 0) >= 9
+            return BlePassiveConfiguration(
+                enabled = true,
+                autoUnlock = false,
+                autoLock = false,
+                buttonEnabled = isLeap3,
+                calibration = BleCalibration.defaultForModel(carType)
+            )
+        }
     }
 }
 

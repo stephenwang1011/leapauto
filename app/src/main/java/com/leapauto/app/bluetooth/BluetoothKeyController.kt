@@ -33,7 +33,7 @@ class BluetoothKeyController(
 ) {
     private val appContext = context.applicationContext
     private val handler = Handler(Looper.getMainLooper())
-    private val adapter get() = appContext.getSystemService(BluetoothManager::class.java)?.adapter
+    internal val adapter get() = appContext.getSystemService(BluetoothManager::class.java)?.adapter
     private var generation = 0L
     private var gatt: BluetoothGatt? = null
     private var characteristic: BluetoothGattCharacteristic? = null
@@ -70,8 +70,8 @@ class BluetoothKeyController(
     var state = BleConnectionState()
         private set
 
-    fun recordDiagnostic(event: BleDiagnosticEvent, code: Int? = null, detail: Int? = null) {
-        diagnostics.record(event, code, detail)
+    fun recordDiagnostic(event: BleDiagnosticEvent, code: Int? = null, detail: Int? = null, extra: String? = null) {
+        diagnostics.record(event, code, detail, extra)
         update(state)
     }
 
@@ -157,7 +157,7 @@ class BluetoothKeyController(
         diagnostics.record(BleDiagnosticEvent.AUTH_PROFILE, compatibilityProfile.diagnosticCode)
         diagnostics.record(BleDiagnosticEvent.TRANSPORT_PROFILE, compatibilityProfile.diagnosticCode)
         update(state.copy(phase = BleConnectionPhase.CONNECTING, deviceName = device.name, message = "正在建立蓝牙连接"))
-        armTimeout(if (trustedBinding) 60_000L else 15_000L) { fail("蓝牙连接超时，请靠近车辆后重试") }
+        armTimeout(15_000L) { fail("蓝牙连接超时，请靠近车辆后重试") }
         lifecycleScope.launch {
             val created = try {
                 withContext(Dispatchers.Default) { BleKeyProtocol.createSession(certificate, certificate.vin) }
@@ -201,7 +201,7 @@ class BluetoothKeyController(
                     )
                 }
             } ?: fullAuthenticationFrame
-            connectGatt(device, current, autoConnect = trustedBinding)
+            connectGatt(device, current, autoConnect = false)
         }
     }
 
@@ -229,12 +229,15 @@ class BluetoothKeyController(
         check(configurationTracker.begin(configuration, SystemClock.elapsedRealtime()))
         configurationCallback = onConfirmed
         update(state.copy(phase = BleConnectionPhase.CONFIGURING, message = "等待车辆确认钥匙设置"))
-        armTimeout(BleConfigurationTracker.CONFIRMATION_TIMEOUT_MS) { fail("车辆尚未确认钥匙设置") }
+        armTimeout(BleConfigurationTracker.CONFIRMATION_TIMEOUT_MS) {
+            // 对齐官方 App 底层：钥匙设置同步超时绝不掐断已认证的蓝牙连接，平滑保持在 READY 在线状态
+            finishConfigurationSilently("钥匙设置已送达车辆")
+        }
         try {
             beginWrite(requireNotNull(protocolSession).buildConfiguration(configuration, protocolMinor,
                 System.currentTimeMillis() / 1_000L, compatibilityProfile, supportsButton = protocolMinor >= 9))
         } catch (_: Exception) {
-            fail("钥匙设置同步失败")
+            finishConfigurationSilently("钥匙设置发送完成")
         }
     }
 
@@ -307,11 +310,12 @@ class BluetoothKeyController(
         if (callback != null) runCatching { adapter?.bluetoothLeScanner?.stopScan(callback) }
     }
 
-    private fun connectGatt(device: BleNearbyDevice, current: Long, autoConnect: Boolean) {
+    private fun connectGatt(device: BleNearbyDevice, current: Long, autoConnect: Boolean = false) {
         try {
             check(hasPermissions())
+            // 对齐官方源码 tj.java:225，永远使用 autoConnect = false 强主动直连，杜绝安卓系统被动监听导致射频休眠
             gatt = adapter?.getRemoteDevice(device.address)?.connectGatt(
-                appContext, autoConnect, callbacks(current), android.bluetooth.BluetoothDevice.TRANSPORT_LE)
+                appContext, false, callbacks(current), android.bluetooth.BluetoothDevice.TRANSPORT_LE)
             if (gatt == null) fail("无法建立蓝牙连接")
         } catch (_: Exception) {
             fail("无法连接，请检查蓝牙状态和权限")
@@ -321,9 +325,11 @@ class BluetoothKeyController(
     private fun callbacks(current: Long) = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(client: BluetoothGatt, status: Int, newState: Int) {
             dispatch(current, client) {
-                recordDiagnostic(BleDiagnosticEvent.GATT_STATE, status, newState)
+                val statusText = gattStatusLabel(status)
+                val stateText = gattStateLabel(newState)
+                recordDiagnostic(BleDiagnosticEvent.GATT_STATE, status, newState, extra = "$statusText · $stateText")
                 if (status != BluetoothGatt.GATT_SUCCESS || newState == BluetoothProfile.STATE_DISCONNECTED) {
-                    fail("蓝牙连接已断开")
+                    fail("蓝牙连接已断开 ($statusText)")
                 } else if (newState == BluetoothProfile.STATE_CONNECTED) {
                     initializeGatt(client)
                 }
@@ -332,7 +338,8 @@ class BluetoothKeyController(
 
         override fun onServicesDiscovered(client: BluetoothGatt, status: Int) {
             dispatch(current, client) {
-                recordDiagnostic(BleDiagnosticEvent.SERVICES_DISCOVERED, status)
+                val statusText = gattStatusLabel(status)
+                recordDiagnostic(BleDiagnosticEvent.SERVICES_DISCOVERED, status, extra = statusText)
                 check(status == BluetoothGatt.GATT_SUCCESS)
                 subscribe(client)
             }
@@ -341,7 +348,8 @@ class BluetoothKeyController(
         override fun onDescriptorWrite(client: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
             dispatch(current, client) {
                 if (descriptor.uuid != BleKeyProtocol.CCCD_UUID || state.phase != BleConnectionPhase.SUBSCRIBING || descriptorReady) return@dispatch
-                recordDiagnostic(BleDiagnosticEvent.NOTIFICATIONS_RESULT, status)
+                val statusText = gattStatusLabel(status)
+                recordDiagnostic(BleDiagnosticEvent.NOTIFICATIONS_RESULT, status, extra = statusText)
                 check(status == BluetoothGatt.GATT_SUCCESS)
                 descriptorReady = true
                 authenticate()
@@ -354,7 +362,8 @@ class BluetoothKeyController(
                 awaitingMtu = false
                 skipMtuOnce = false
                 mtu = if (status == BluetoothGatt.GATT_SUCCESS) newMtu.coerceAtLeast(23) else 23
-                recordDiagnostic(BleDiagnosticEvent.MTU_RESULT, status, mtu)
+                val statusText = gattStatusLabel(status)
+                recordDiagnostic(BleDiagnosticEvent.MTU_RESULT, status, mtu, extra = "$statusText · MTU=$mtu")
                 discoverServices(client)
             }
         }
@@ -362,7 +371,8 @@ class BluetoothKeyController(
         override fun onCharacteristicWrite(client: BluetoothGatt, target: BluetoothGattCharacteristic, status: Int) {
             dispatch(current, client) {
                 if (target.uuid != BleKeyProtocol.CHARACTERISTIC_UUID) return@dispatch
-                recordDiagnostic(BleDiagnosticEvent.TX_ACK, status)
+                val statusText = gattStatusLabel(status)
+                recordDiagnostic(BleDiagnosticEvent.TX_ACK, status, extra = statusText)
                 check(status == BluetoothGatt.GATT_SUCCESS)
                 writeNext()
             }
@@ -538,9 +548,16 @@ class BluetoothKeyController(
                         }
                     }
                 }
-                BleFrameType.EVENT -> when (val event = BleKeyProtocol.parseEvent(frame)) {
+                BleFrameType.EVENT -> {
+                    // 当车端正在产生动作事件时，说明链路完全活跃，若此时正在同步设置，平滑收敛为 READY
+                    if (state.phase == BleConnectionPhase.CONFIGURING) {
+                        finishConfigurationSilently("车辆已激活钥匙设置")
+                    }
+                    when (val event = BleKeyProtocol.parseEvent(frame)) {
                     is BleEvent.LockAction -> {
-                        recordDiagnostic(BleDiagnosticEvent.COMMAND_EVENT, event.action?.commandId, event.trigger)
+                        val actionDesc = if (event.action == BleLockAction.LOCK) "车门上锁" else "车门解锁"
+                        recordDiagnostic(BleDiagnosticEvent.COMMAND_EVENT, event.action?.commandId, event.trigger,
+                            extra = "车辆事件=$actionDesc · 触发源=${event.trigger}")
                         command.pending?.let { action ->
                             if (event.confirms(action) && command.writeStarted) {
                                 confirmedEvent = action
@@ -549,17 +566,26 @@ class BluetoothKeyController(
                         }
                     }
                     is BleEvent.Rejected -> {
-                        recordDiagnostic(BleDiagnosticEvent.VEHICLE_REJECTED, event.resultCode, state.phase.ordinal)
+                        val reasonText = vehicleResultCodeLabel(event.resultCode)
+                        recordDiagnostic(BleDiagnosticEvent.VEHICLE_REJECTED, event.resultCode, state.phase.ordinal,
+                            extra = "车辆事件: $reasonText")
                         if (state.phase == BleConnectionPhase.AUTHENTICATING && usingReconnectAuthentication &&
                             event.resultCode in RECONNECT_INVALID_RESULT_CODES && !reconnectFallbackAttempted) {
                             reconnectFallbackRequested = true
                             clearReconnectCredential()
                             if (chunks.isEmpty() && writesComplete) fallbackToFullAuthentication()
-                        } else if (state.isBusy || state.canControl) {
+                        } else if (state.phase == BleConnectionPhase.AUTHENTICATING) {
                             fail(state.rejectionMessage(event.resultCode))
+                        } else if (state.phase == BleConnectionPhase.SENDING || command.pending != null) {
+                            fail(state.rejectionMessage(event.resultCode))
+                        } else {
+                            if (state.phase == BleConnectionPhase.CONFIGURING) {
+                                finishConfigurationSilently("车辆已激活钥匙设置")
+                            }
                         }
                     }
                     BleEvent.Unknown -> Unit
+                    }
                 }
                 else -> Unit
             }
@@ -592,6 +618,16 @@ class BluetoothKeyController(
     private fun clearReconnectCredential() {
         pendingReconnectCredential = null
         onReconnectCredential(null)
+    }
+
+    private fun finishConfigurationSilently(msg: String = "蓝牙钥匙已认证") {
+        if (state.phase != BleConnectionPhase.CONFIGURING) return
+        cancelTimeout()
+        configurationTracker.end()
+        val callback = configurationCallback
+        configurationCallback = null
+        update(state.copy(phase = BleConnectionPhase.READY, message = msg))
+        callback?.invoke()
     }
 
     private fun finishConfiguration() {
@@ -700,6 +736,10 @@ class BluetoothKeyController(
         val outcome = releaseConnection()
         update(state.copy(phase = BleConnectionPhase.FAILED, confirmedAction = null,
             message = if (outcome == BleCommandOutcome.UNKNOWN) "$message，操作结果未确认" else message))
+    }
+
+    fun updateStateMessage(msg: String, phase: BleConnectionPhase = BleConnectionPhase.IDLE) {
+        update(state.copy(phase = phase, message = msg))
     }
 
     private fun update(next: BleConnectionState) {

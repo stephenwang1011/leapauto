@@ -10,11 +10,13 @@
     <item android:id="@android:id/progress">
         <clip>
             <shape android:shape="rectangle">
+                <!-- 智能座舱极低电量警示微晶流光渐变：深红 #E53935 ➔ 危险红 @color/widget_range_critical ➔ #FF5252 -->
                 <gradient
                     android:type="linear"
                     android:angle="0"
-                    android:startColor="@color/widget_range_critical"
-                    android:endColor="#FF6961" />
+                    android:startColor="#E53935"
+                    android:centerColor="@color/widget_range_critical"
+                    android:endColor="#FF5252" />
                 <corners android:radius="2dp" />
             </shape>
         </clip>

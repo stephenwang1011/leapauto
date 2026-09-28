@@ -248,8 +248,20 @@ class VehicleHomeStatusTest {
         val earlier = LocalDateTime.of(2026, 8, 12, 8, 9).atZone(zone).toInstant().toEpochMilli()
 
         assertEquals("今天19:03更新", VehicleHomeStatus.updatedLabel(today, now, zone))
+        assertEquals("19:03更新", VehicleHomeStatus.updatedLabel(today, now, zone, omitTodayPrefix = true))
         assertEquals("昨天23:06更新", VehicleHomeStatus.updatedLabel(yesterday, now, zone))
+        assertEquals("昨天23:06更新", VehicleHomeStatus.updatedLabel(yesterday, now, zone, omitTodayPrefix = true))
         assertEquals("8/12 08:09更新", VehicleHomeStatus.updatedLabel(earlier, now, zone))
+    }
+
+    @Test
+    fun `is status fresh verifies within thirty minutes threshold`() {
+        val now = 100_000_000L
+        assertTrue(VehicleHomeStatus.isStatusFresh(now - 10 * 60 * 1000L, nowEpochMs = now))
+        assertTrue(VehicleHomeStatus.isStatusFresh(now - 30 * 60 * 1000L, nowEpochMs = now))
+        assertFalse(VehicleHomeStatus.isStatusFresh(now - 31 * 60 * 1000L, nowEpochMs = now))
+        assertFalse(VehicleHomeStatus.isStatusFresh(0L, nowEpochMs = now))
+        assertFalse(VehicleHomeStatus.isStatusFresh(-1L, nowEpochMs = now))
     }
 
     @Test

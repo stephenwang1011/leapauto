@@ -1,9 +1,14 @@
 package com.leapauto.app.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -12,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -29,11 +35,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.leapauto.app.R
+import com.leapauto.app.bluetooth.BatteryOptimizationHelper
 import com.leapauto.app.bluetooth.BleAccessPolicy
 import com.leapauto.app.bluetooth.BleCalibration
 import com.leapauto.app.bluetooth.BleCloudSaveStatus
@@ -108,7 +118,7 @@ fun BluetoothKeyDialog(
     onScan: () -> Unit,
     onConnect: (BleNearbyDevice) -> Unit,
     onDisconnect: () -> Unit,
-    onControl: (BleLockAction) -> Unit,
+    onControl: (BleLockAction) -> Unit = {},
     onOpenSettings: () -> Unit,
     onCopyDiagnostics: () -> Unit,
     onShareDiagnostics: () -> Unit,
@@ -140,85 +150,177 @@ fun BluetoothKeyDialog(
             tonalElevation = 0.dp,
             shadowElevation = 0.dp
         ) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 BluetoothDialogHeader(onDismiss)
                 Column(
                     Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    BluetoothCertificateStatus(
-                        state, certificateReady, certificateLoading, certificateMessage, backgroundRunning, onSyncCertificate
-                    )
-                    BluetoothMetadataStatus(metadata, metadataLoading, metadataMessage)
-                    HorizontalDivider()
-                    BluetoothConnectionStatus(state)
-                    HorizontalDivider()
-                    BluetoothNearbyVehicles(
+                    // 1. 核心状态与一键连接卡片 (极简智能座舱微晶舱)
+                    BluetoothConnectionHeroCard(
                         state = state,
+                        certificateReady = certificateReady,
                         certificateLoading = certificateLoading,
                         backgroundRunning = backgroundRunning,
                         backgroundEnabled = configuration.enabled,
                         reconnectDevice = reconnectDevice,
                         canConnect = manualConnectionAllowed && BleAccessPolicy.canConnect(state.phase, certificateLoading, certificateReady),
-                        metadata = metadata,
-                        onScan = onScan,
+                        onSyncCertificate = onSyncCertificate,
                         onDisconnect = onDisconnect,
                         onResumeBackground = onResumeBackground,
-                        onConnect = onConnect
+                        onConnect = onConnect,
+                        onScan = onScan
                     )
-                    HorizontalDivider()
-                    BluetoothPassiveSettings(
-                        configuration = configuration,
-                        appliedConfiguration = appliedConfiguration,
-                        configurationRequested = configurationRequested,
-                        configurationPending = configurationPending,
-                        backgroundRunning = backgroundRunning,
-                        bound = bound,
-                        protocolMinor = protocolMinor,
-                        busy = state.isBusy || state.phase == BleConnectionPhase.SCANNING || certificateLoading,
-                        onApplyConfiguration = onApplyConfiguration,
-                        onResumeBackground = onResumeBackground
-                    )
-                    BluetoothCloudStatus(cloudState, onRetryCloudSync)
-                    TextButton(onClick = onOpenSettings, modifier = Modifier.align(Alignment.End)) {
-                        Text(if (permissionsGranted) "系统权限设置" else "开启附近设备权限")
+
+                    // 2. 智能无感钥匙日常开关舱 (微晶卡片)
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            BluetoothPassiveSettings(
+                                configuration = configuration,
+                                appliedConfiguration = appliedConfiguration,
+                                configurationRequested = configurationRequested,
+                                configurationPending = configurationPending,
+                                backgroundRunning = backgroundRunning,
+                                bound = bound,
+                                protocolMinor = protocolMinor,
+                                busy = state.isBusy || state.phase == BleConnectionPhase.SCANNING || certificateLoading,
+                                onApplyConfiguration = onApplyConfiguration,
+                                onResumeBackground = onResumeBackground
+                            )
+                        }
                     }
-                    HorizontalDivider()
-                    BluetoothManualControlSection(state, onControl)
-                    HorizontalDivider()
-                    BluetoothCalibrationEditor(
-                        calibration = calibration,
-                        applied = calibrationApplied,
-                        pending = calibrationPending,
-                        busy = state.isBusy || state.phase == BleConnectionPhase.SCANNING || certificateLoading ||
-                            cloudState.calibration == BleCloudSaveStatus.SAVING,
-                        onSave = onSaveCalibration
-                    )
-                    HorizontalDivider()
-                    BluetoothDiagnosticsSection(state, onCopyDiagnostics, onShareDiagnostics, onClearDiagnostics)
+
+                    // 3. 高级设置与排障诊断中心 (默认优雅折叠)
+                    var advancedExpanded by rememberSaveable { mutableStateOf(false) }
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.20f),
+                        border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { advancedExpanded = !advancedExpanded },
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_settings_gear),
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = "高级设置与排障诊断",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (advancedExpanded) "收起" else "展开",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_phosphor_caret_right),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp).rotate(if (advancedExpanded) 90f else 0f),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            if (advancedExpanded) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                // 搜索附近车辆与设备列表
+                                BluetoothNearbyVehicles(
+                                    state = state,
+                                    certificateLoading = certificateLoading,
+                                    backgroundRunning = backgroundRunning,
+                                    backgroundEnabled = configuration.enabled,
+                                    reconnectDevice = reconnectDevice,
+                                    canConnect = manualConnectionAllowed && BleAccessPolicy.canConnect(state.phase, certificateLoading, certificateReady),
+                                    metadata = metadata,
+                                    onScan = onScan,
+                                    onDisconnect = onDisconnect,
+                                    onResumeBackground = onResumeBackground,
+                                    onConnect = onConnect
+                                )
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                // 车辆控制器硬件配置元数据
+                                BluetoothMetadataStatus(metadata, metadataLoading, metadataMessage)
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                // 感应标定参数精细调优
+                                BluetoothCalibrationEditor(
+                                    calibration = calibration,
+                                    applied = calibrationApplied,
+                                    pending = calibrationPending,
+                                    busy = state.isBusy || state.phase == BleConnectionPhase.SCANNING || certificateLoading ||
+                                        cloudState.calibration == BleCloudSaveStatus.SAVING,
+                                    onSave = onSaveCalibration
+                                )
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                // 系统后台防杀与全天候保活状态卡片
+                                val context = LocalContext.current
+                                val isBatteryIgnored = remember { BatteryOptimizationHelper.isIgnoringBatteryOptimizations(context) }
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                                    border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(
+                                                text = if (isBatteryIgnored) "全天候无感保活：已就绪" else "后台保活受限 (可能被系统查杀)",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (isBatteryIgnored) MaterialTheme.statusGood else MaterialTheme.colorScheme.error
+                                            )
+                                            Text(
+                                                text = if (isBatteryIgnored) "已开启电池无限制，锁屏放兜里依然能稳定拉门开锁" else "建议开启「无限制」与「允许自启动」，杜绝息屏被杀",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (!isBatteryIgnored) {
+                                            TextButton(onClick = { BatteryOptimizationHelper.requestIgnoreBatteryOptimization(context) }) {
+                                                Text("去开启")
+                                            }
+                                        }
+                                    }
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                // 云端设置同步状态
+                                BluetoothCloudStatus(cloudState, onRetryCloudSync)
+                                TextButton(onClick = onOpenSettings, modifier = Modifier.align(Alignment.End)) {
+                                    Text(if (permissionsGranted) "系统权限设置" else "开启附近设备权限")
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                // 连接诊断日志
+                                BluetoothDiagnosticsSection(state, onCopyDiagnostics, onShareDiagnostics, onClearDiagnostics)
+                            }
+                        }
+                    }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun BluetoothManualControlSection(state: BleConnectionState, onAction: (BleLockAction) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { expanded = !expanded },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text("手动锁控测试", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            Text(if (expanded) "收起" else "展开", style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        if (expanded) {
-            Text("用于验证蓝牙连接和车辆回执，不影响靠近自动解锁、远离自动锁车设置。",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            BluetoothLockControls(state, onAction)
         }
     }
 }
@@ -276,6 +378,189 @@ private fun BluetoothDialogHeader(onDismiss: () -> Unit) {
     }
 }
 
+/**
+ * 智能座舱级微晶连接状态与一键主控卡片
+ * 直观呈现连接状态、呼吸灯、设备名、一键连接/断开与安全凭证状态。
+ */
+@Composable
+private fun BluetoothConnectionHeroCard(
+    state: BleConnectionState,
+    certificateReady: Boolean,
+    certificateLoading: Boolean,
+    backgroundRunning: Boolean,
+    backgroundEnabled: Boolean,
+    reconnectDevice: BleNearbyDevice?,
+    canConnect: Boolean,
+    onSyncCertificate: () -> Unit,
+    onDisconnect: () -> Unit,
+    onResumeBackground: () -> Unit,
+    onConnect: (BleNearbyDevice) -> Unit,
+    onScan: () -> Unit
+) {
+    val isConnected = state.phase == BleConnectionPhase.READY || state.phase == BleConnectionPhase.SENDING
+    val isConnecting = state.isBusy || state.phase == BleConnectionPhase.SCANNING
+    val active = state.phase !in setOf(BleConnectionPhase.IDLE, BleConnectionPhase.FAILED)
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // 第 1 行：大号状态图标 + 状态文字 + 主控按钮
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // 呼吸状态徽标
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                isConnected -> MaterialTheme.statusGood.copy(alpha = 0.14f)
+                                isConnecting -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                state.phase == BleConnectionPhase.FAILED -> MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                                else -> MaterialTheme.colorScheme.surfaceVariant
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isConnecting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_bluetooth_key_hero),
+                            contentDescription = null,
+                            tint = when {
+                                isConnected -> MaterialTheme.statusGood
+                                state.phase == BleConnectionPhase.FAILED -> MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            },
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+
+                // 状态主标题与说明
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        text = when {
+                            isConnected -> "蓝牙钥匙已就绪"
+                            isConnecting -> "正在连接车辆..."
+                            state.phase == BleConnectionPhase.FAILED -> "连接未成功"
+                            else -> "蓝牙钥匙未连接"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = when {
+                            isConnected -> MaterialTheme.statusGood
+                            state.phase == BleConnectionPhase.FAILED -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurface
+                        }
+                    )
+                    Text(
+                        text = when {
+                            isConnected -> state.deviceName.ifBlank { "已连接并处于待命状态" }
+                            isConnecting -> state.detailMessage ?: "正在进行安全握手..."
+                            state.phase == BleConnectionPhase.FAILED -> state.detailMessage ?: "请确认车辆在附近并重试"
+                            else -> "待命模式 · 靠近车辆自动感应"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                // 主控快捷按钮
+                if (active || backgroundRunning) {
+                    OutlinedButton(
+                        onClick = onDisconnect,
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text("断开", style = MaterialTheme.typography.labelMedium)
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            if (reconnectDevice != null && canConnect) {
+                                onConnect(reconnectDevice)
+                            } else if (backgroundEnabled) {
+                                onResumeBackground()
+                            } else {
+                                onScan()
+                            }
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = if (backgroundEnabled) "恢复连接" else "连接车辆",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            // 第 2 行：安全凭证状态微晶指示条
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_phosphor_key),
+                        contentDescription = null,
+                        tint = if (certificateReady) MaterialTheme.statusGood else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        text = if (certificateReady) "数字钥匙安全凭证：有效" else "数字钥匙安全凭证：尚未同步",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = if (certificateReady) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error
+                    )
+                }
+
+                if (!certificateReady || certificateLoading) {
+                    TextButton(
+                        onClick = onSyncCertificate,
+                        enabled = !backgroundRunning && !certificateLoading,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        if (certificateLoading) {
+                            CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.6.dp)
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text(if (certificateLoading) "同步中" else "立即同步", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun BluetoothCertificateStatus(
     state: BleConnectionState,
@@ -285,30 +570,62 @@ private fun BluetoothCertificateStatus(
     backgroundRunning: Boolean,
     onSync: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("车辆钥匙", style = MaterialTheme.typography.titleSmall)
-        Text(
-            message.ifBlank {
-                when {
-                    loading -> "正在同步钥匙"
-                    ready -> "钥匙已就绪"
-                    else -> "尚未同步钥匙"
-                }
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+    val canSync = !backgroundRunning && BleAccessPolicy.canSyncCertificate(state.phase, loading)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_phosphor_key),
+                contentDescription = null,
+                tint = if (ready) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Column {
+                Text(
+                    text = "车辆安全凭证",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = message.ifBlank {
+                        when {
+                            loading -> "正在同步钥匙凭证..."
+                            ready -> "安全凭证已就绪"
+                            else -> "尚未同步钥匙凭证"
+                        }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (ready) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
         OutlinedButton(
             onClick = onSync,
-            enabled = !backgroundRunning && BleAccessPolicy.canSyncCertificate(state.phase, loading),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            enabled = canSync,
+            shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
         ) {
             if (loading) {
-                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.8.dp)
+                Spacer(Modifier.width(6.dp))
             } else {
-                Icon(painterResource(R.drawable.ic_phosphor_arrow_clockwise), contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(
+                    painter = painterResource(R.drawable.ic_phosphor_arrow_clockwise),
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(Modifier.width(4.dp))
             }
-            Text(if (loading) "同步中" else "同步钥匙", modifier = Modifier.padding(start = 8.dp))
+            Text(if (loading) "同步中" else "同步凭证", style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -410,26 +727,67 @@ internal object BluetoothKeyPresentation {
 
 @Composable
 private fun BluetoothConnectionStatus(state: BleConnectionState) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (state.isBusy || state.phase == BleConnectionPhase.SCANNING) {
-                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+    val isConnected = state.phase == BleConnectionPhase.READY || state.phase == BleConnectionPhase.SENDING
+    val isConnecting = state.isBusy || state.phase == BleConnectionPhase.SCANNING
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(
+                    when {
+                        isConnected -> MaterialTheme.statusGood.copy(alpha = 0.12f)
+                        isConnecting -> MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                        state.phase == BleConnectionPhase.FAILED -> MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                        else -> MaterialTheme.colorScheme.surfaceVariant
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isConnecting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else {
+                Icon(
+                    painter = painterResource(R.drawable.ic_bluetooth_key_hero),
+                    contentDescription = null,
+                    tint = when {
+                        isConnected -> MaterialTheme.statusGood
+                        state.phase == BleConnectionPhase.FAILED -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    },
+                    modifier = Modifier.size(18.dp)
+                )
             }
+        }
+
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                state.phaseLabel,
+                text = if (isConnected) "蓝牙钥匙已就绪" else state.phaseLabel,
                 style = MaterialTheme.typography.titleSmall,
-                color = when (state.phase) {
-                    BleConnectionPhase.READY -> MaterialTheme.statusGood
-                    BleConnectionPhase.FAILED -> MaterialTheme.colorScheme.error
+                fontWeight = FontWeight.Bold,
+                color = when {
+                    isConnected -> MaterialTheme.statusGood
+                    state.phase == BleConnectionPhase.FAILED -> MaterialTheme.colorScheme.error
                     else -> MaterialTheme.colorScheme.onSurface
                 }
             )
-        }
-        if (state.deviceName.isNotBlank()) {
-            Text(state.deviceName, style = MaterialTheme.typography.bodyMedium)
-        }
-        state.detailMessage?.let { message ->
-            Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val desc = state.detailMessage ?: state.deviceName.takeIf { it.isNotBlank() }
+            if (!desc.isNullOrBlank()) {
+                Text(
+                    text = desc,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -521,40 +879,6 @@ private fun BluetoothDeviceRow(device: BleNearbyDevice, enabled: Boolean, matche
 private fun maskBluetoothAddress(address: String): String {
     val parts = address.split(':')
     return if (parts.size == 6) "**:**:**:${parts[3]}:${parts[4]}:${parts[5]}" else "已连接设备"
-}
-
-@Composable
-private fun BluetoothLockControls(state: BleConnectionState, onAction: (BleLockAction) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("车锁", style = MaterialTheme.typography.titleSmall)
-        if (state.canControl) {
-            state.confirmedAction?.let { action ->
-                Text(
-                    if (action == BleLockAction.LOCK) "车辆已确认上锁" else "车辆已确认解锁",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.statusGood
-                )
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(
-                onClick = { onAction(BleLockAction.UNLOCK) },
-                enabled = state.canControl,
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-            ) {
-                Icon(painterResource(R.drawable.ic_phosphor_lock_open), contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("解锁", Modifier.padding(start = 8.dp))
-            }
-            Button(
-                onClick = { onAction(BleLockAction.LOCK) },
-                enabled = state.canControl,
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-            ) {
-                Icon(painterResource(R.drawable.ic_phosphor_lock), contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("上锁", Modifier.padding(start = 8.dp))
-            }
-        }
-    }
 }
 
 @Composable

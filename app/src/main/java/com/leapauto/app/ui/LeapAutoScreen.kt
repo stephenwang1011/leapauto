@@ -13,9 +13,12 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.animateColor
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.animateColorAsState
+import com.leapauto.app.bluetooth.BleConnectionPhase
+import com.leapauto.app.bluetooth.BleConnectionState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -96,6 +99,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -120,6 +124,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import android.graphics.Bitmap
 import com.leapauto.app.ChassisParkingPhoto
@@ -323,8 +328,7 @@ fun LeapAutoScreen(
     pinSetupInProgress: Boolean,
     pinSetupErrorMessage: String = "",
     showVehicleConfigConfirmationPrompt: Boolean,
-    widgetOpacity: Int,
-    widgetBackgroundStyle: Int = SessionStore.WIDGET_BG_STYLE_DEFAULT,
+    bluetoothState: BleConnectionState = BleConnectionState(),
     widget4x2Actions: List<String> = Widget4x2ActionPolicy.DEFAULT_ACTIONS,
     onWidget4x2ActionsChange: (List<String>) -> Unit = {},
     tripRecords: List<TripRecord> = emptyList(),
@@ -371,8 +375,6 @@ fun LeapAutoScreen(
     onLogin: () -> Unit,
     onSavePin: () -> Unit,
     onCancelPinSetup: () -> Unit,
-    onWidgetOpacityChange: (Int) -> Unit,
-    onWidgetBackgroundStyleChange: (Int) -> Unit = {},
     onAppearanceModeChange: (AppearanceMode) -> Unit,
     onSaveVehicleConfig: (String, String, SessionStore.VehiclePowerType?, String, String) -> Unit = { _, _, _, _, _ -> },
     onNetworkDebugEnabledChange: (Boolean) -> Unit = {},
@@ -928,7 +930,9 @@ fun LeapAutoScreen(
                         tripRecords = tripRecords,
                         onClearTrips = onClearTrips,
                         openTripJournalTrigger = openTripJournalTrigger,
-                        tripRecordEnabled = tripRecordEnabled
+                        tripRecordEnabled = tripRecordEnabled,
+                        bluetoothState = bluetoothState,
+                        onOpenBluetoothKey = onOpenBluetoothKey
                     )
                 }
 
@@ -981,10 +985,6 @@ fun LeapAutoScreen(
                                 onSavePin = onSavePin,
                                 pinSetupInProgress = pinSetupInProgress,
                                 onCancelPinSetup = onCancelPinSetup,
-                                widgetOpacity = widgetOpacity,
-                                onWidgetOpacityChange = onWidgetOpacityChange,
-                                widgetBackgroundStyle = widgetBackgroundStyle,
-                                onWidgetBackgroundStyleChange = onWidgetBackgroundStyleChange,
                                 widget4x2Actions = widget4x2Actions,
                                 onWidget4x2ActionsChange = onWidget4x2ActionsChange,
                                 appearanceMode = appearanceMode,
@@ -1024,59 +1024,6 @@ fun LeapAutoScreen(
         }
     }
 }
-}
-
-@Composable
-private fun WidgetBackgroundStyleCard(
-    style: Int,
-    onStyleChange: (Int) -> Unit
-) {
-    val options = listOf(
-        SessionStore.WIDGET_BG_STYLE_CLASSIC to "经典微晶",
-        SessionStore.WIDGET_BG_STYLE_LANDSCAPE to "官方山河"
-    )
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        color = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = glassCardBorder(),
-        shadowElevation = 0.dp
-    ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("小组件背景风格", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("支持经典微晶毛玻璃与官方山河天幕画卷", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(
-                    options.firstOrNull { it.first == style }?.second ?: "官方山河",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                options.forEachIndexed { index, option ->
-                    SegmentedButton(
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                        onClick = { onStyleChange(option.first) },
-                        selected = style == option.first,
-                        colors = SegmentedButtonDefaults.colors(
-                            activeContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            activeContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            activeBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                            inactiveContainerColor = MaterialTheme.colorScheme.surface,
-                            inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant
-                        ),
-                        label = { Text(option.second, style = MaterialTheme.typography.labelSmall) }
-                    )
-                }
-            }
-        }
-    }
 }
 
 @Composable
@@ -1442,7 +1389,9 @@ private fun HomeContent(
     tripRecords: List<TripRecord> = emptyList(),
     onClearTrips: () -> Unit = {},
     openTripJournalTrigger: Long = 0L,
-    tripRecordEnabled: Boolean = false
+    tripRecordEnabled: Boolean = false,
+    bluetoothState: BleConnectionState = BleConnectionState(),
+    onOpenBluetoothKey: (() -> Unit)? = null
 ) {
     var showAddressNavigationDialog by rememberSaveable { mutableStateOf(false) }
     var showParkingDetailDialog by rememberSaveable { mutableStateOf(false) }
@@ -1531,7 +1480,9 @@ private fun HomeContent(
                         locationSnapshot = locationSnapshot,
                         activeControlCommand = activeControlCommand,
                         controlFeedback = controlFeedback,
-                        onDismissControlFeedback = onDismissControlFeedback
+                        onDismissControlFeedback = onDismissControlFeedback,
+                        bluetoothState = bluetoothState,
+                        onOpenBluetoothKey = onOpenBluetoothKey
                     )
 
                     // 1. 胎压与车况状态卡片
@@ -1755,10 +1706,6 @@ private fun MyContent(
     onSavePin: () -> Unit,
     pinSetupInProgress: Boolean,
     onCancelPinSetup: () -> Unit,
-    widgetOpacity: Int,
-    onWidgetOpacityChange: (Int) -> Unit,
-    widgetBackgroundStyle: Int = SessionStore.WIDGET_BG_STYLE_DEFAULT,
-    onWidgetBackgroundStyleChange: (Int) -> Unit = {},
     widget4x2Actions: List<String> = Widget4x2ActionPolicy.DEFAULT_ACTIONS,
     onWidget4x2ActionsChange: (List<String>) -> Unit = {},
     appearanceMode: AppearanceMode,
@@ -1864,8 +1811,6 @@ private fun MyContent(
         )
 
         AppearanceModeCard(appearanceMode, onAppearanceModeChange)
-        WidgetOpacityCard(widgetOpacity, onWidgetOpacityChange)
-        WidgetBackgroundStyleCard(widgetBackgroundStyle, onWidgetBackgroundStyleChange)
         Widget4x2ActionsCard(
             actions = widget4x2Actions,
             onActionsChange = onWidget4x2ActionsChange
@@ -2864,58 +2809,6 @@ private fun AppearanceModeCard(
 }
 
 @Composable
-private fun WidgetOpacityCard(opacity: Int, onOpacityChange: (Int) -> Unit) {
-    val options = listOf(
-        100 to "不透明",
-        75 to "微透",
-        50 to "半透",
-        25 to "全透"
-    )
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        color = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = glassCardBorder(),
-        shadowElevation = 0.dp
-    ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("小组件透明度", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("控制桌面卡片的背景显示", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(
-                    options.firstOrNull { it.first == opacity }?.second ?: "半透",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                options.forEachIndexed { index, option ->
-                    SegmentedButton(
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                        onClick = { onOpacityChange(option.first) },
-                        selected = opacity == option.first,
-                        colors = SegmentedButtonDefaults.colors(
-                            activeContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            activeContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            activeBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                            inactiveContainerColor = MaterialTheme.colorScheme.surface,
-                            inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant
-                        ),
-                        label = { Text(option.second, style = MaterialTheme.typography.labelSmall) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun Widget4x2ActionsCard(
     actions: List<String>,
     onActionsChange: (List<String>) -> Unit
@@ -3504,7 +3397,9 @@ fun VehicleHero(
     locationSnapshot: VehicleLocationSnapshot? = null,
     activeControlCommand: String? = null,
     controlFeedback: ControlFeedback? = null,
-    onDismissControlFeedback: () -> Unit = {}
+    onDismissControlFeedback: () -> Unit = {},
+    bluetoothState: BleConnectionState? = null,
+    onOpenBluetoothKey: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val remoteBitmap = remember(vehicleVin, vehicleImageVersion) {
@@ -3819,7 +3714,7 @@ fun VehicleHero(
                         }
                     }
 
-                    // 状态更新时间与实况气象文字 (加点连接，样式保持完全一致，无图标)
+                    // 状态更新时间与实况气象文字 (显示具体日期/今天，加点连接气象)
                     val updatedBaseText = VehicleHomeStatus.updatedLabel(statusUpdatedAtEpochMs)
                     val weatherSummary = liveWeather?.summaryText?.takeIf { it.isNotBlank() }
                     val statusTextWithWeather = if (weatherSummary != null) {
@@ -4063,25 +3958,37 @@ fun VehicleHero(
                     }
                 }
 
-                // 右侧列：设置按钮 + 位置信息
+                // 右侧列：蓝牙状态按钮 + 设置按钮 + 位置信息
                 Column(
                     horizontalAlignment = Alignment.End
                 ) {
-                    TooltipBox(
-                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-                        tooltip = { PlainTooltip { Text("设置") } },
-                        state = rememberTooltipState()
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        IconButton(
-                            onClick = onOpenAccount,
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_settings_gear),
-                                contentDescription = "设置",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(20.dp)
+                        if (onOpenBluetoothKey != null) {
+                            HeroBluetoothStatusButton(
+                                phase = bluetoothState?.phase ?: BleConnectionPhase.IDLE,
+                                onClick = onOpenBluetoothKey
                             )
+                        }
+
+                        TooltipBox(
+                            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                            tooltip = { PlainTooltip { Text("设置") } },
+                            state = rememberTooltipState()
+                        ) {
+                            IconButton(
+                                onClick = onOpenAccount,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_settings_gear),
+                                    contentDescription = "设置",
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                     val detailedDrivingState = VehicleHomeStatus.resolveDetailedDrivingState(
@@ -4326,7 +4233,8 @@ fun VehicleHero(
                     onControl = onControl,
                     activeControlCommand = activeControlCommand,
                     embedded = true,
-                    onOpenHealthCheck = onOpenHealthCheck
+                    onOpenHealthCheck = onOpenHealthCheck,
+                    bluetoothState = bluetoothState ?: BleConnectionState()
                 )
             }
             Spacer(Modifier.height(8.dp))
@@ -4430,6 +4338,76 @@ private fun HeroControlHudPill(
                 fontWeight = if (isSuccess) FontWeight.Bold else FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HeroBluetoothStatusButton(
+    phase: BleConnectionPhase,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isConnected = phase == BleConnectionPhase.READY || phase == BleConnectionPhase.SENDING
+    val isConnecting = phase in setOf(
+        BleConnectionPhase.CONNECTING,
+        BleConnectionPhase.DISCOVERING,
+        BleConnectionPhase.SUBSCRIBING,
+        BleConnectionPhase.AUTHENTICATING,
+        BleConnectionPhase.CONFIGURING,
+        BleConnectionPhase.SCANNING
+    )
+
+    // 连接中的灰蓝色动态平滑呼吸切换 (1.2 秒往复周期)
+    val transition = rememberInfiniteTransition(label = "heroBtPulse")
+    val pulseColor by transition.animateColor(
+        initialValue = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.40f),
+        targetValue = MaterialTheme.colorScheme.primary,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "heroBtColor"
+    )
+
+    val iconColor = when {
+        isConnecting -> pulseColor
+        isConnected -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+    }
+
+    val containerColor = when {
+        isConnected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        isConnecting -> MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+        else -> Color.Transparent
+    }
+
+    val statusText = when {
+        isConnected -> "蓝牙钥匙：已连接"
+        isConnecting -> "蓝牙钥匙：正在连接..."
+        else -> "蓝牙钥匙：未连接"
+    }
+
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(statusText) } },
+        state = rememberTooltipState()
+    ) {
+        Box(
+            modifier = modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(containerColor)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_bluetooth_key_hero),
+                contentDescription = statusText,
+                tint = iconColor,
+                modifier = Modifier.size(17.dp)
             )
         }
     }
@@ -5261,13 +5239,15 @@ private fun QuickVehicleActions(
     activeControlCommand: String? = null,
     seamless: Boolean = false,
     embedded: Boolean = false,
-    onOpenHealthCheck: () -> Unit = {}
+    onOpenHealthCheck: () -> Unit = {},
+    bluetoothState: BleConnectionState = BleConnectionState()
 ) {
     val context = LocalContext.current
     val sessionStore = remember(context) { SessionStore(context) }
     var editing by rememberSaveable { mutableStateOf(false) }
     var windowMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var sunshadeMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    var showStraightRemoteSheet by rememberSaveable { mutableStateOf(false) }
     var windowButtonTopLeft by remember { mutableStateOf(Offset.Zero) }
     var windowButtonWidth by remember { mutableStateOf(0f) }
     var windowButtonHeight by remember { mutableStateOf(0f) }
@@ -5277,7 +5257,7 @@ private fun QuickVehicleActions(
     val trunkState = status?.trunkState ?: TrunkState.UNKNOWN
     val isDrivingGear = VehicleDrivingSafetyPolicy.isDrivingGear(status?.gearStatus)
     val commandsPerPage = 5
-    val availableCommands = remember(vehicleModel, status?.sentryMode) {
+    val availableCommands = remember(vehicleVin, vehicleModel, status?.sentryMode) {
         val supportsWindowGroup = !vehicleModel.contains("T03", ignoreCase = true)
         val supportsFrunk = VehicleQuickControlCapabilities.supportsFrunk(vehicleModel)
         val windowGroup = if (supportsWindowGroup) {
@@ -5294,6 +5274,11 @@ private fun QuickVehicleActions(
             emptyList()
         }
         val extraCommands = allCommands.filterNot { it.name == "windowOpen" || it.name == "windowClose" }
+        val straightRemoteCmd = if (com.leapauto.app.bluetooth.BleStraightProtocol.isAuthorized(vehicleVin)) {
+            listOf(Cmd("straightRemote", "直进直出", R.drawable.ic_straight_remote))
+        } else {
+            emptyList()
+        }
         listOf(
             Cmd("unlock", "解锁", R.drawable.ic_phosphor_lock_open),
             Cmd("lock", "上锁", R.drawable.ic_phosphor_lock),
@@ -5301,8 +5286,9 @@ private fun QuickVehicleActions(
             Cmd("trunk", "开后备箱", R.drawable.ic_phosphor_trunk_open),
             *frunkCommands.toTypedArray(),
             *extraCommands.toTypedArray(),
+            *straightRemoteCmd.toTypedArray(),
             Cmd("sentry", "哨兵模式", R.drawable.ic_sentry),
-            Cmd("diagnostics", "诊断", R.drawable.ic_health_cross)
+            Cmd("diagnostics", "诊断", R.drawable.ic_quick_diagnostics)
         )
     }
     var savedOrder by remember(vehicleVin, availableCommands) { mutableStateOf<List<String>?>(null) }
@@ -5559,6 +5545,7 @@ private fun QuickVehicleActions(
                                                 when (command.name) {
                                                     "diagnostics" -> onOpenHealthCheck()
                                                     "sentry" -> onControl(SentryModeControlPolicy.commandName(status?.sentryMode))
+                                                    "straightRemote" -> showStraightRemoteSheet = true
                                                     else -> onControl(command.name)
                                                 }
                                             }
@@ -5833,6 +5820,27 @@ private fun QuickVehicleActions(
                     savedOrder = editingOrder
                     editing = false
                 }) { Text("完成") }
+            }
+        )
+    }
+
+    if (showStraightRemoteSheet && com.leapauto.app.bluetooth.BleStraightProtocol.isAuthorized(vehicleVin)) {
+        StraightRemoteBottomSheet(
+            onDismissRequest = {
+                onControl("straightStop")
+                showStraightRemoteSheet = false
+            },
+            canControl = bluetoothState.canControl,
+            bluetoothPhase = bluetoothState.phase,
+            onStartMoving = { action ->
+                if (action == com.leapauto.app.bluetooth.BleStraightAction.FORWARD) {
+                    onControl("straightForward")
+                } else if (action == com.leapauto.app.bluetooth.BleStraightAction.BACKWARD) {
+                    onControl("straightBackward")
+                }
+            },
+            onStopMoving = {
+                onControl("straightStop")
             }
         )
     }
@@ -7995,7 +8003,7 @@ fun EnergyHomeSummaryPage(
             label = "累计里程",
             value = totalMileageDisplay,
             unit = "km",
-            valueColor = if (mileageHasValue) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            valueColor = if (mileageHasValue) MaterialTheme.statusWarn else MaterialTheme.colorScheme.onSurfaceVariant,
             accentColor = MaterialTheme.statusWarn,
             modifier = Modifier.weight(1f)
         )
@@ -8003,7 +8011,7 @@ fun EnergyHomeSummaryPage(
             label = "累计能耗",
             value = energyText,
             unit = "kWh",
-            valueColor = if (energyHasValue) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            valueColor = if (energyHasValue) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             accentColor = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f)
         )
@@ -8072,8 +8080,8 @@ private fun EnergyMetricCard(
             Text(
                 text = unit,
                 style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 10.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Bold,
                 maxLines = 1
             )
         }

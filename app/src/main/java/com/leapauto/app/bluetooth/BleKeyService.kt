@@ -59,8 +59,11 @@ class BleKeyService : Service() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        runtime.stopBackground()
-        stopSelf()
+        val needsBackground = runtime.managedKey.value?.needsBackground == true
+        if (!needsBackground) {
+            runtime.stopBackground()
+            stopSelf()
+        }
         super.onTaskRemoved(rootIntent)
     }
 

@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 移除锁屏常驻通知相关模块与设置入口，精简后台服务保持纯粹轻量\n" +
-        "2. 优化主页车窗状态弹窗：支持四门车窗开度网格呈现与一键全关快捷控制\n" +
-        "3. 完善车况数据展示逻辑，通过全量单元测试与稳定性回归验证"
+        "1. 优化车门锁控制响应速度：消除桌面插件等待延迟，指令反馈大幅提速\n" +
+        "2. 桌面插件与控制中心实时同步门锁状态，落锁与解锁即按即变\n" +
+        "3. 锁车防盗安全检测异步后台化，保证操作流畅零阻塞"
 }

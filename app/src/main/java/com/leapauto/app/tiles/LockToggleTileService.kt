@@ -53,10 +53,11 @@ class LockToggleTileService : TileService() {
         }
 
         val snapshot = store.loadSelectedWidgetSnapshot()
-        val isLocked = snapshot?.locked ?: true // 默认判定为已上锁，优先触发解锁
+        // 智能车锁状态判定：快照有值以快照为准；快照无值时参考 Tile 自身激活态 (已激活代表已解锁，需触发上锁)
+        val isLocked = snapshot?.locked ?: (qsTile?.state != Tile.STATE_ACTIVE)
 
         if (isLocked) {
-            // 解锁车门属于敏感操作：若处于锁屏状态，先引导用户解锁手机指纹/密码
+            // 已上锁状态 -> 点击执行解锁
             if (isLockedState()) {
                 unlockAndRun {
                     executeLockCommand("unlock")
@@ -65,7 +66,7 @@ class LockToggleTileService : TileService() {
                 executeLockCommand("unlock")
             }
         } else {
-            // 上锁操作为安全保护动作，直接下发执行
+            // 未上锁/已解锁状态 -> 点击执行上锁
             executeLockCommand("lock")
         }
     }
@@ -78,7 +79,13 @@ class LockToggleTileService : TileService() {
 
     private fun executeLockCommand(command: String) {
         val isUnlock = command == "unlock"
-        updateTileState(inProgress = true, customSubtitle = if (isUnlock) "正在解锁..." else "正在上锁...")
+        val targetLockState = !isUnlock
+        val store = SessionStore(applicationContext)
+        val session = store.load()
+        if (session.selectedVin.isNotBlank()) {
+            store.updateWidgetLockState(session.selectedVin, targetLockState)
+        }
+        updateTileState(inProgress = true, customSubtitle = if (isUnlock) "正在解锁..." else "正在上锁...", forceTargetLock = targetLockState)
 
         val intent = Intent(applicationContext, ControlService::class.java).apply {
             putExtra(ControlService.EXTRA_COMMAND, command)
@@ -94,14 +101,18 @@ class LockToggleTileService : TileService() {
         }
 
         mainHandler.postDelayed({
-            updateTileState(inProgress = false)
-        }, 2500L)
+            updateTileState(inProgress = false, forceTargetLock = targetLockState)
+        }, 1500L)
     }
 
-    private fun updateTileState(inProgress: Boolean, customSubtitle: String? = null) {
+    private fun updateTileState(
+        inProgress: Boolean,
+        customSubtitle: String? = null,
+        forceTargetLock: Boolean? = null
+    ) {
         val tile = qsTile ?: return
         val snapshot = SessionStore(applicationContext).loadSelectedWidgetSnapshot()
-        val isLocked = snapshot?.locked
+        val isLocked = forceTargetLock ?: snapshot?.locked ?: (tile.state != Tile.STATE_ACTIVE)
 
         if (inProgress) {
             tile.state = Tile.STATE_ACTIVE
@@ -109,33 +120,22 @@ class LockToggleTileService : TileService() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 tile.subtitle = customSubtitle ?: "正在发送..."
             }
-            tile.icon = Icon.createWithResource(this, R.drawable.ic_phosphor_lock)
+            tile.icon = Icon.createWithResource(this, if (isLocked) R.drawable.ic_phosphor_lock else R.drawable.ic_phosphor_lock_open)
         } else {
-            when (isLocked) {
-                true -> {
-                    tile.state = Tile.STATE_INACTIVE
-                    tile.label = "车锁"
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        tile.subtitle = customSubtitle ?: "已上锁 (点击解锁)"
-                    }
-                    tile.icon = Icon.createWithResource(this, R.drawable.ic_phosphor_lock)
+            if (isLocked) {
+                tile.state = Tile.STATE_INACTIVE
+                tile.label = "车锁"
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    tile.subtitle = customSubtitle ?: "已上锁 (点击解锁)"
                 }
-                false -> {
-                    tile.state = Tile.STATE_ACTIVE
-                    tile.label = "车锁"
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        tile.subtitle = customSubtitle ?: "已解锁 (点击上锁)"
-                    }
-                    tile.icon = Icon.createWithResource(this, R.drawable.ic_phosphor_lock_open)
+                tile.icon = Icon.createWithResource(this, R.drawable.ic_phosphor_lock)
+            } else {
+                tile.state = Tile.STATE_ACTIVE
+                tile.label = "车锁"
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    tile.subtitle = customSubtitle ?: "已解锁 (点击上锁)"
                 }
-                null -> {
-                    tile.state = Tile.STATE_INACTIVE
-                    tile.label = "车锁"
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        tile.subtitle = customSubtitle ?: "点击控锁"
-                    }
-                    tile.icon = Icon.createWithResource(this, R.drawable.ic_phosphor_lock)
-                }
+                tile.icon = Icon.createWithResource(this, R.drawable.ic_phosphor_lock_open)
             }
         }
         tile.updateTile()

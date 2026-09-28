@@ -107,6 +107,39 @@ class BleProtocolSelectionTest {
             select(selected = lowerCase, scanned = listOf(selected), binding = saved))
     }
 
+    @Test
+    fun c16ModelAutomaticallyResolvesToMinorNineAndHealsLegacyEight() {
+        // 无广播且无绑定时，C16 默认 9
+        val unverified = device(null, BleProtocolMinorSource.UNKNOWN)
+        val resolvedDefault = BleProtocolSelection.forManualConnection(
+            unverified, listOf(unverified), null, identity, certificate, "C16"
+        )
+        assertEquals(9, resolvedDefault.protocolMinor)
+        assertEquals(BleProtocolMinorSource.DEFAULT, resolvedDefault.protocolMinorSource)
+
+        // 历史绑定存了 8 时，C16 自动自愈提升为 9
+        val savedEight = binding(8)
+        val resolvedHealed = BleProtocolSelection.forManualConnection(
+            unverified, listOf(unverified), savedEight, identity, certificate, "零跑C16"
+        )
+        assertEquals(9, resolvedHealed.protocolMinor)
+        assertEquals(BleProtocolMinorSource.SAVED, resolvedHealed.protocolMinorSource)
+
+        // 老车型 (T03) 保持原有默认 8，不强行升级
+        val resolvedT03 = BleProtocolSelection.forManualConnection(
+            unverified, listOf(unverified), null, identity, certificate, "T03"
+        )
+        assertEquals(8, resolvedT03.protocolMinor)
+
+        // 实车广播了明确 minor 时，依然绝对优先
+        val advertised = device(8, BleProtocolMinorSource.ADVERTISED)
+        val resolvedAdvertised = BleProtocolSelection.forManualConnection(
+            advertised, listOf(advertised), savedEight, identity, certificate, "C16"
+        )
+        assertEquals(8, resolvedAdvertised.protocolMinor)
+        assertEquals(BleProtocolMinorSource.ADVERTISED, resolvedAdvertised.protocolMinorSource)
+    }
+
     private fun device(minor: Int?, source: BleProtocolMinorSource) =
         BleNearbyDevice(address, "synthetic-vehicle", -60, minor, source)
 

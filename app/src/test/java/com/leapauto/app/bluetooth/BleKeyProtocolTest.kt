@@ -374,6 +374,27 @@ class BleKeyProtocolTest {
     }
 
     @Test
+    fun falseEncryptedHeaderWithZeroLengthIsIgnoredAsDataNoise() {
+        val decoder = BleFrameDecoder()
+        val fakeEncryptedHeader = hex("aaab00000000") // 声明长度为 0
+        val validEvent = hex("aaac00000002030000007c0101")
+        val stream = fakeEncryptedHeader + validEvent
+        val frames = decoder.append(stream)
+        assertEquals(1, frames.size)
+        assertEquals(BleFrameType.EVENT, frames[0].type)
+    }
+
+    @Test
+    fun defaultProtocolMinorDistinguishesLeap3ModelsFromLegacy() {
+        assertEquals(9, BleKeyProtocol.defaultProtocolMinor("C16"))
+        assertEquals(9, BleKeyProtocol.defaultProtocolMinor("零跑C16"))
+        assertEquals(9, BleKeyProtocol.defaultProtocolMinor("C10"))
+        assertEquals(8, BleKeyProtocol.defaultProtocolMinor("T03"))
+        assertEquals(8, BleKeyProtocol.defaultProtocolMinor("C11"))
+        assertEquals(8, BleKeyProtocol.defaultProtocolMinor(null))
+    }
+
+    @Test
     fun onlyActiveMatchingActionConfirmsManualControl() {
         val unlock = BleKeyProtocol.parseEvent(event(2, 124, 1, 1)) as BleEvent.LockAction
         assertEquals(124, unlock.crc8)
@@ -412,11 +433,11 @@ class BleKeyProtocolTest {
         assertEquals(20, BleKeyProtocol.chunkLimit(0))
         assertEquals(160, BleKeyProtocol.chunkLimit(200))
         assertEquals(160, BleKeyProtocol.chunkLimit(Int.MAX_VALUE))
-        assertEquals(197, BleKeyProtocol.chunkLimit(200, BleChunkProfile.ONE_PAO_V010))
-        assertEquals(197, BleKeyProtocol.chunkLimit(Int.MAX_VALUE, BleChunkProfile.ONE_PAO_V010))
+        assertEquals(160, BleKeyProtocol.chunkLimit(200, BleChunkProfile.ONE_PAO_V010))
+        assertEquals(160, BleKeyProtocol.chunkLimit(Int.MAX_VALUE, BleChunkProfile.ONE_PAO_V010))
         assertEquals(listOf(20, 20, 1), BleKeyProtocol.chunks(ByteArray(41), 23).map { it.size })
         assertEquals(listOf(160, 1), BleKeyProtocol.chunks(ByteArray(161), 200).map { it.size })
-        assertEquals(listOf(197, 114), BleKeyProtocol.chunks(
+        assertEquals(listOf(160, 151), BleKeyProtocol.chunks(
             ByteArray(311), 247, BleChunkProfile.ONE_PAO_V010).map { it.size })
         assertTrue(BleKeyProtocol.chunks(byteArrayOf(), 23).isEmpty())
     }

@@ -32,7 +32,22 @@ data class BleCalibration(
         val BYTE_PROTOCOL_RANGE: IntRange = 0..255
         val COEFFICIENT_PROTOCOL_RANGE: IntRange = 0..65_535
         val DEFAULT = BleCalibration()
+        val C16_DEFAULT = BleCalibration(
+            distanceCalibration = 69,
+            coefficientHundredths = 100,
+            unlockCalibration = 4,
+            lockCalibration = 21
+        )
         private val TEXT = Regex("([0-9]{1,3});([0-9]{1,3})\\.([0-9]{2});([0-9]{1,3});([0-9]{1,3})")
+
+        fun defaultForModel(carType: String?): BleCalibration {
+            val model = carType.orEmpty().uppercase()
+            return if (model.contains("C16") || model.contains("C10")) {
+                C16_DEFAULT
+            } else {
+                DEFAULT
+            }
+        }
 
         fun parseOrNull(value: String): BleCalibration? {
             if (value.length > 32) return null

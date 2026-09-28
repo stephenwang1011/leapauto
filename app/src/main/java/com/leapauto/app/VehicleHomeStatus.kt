@@ -271,19 +271,26 @@ object VehicleHomeStatus {
     fun updatedLabel(
         updatedAtEpochMs: Long,
         nowEpochMs: Long = System.currentTimeMillis(),
-        zoneId: ZoneId = ZoneId.systemDefault()
+        zoneId: ZoneId = ZoneId.systemDefault(),
+        omitTodayPrefix: Boolean = false
     ): String {
         if (updatedAtEpochMs <= 0L) return "状态待同步"
         val updated = Instant.ofEpochMilli(updatedAtEpochMs).atZone(zoneId)
         val today = Instant.ofEpochMilli(nowEpochMs).atZone(zoneId).toLocalDate()
         val timeStr = updated.format(TIME_FORMATTER)
         val prefix = when (updated.toLocalDate()) {
-            today -> "今天"
+            today -> if (omitTodayPrefix) "" else "今天"
             today.minusDays(1) -> "昨天"
             else -> "${updated.format(DateTimeFormatter.ofPattern("M/d", Locale.CHINA))} "
         }
         return "${prefix}${timeStr}更新"
     }
+
+    fun isStatusFresh(
+        updatedAtEpochMs: Long,
+        nowEpochMs: Long = System.currentTimeMillis(),
+        freshThresholdMs: Long = 30 * 60 * 1000L
+    ): Boolean = updatedAtEpochMs > 0L && (nowEpochMs - updatedAtEpochMs) in 0..freshThresholdMs
 
     private val TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm", Locale.CHINA)
 

@@ -158,24 +158,14 @@ class ControlService : Service() {
                         ControlWidget.enqueueCommandSync(this)
                     }
                 }
-                if (ParkingAnomalyPolicy.shouldCheck(command, commandAccepted)) {
-                    Thread.sleep(ParkingAnomalyPolicy.POST_LOCK_CHECK_DELAY_MS)
-                    val currentSession = store.load()
-                    if (currentSession.oldAuth != null &&
-                        currentSession.newAuth != null &&
-                        currentSession.generation == session.generation &&
-                        currentSession.selectedVin == session.selectedVin
-                    ) {
-                        runCatching {
-                            val latest = api.getVehicleState()
-                            ParkingAnomalyNotificationManager.notifyIfNeeded(
-                                this,
-                                store,
-                                session.selectedCarType,
-                                latest
-                            )
-                        }
-                    }
+                val confirmedLockedState = when (effectiveCommand) {
+                    "lock" -> true
+                    "unlock" -> false
+                    else -> null
+                }
+                if (confirmedLockedState != null) {
+                    store.updateWidgetLockState(session.selectedVin, locked = confirmedLockedState)
+                    com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this)
                 }
                 val confirmedAcState =
                     WidgetAcMapper.confirmedStateForCommand(effectiveCommand, executionConfirmed)
@@ -187,8 +177,31 @@ class ControlService : Service() {
                 } else if (effectiveCommand == "windowOpen" || effectiveCommand == "windowVent") {
                     store.updateWidgetWindowState(session.selectedVin, windowOpen = true)
                 }
-                ControlWidget.showControlStatus(this, text, confirmedAcState)
+                ControlWidget.showControlStatus(this, text, confirmedAcState, locked = confirmedLockedState)
                 notifyResult(text)
+
+                if (ParkingAnomalyPolicy.shouldCheck(command, commandAccepted)) {
+                    Thread {
+                        try {
+                            Thread.sleep(ParkingAnomalyPolicy.POST_LOCK_CHECK_DELAY_MS)
+                            val currentSession = store.load()
+                            if (currentSession.oldAuth != null &&
+                                currentSession.newAuth != null &&
+                                currentSession.generation == session.generation &&
+                                currentSession.selectedVin == session.selectedVin
+                            ) {
+                                val latest = api.getVehicleState()
+                                ParkingAnomalyNotificationManager.notifyIfNeeded(
+                                    this@ControlService,
+                                    store,
+                                    session.selectedCarType,
+                                    latest
+                                )
+                            }
+                        } catch (_: Exception) {
+                        }
+                    }.start()
+                }
             } catch (e: Exception) {
                 val error = e.message ?: "控车失败"
                 ControlWidget.showControlStatus(this, error)

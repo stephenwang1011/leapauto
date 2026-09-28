@@ -54,7 +54,7 @@ internal fun BluetoothPassiveSettings(
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         BluetoothPassiveSwitchRow("后台蓝牙钥匙", draft.enabled, !busy && bound) { enabled ->
-            draft = if (enabled) draft.copy(enabled = true) else BlePassiveConfiguration()
+            draft = if (enabled) draft.copy(enabled = true, buttonEnabled = supportsButton) else BlePassiveConfiguration(enabled = false, buttonEnabled = false, calibration = draft.calibration)
         }
         BluetoothPassiveSwitchRow("靠近自动解锁", draft.autoUnlock, canEditChildren) {
             draft = draft.copy(autoUnlock = it)

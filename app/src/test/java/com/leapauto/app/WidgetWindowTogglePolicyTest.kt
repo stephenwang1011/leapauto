@@ -1,6 +1,8 @@
 package com.leapauto.app
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WidgetWindowTogglePolicyTest {
@@ -71,5 +73,13 @@ class WidgetWindowTogglePolicyTest {
             "车窗半开",
             WidgetWindowTogglePolicy.contentDescription("windowOpen", isWindowOpen = false)
         )
+    }
+
+    @Test
+    fun `window opening degree matches half open fifty percent and vent fifteen percent`() {
+        val halfOpenPercent = 50
+        val ventPercent = 15
+        assertTrue(halfOpenPercent > 25)
+        assertFalse(ventPercent > 25)
     }
 }

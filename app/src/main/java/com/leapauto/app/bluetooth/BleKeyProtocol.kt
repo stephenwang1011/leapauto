@@ -35,7 +35,7 @@ enum class BleFrameType(val code: Int, val headerSize: Int) {
 
 enum class BleChunkProfile(val maximum: Int) {
     LEGACY_160(160),
-    ONE_PAO_V010(197)
+    ONE_PAO_V010(160) // 对齐官方源码 xj.java:1409，车端蓝牙 MCU 接收缓冲区单片硬编码上限为 160 字节
 }
 
 @JvmInline
@@ -82,7 +82,17 @@ object BleKeyProtocol {
     val CHARACTERISTIC_UUID: UUID = UUID.fromString("0000fff2-0000-1000-8000-00805f9b34fb")
     val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     const val DEFAULT_PROTOCOL_MINOR = 8
+    const val LEAP3_PROTOCOL_MINOR = 9
     private val PROTOCOL_MINOR_UUID_PATTERN = Regex("000001[0-9a-f]{2}-0000-1000-8000-00805f9b34fb")
+
+    fun defaultProtocolMinor(carType: String? = null): Int {
+        val model = carType.orEmpty().uppercase()
+        return if (model.contains("C16") || model.contains("C10")) {
+            LEAP3_PROTOCOL_MINOR
+        } else {
+            DEFAULT_PROTOCOL_MINOR
+        }
+    }
 
     fun certificateFingerprint(certificate: BleKeyCertificate): String =
         certificateDigest(certificate).joinToString("") { "%02x".format(it.toInt() and 0xFF) }
@@ -162,8 +172,8 @@ object BleKeyProtocol {
             ?.substring(6, 8)?.toInt(16)
     }
 
-    fun protocolMinor(serviceUuids: Iterable<UUID>): Int =
-        advertisedProtocolMinor(serviceUuids) ?: DEFAULT_PROTOCOL_MINOR
+    fun protocolMinor(serviceUuids: Iterable<UUID>, carType: String? = null): Int =
+        advertisedProtocolMinor(serviceUuids) ?: defaultProtocolMinor(carType)
 
     fun chunkLimit(mtu: Int, profile: BleChunkProfile = BleChunkProfile.LEGACY_160): Int =
         (mtu.coerceAtLeast(23) - 3).coerceIn(20, profile.maximum)
@@ -247,14 +257,14 @@ data class BleAuthenticationStructure(
 )
 
 class BleKeySession internal constructor(
-    private val sessionId: Long,
+    internal val sessionId: Long,
     publicKey: ByteArray,
     key: ByteArray,
     iv: ByteArray,
     certificateFingerprint: ByteArray,
     private val keyType: Int
 ) : AutoCloseable {
-    private val publicKey = publicKey.copyOf()
+    internal val publicKey = publicKey.copyOf()
     private val key = key.copyOf()
     private val iv = iv.copyOf()
     private val certificateFingerprint = certificateFingerprint.copyOf()
@@ -291,7 +301,7 @@ class BleKeySession internal constructor(
                 it[2] = deviceId
             }
             BleAuthenticationTextProfile.ONE_PAO_V010 -> mutableListOf(
-                "", accountId, deviceId, fields[3], fields[4], fields[5]
+                fields[0], accountId, deviceId, fields[3], fields[4], fields[5]
             )
         }
         val settings = if (textProfile == BleAuthenticationTextProfile.ONE_PAO_V010) {
@@ -388,6 +398,7 @@ class BleKeySession internal constructor(
     }
 
     fun decodeResponse(frame: BleFrame): BleResponse {
+        check(!closed) { "BLE session is closed" }
         require(frame.type == BleFrameType.ENCRYPTED) { "Only an encrypted BLE frame can be decoded" }
         val ciphertext = decodeBase64(String(frame.payload, Charsets.US_ASCII).trim(), "Invalid encrypted BLE frame")
         require(ciphertext.isNotEmpty()) { "Empty encrypted BLE frame" }
@@ -418,7 +429,7 @@ class BleKeySession internal constructor(
         certificateFingerprint.fill(0)
     }
 
-    private fun crypt(bytes: ByteArray, mode: Int): ByteArray {
+    internal fun crypt(bytes: ByteArray, mode: Int): ByteArray {
         check(!closed) { "BLE session is closed" }
         if (keyType == 1) return BleSm2Crypto.crypt(bytes, key, iv, mode == Cipher.ENCRYPT_MODE)
         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
@@ -449,6 +460,11 @@ class BleFrameDecoder(private val maxFrameSize: Int = 65_539) {
             val lengthOffset = if (type == BleFrameType.EVENT) 6 else 2
             val lengthSize = if (type.headerSize == 4) 2 else 4
             val length = unsignedLittleEndian(pending, offset + lengthOffset, lengthSize)
+            // 合法加密业务帧 (0xAB) 的载荷绝不可能为 0 字节，若声明长度为 0 判定为数据流内伪帧头跳过
+            if (type == BleFrameType.ENCRYPTED && length == 0L) {
+                offset++
+                continue
+            }
             val total = type.headerSize + length
             if (total > maxFrameSize) {
                 offset++

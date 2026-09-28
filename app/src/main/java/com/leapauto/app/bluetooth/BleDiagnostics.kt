@@ -14,6 +14,9 @@ enum class BleDiagnosticEvent(val label: String) {
     SCAN_DEVICE_FOUND("发现可连接车辆"),
     SCAN_FINISHED("车辆扫描结束"),
     SCAN_FAILED("系统扫描失败"),
+    PROBE_STARTED("探查附近车辆"),
+    PROBE_SUCCESS("发现车辆广播"),
+    PROBE_MISSED("未在车辆附近"),
     CONNECT_STARTED("开始连接车辆"),
     PROTOCOL_SELECTED("认证协议版本"),
     VEHICLE_METADATA_STARTED("同步车辆蓝牙信息"),
@@ -67,7 +70,8 @@ data class BleDiagnosticEntry(
     val elapsedMillis: Long,
     val event: BleDiagnosticEvent,
     val code: Int? = null,
-    val detail: Int? = null
+    val detail: Int? = null,
+    val extra: String? = null
 ) {
     val description: String get() = buildString {
         append(event.label)
@@ -87,7 +91,7 @@ data class BleDiagnosticEntry(
             )
             BleDiagnosticEvent.TRANSPORT_PROFILE -> append(
                 if (code == BleCompatibilityProfile.ONE_PAO_V010.diagnosticCode)
-                    " · MTU优先 · 分片上限197" else " · 旧版分片上限160"
+                    " · MTU优先 · 官方分片上限160" else " · 旧版分片上限160"
             )
             BleDiagnosticEvent.RECONNECT_CREDENTIAL_STORE -> append(when (code) {
                 1 -> if (detail == 1) " · 已加密保存" else " · 保存失败"
@@ -116,7 +120,9 @@ data class BleDiagnosticEntry(
                 append(" · 加密前字节=").append(code).append(" · 密文字节=").append(detail)
             BleDiagnosticEvent.AUTH_CONFIGURATION -> {
                 append(" · 协议版本=").append(code).append(" · 发送标志位=").append(detail)
-                append("（按发送顺序，第1项为最低位）")
+                append("（按发送顺序，第1项为最低位")
+                if (code != null && code >= 9) append(" · 4标志位模式")
+                append("）")
             }
             else -> Unit
         }
@@ -142,10 +148,11 @@ data class BleDiagnosticEntry(
         }
         code?.let { append(" · code=").append(it) }
         detail?.let { append(" · detail=").append(it) }
+        extra?.takeIf { it.isNotBlank() }?.let { append(" · ").append(it) }
     }
 }
 
-// Structured events intentionally cannot carry certificate text, addresses or raw packets.
+// Structured events intentionally cannot carry certificate text, private keys or raw packets.
 class BleDiagnostics(
     private val capacity: Int = 120,
     private val clockMillis: () -> Long = { System.nanoTime() / 1_000_000L }
@@ -157,9 +164,9 @@ class BleDiagnostics(
         require(capacity in 1..1_000)
     }
 
-    fun record(event: BleDiagnosticEvent, code: Int? = null, detail: Int? = null) {
+    fun record(event: BleDiagnosticEvent, code: Int? = null, detail: Int? = null, extra: String? = null) {
         if (entries.size == capacity) entries.removeFirst()
-        entries.addLast(BleDiagnosticEntry((clockMillis() - startedAt).coerceAtLeast(0), event, code, detail))
+        entries.addLast(BleDiagnosticEntry((clockMillis() - startedAt).coerceAtLeast(0), event, code, detail, extra))
     }
 
     fun recordAuthentication(structure: BleAuthenticationStructure) {
@@ -204,4 +211,45 @@ private fun targetLabel(code: Int?): String = when (code) {
     1 -> "一致"
     2 -> "不一致"
     else -> "未知"
+}
+
+fun maskAddress(address: String?): String {
+    if (address.isNullOrBlank()) return "--"
+    val parts = address.split(":")
+    return if (parts.size >= 2) "**:*:" + parts.takeLast(2).joinToString(":")
+    else address.takeLast(5)
+}
+
+fun gattStatusLabel(status: Int): String = when (status) {
+    0 -> "GATT_SUCCESS"
+    8 -> "CONN_TIMEOUT(距离过远/超时)"
+    19 -> "PEER_TERMINATE(车机主动挂断)"
+    22 -> "LOCAL_TERMINATE(本地主动释放)"
+    34 -> "LMP_TIMEOUT(链路层握手超时)"
+    62 -> "FAIL_ESTABLISH(物理建链失败)"
+    133 -> "GATT_ERROR(133/未检测到广播或信号中断)"
+    256 -> "INTERNAL_ERROR(手机蓝牙堆栈异常)"
+    else -> "STATUS_$status"
+}
+
+fun gattStateLabel(state: Int): String = when (state) {
+    0 -> "DISCONNECTED"
+    1 -> "CONNECTING"
+    2 -> "CONNECTED"
+    3 -> "DISCONNECTING"
+    else -> "STATE_$state"
+}
+
+fun vehicleResultCodeLabel(resultCode: Int): String = when (resultCode) {
+    0 -> "成功"
+    1 -> "执行失败"
+    2 -> "非P挡安全拒绝"
+    3 -> "凭证失效"
+    4 -> "时间戳超时/防重放"
+    5 -> "低电量保护拒绝"
+    7 -> "车机拒绝"
+    8 -> "协议版本不匹配"
+    9 -> "钥匙未授权/验签不匹配"
+    16 -> "车身迎宾/待命通知 (0x10)"
+    else -> "结果码 $resultCode"
 }

@@ -10,11 +10,13 @@
     <item android:id="@android:id/progress">
         <clip>
             <shape android:shape="rectangle">
+                <!-- 智能座舱极光双色微晶流光渐变：零跑蓝 #0066FF ➔ 极光绿 @color/energy_green ➔ #00E676 -->
                 <gradient
                     android:type="linear"
                     android:angle="0"
-                    android:startColor="@color/energy_green"
-                    android:endColor="#69F0AE" />
+                    android:startColor="#0066FF"
+                    android:centerColor="@color/energy_green"
+                    android:endColor="#00E676" />
                 <corners android:radius="2dp" />
             </shape>
         </clip>

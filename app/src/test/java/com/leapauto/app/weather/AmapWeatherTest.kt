@@ -147,4 +147,80 @@ class AmapWeatherTest {
         )
         assertNull(suggestion)
     }
+
+    @Test
+    fun `live weather serialization and deserialization roundtrip preserves all fields`() {
+        val original = LiveWeather(
+            province = "浙江",
+            city = "杭州市",
+            adcode = "330108",
+            weather = "小雨",
+            temperature = "18",
+            windDirection = "东风",
+            windPower = "3",
+            humidity = "85",
+            reportTime = "2026-09-24 10:00:00",
+            fetchedAtEpochMs = 1727143200000L
+        )
+        val json = original.toJson()
+        val restored = LiveWeather.fromJson(json)
+        assertEquals(original.province, restored.province)
+        assertEquals(original.city, restored.city)
+        assertEquals(original.adcode, restored.adcode)
+        assertEquals(original.weather, restored.weather)
+        assertEquals(original.temperature, restored.temperature)
+        assertEquals(original.windDirection, restored.windDirection)
+        assertEquals(original.windPower, restored.windPower)
+        assertEquals(original.humidity, restored.humidity)
+        assertEquals(original.reportTime, restored.reportTime)
+        assertEquals(original.fetchedAtEpochMs, restored.fetchedAtEpochMs)
+    }
+
+    @Test
+    fun `cache ttl is ninety minutes and stale fallback protects for twelve hours`() {
+        AmapWeatherService.clearCache()
+        val now = System.currentTimeMillis()
+        val adcode = "330100"
+
+        // 1. 刚刚获取的天气（30 分钟前），完全在 90 分钟 TTL 范围内
+        val recentWeather = LiveWeather(
+            city = "杭州市",
+            adcode = adcode,
+            weather = "多云",
+            temperature = "25",
+            fetchedAtEpochMs = now - 30 * 60 * 1000L
+        )
+        // 模拟解析注入
+        val json = """{"status":"1","lives":[{"city":"杭州市","adcode":"$adcode","weather":"多云","temperature":"25"}]}"""
+        val parsed = AmapWeatherService.parseWeatherJson(json, nowEpochMs = now - 30 * 60 * 1000L)
+        assertNotNull(parsed)
+
+        // 验证 90 分钟常量和 12 小时常量
+        assertEquals(90 * 60 * 1000L, AmapWeatherService.CACHE_TTL_MS)
+        assertEquals(12 * 60 * 60 * 1000L, AmapWeatherService.STALE_FALLBACK_TTL_MS)
+    }
+
+    @Test
+    fun `weather service is exclusively authorized for vin LFZ63AZ55SH023503`() {
+        assertEquals("LFZ63AZ55SH023503", AmapWeatherService.AUTHORIZED_VIN)
+
+        // 授权通过
+        assertTrue(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH023503"))
+        assertTrue(AmapWeatherService.isWeatherServiceAuthorized("lfz63az55sh023503"))
+        assertTrue(AmapWeatherService.isWeatherServiceAuthorized("  LFZ63AZ55SH023503  "))
+
+        // 其他车辆一律拒绝
+        assertFalse(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH023504"))
+        assertFalse(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH000000"))
+        assertFalse(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH999999"))
+        assertFalse(AmapWeatherService.isWeatherServiceAuthorized(""))
+        assertFalse(AmapWeatherService.isWeatherServiceAuthorized("   "))
+        assertFalse(AmapWeatherService.isWeatherServiceAuthorized(null))
+
+        // 未授权车辆调用接口直接拦截返回 null
+        assertNull(AmapWeatherService.fetchLiveWeather("330100", vin = "OTHER_VIN", context = null))
+        assertNull(AmapWeatherService.fetchLiveWeather("330100", vin = null, context = null))
+        assertNull(AmapWeatherService.getLatestWeather(context = null, vin = "OTHER_VIN"))
+        assertNull(AmapWeatherService.getLatestWeather(context = null, vin = null))
+    }
 }

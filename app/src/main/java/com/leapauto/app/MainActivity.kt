@@ -229,8 +229,6 @@ class MainActivity : ComponentActivity() {
     private var code by mutableStateOf("")
     private var smsCountdownSeconds by mutableStateOf(0)
     private var pin by mutableStateOf("")
-    private var widgetOpacity by mutableStateOf(100)
-    private var widgetBackgroundStyle by mutableIntStateOf(SessionStore.WIDGET_BG_STYLE_DEFAULT)
     private var widget4x2Actions by mutableStateOf(Widget4x2ActionPolicy.DEFAULT_ACTIONS)
     private var appearanceMode by mutableStateOf(AppearanceMode.SYSTEM)
     private var energyState by mutableStateOf<EnergyAnalyticsState>(EnergyAnalyticsState.Idle)
@@ -306,8 +304,19 @@ class MainActivity : ComponentActivity() {
         sessionStore = SessionStore(this)
         energyCacheStore = EnergyCacheStore(this)
         session = sessionStore.load()
+        // 启动时零延迟预热最新天气（仅针对独占授权车辆 VIN 提供）
+        runCatching {
+            val selectedVin = session.selectedVin
+            if (com.leapauto.app.weather.AmapWeatherService.isWeatherServiceAuthorized(selectedVin)) {
+                liveWeather = com.leapauto.app.weather.AmapWeatherService.getLatestWeather(this, vin = selectedVin)
+            } else {
+                liveWeather = null
+            }
+        }
         bluetoothRuntime = BleKeyRuntime.get(applicationContext)
-        bluetoothRuntime.attachSession(session)
+        runCatching {
+            bluetoothRuntime.attachSession(session)
+        }
         bluetoothKeyController = bluetoothRuntime.controller
         bluetoothCloud = BleCloudCoordinator(applicationContext, lifecycleScope, ::currentBluetoothIdentity,
             { bluetoothRuntime.managedKey.value },
@@ -339,8 +348,6 @@ class MainActivity : ComponentActivity() {
         )
         pin = sessionStore.loadOpPassword() ?: ""
         pinSaved = pin.isNotBlank()
-        widgetOpacity = sessionStore.loadWidgetOpacity()
-        widgetBackgroundStyle = sessionStore.loadWidgetBackgroundStyle()
         widget4x2Actions = sessionStore.loadWidget4x2Actions()
         appearanceMode = sessionStore.loadAppearanceMode()
         handledUpdateVersion = sessionStore.loadHandledUpdateVersion()
@@ -397,7 +404,7 @@ class MainActivity : ComponentActivity() {
                     onSwitchVehicle = ::switchVehicle,
                     tripRecords = tripRecords,
                     onClearTrips = ::clearTripRecords,
-                    widgetOpacity = widgetOpacity,
+                    bluetoothState = bluetoothState,
                     appearanceMode = appearanceMode,
                     energyState = energyState,
                     healthyChargeLimitSoc = healthyChargeLimitSoc,
@@ -443,9 +450,6 @@ class MainActivity : ComponentActivity() {
                     onLogin = { login() },
                     onSavePin = ::savePin,
                     onCancelPinSetup = ::cancelPinSetup,
-                    widgetBackgroundStyle = widgetBackgroundStyle,
-                    onWidgetBackgroundStyleChange = ::saveWidgetBackgroundStyle,
-                    onWidgetOpacityChange = ::saveWidgetOpacity,
                     widget4x2Actions = widget4x2Actions,
                     onWidget4x2ActionsChange = ::saveWidget4x2Actions,
                     onAppearanceModeChange = ::saveAppearanceMode,
@@ -583,6 +587,10 @@ class MainActivity : ComponentActivity() {
         if (BleVehicleProfile.freshMetadata(bluetoothCloud.state.value.profile.metadata, System.currentTimeMillis()) == null) {
             bluetoothCloud.refreshMetadata()
         }
+        // 自动静默同步：若检测到本地尚未就绪有效凭证，打开即自动发起静默同步，无需用户手动点击
+        if (!BleAccessPolicy.isCertificateReady(bluetoothCertificate, identity.vin) && !bluetoothCertificateLoading) {
+            syncBluetoothCertificate(silent = true)
+        }
     }
 
     private fun hideBluetoothKey() {
@@ -602,16 +610,18 @@ class MainActivity : ComponentActivity() {
         bluetoothCertificateMessage = BleAccessPolicy.certificateMessage(bluetoothCertificate, session.selectedVin)
     }
 
-    private fun syncBluetoothCertificate() {
+    private fun syncBluetoothCertificate(silent: Boolean = false) {
         if (bluetoothBackgroundRunning) {
-            toast("请先关闭后台钥匙并等待车辆确认")
+            if (!silent) toast("请先关闭后台钥匙并等待车辆确认")
             return
         }
-        if (!isBluetoothForegroundContext() ||
+        if (!isBluetoothForegroundContext(requireManagement = !silent) ||
             !BleAccessPolicy.canSyncCertificate(bluetoothState.phase, bluetoothCertificateLoading)) return
         bluetoothPermissionGeneration = null
         bluetoothScanAfterPermissionGeneration = null
-        bluetoothKeyController.disconnect()
+        if (!silent) {
+            bluetoothKeyController.disconnect()
+        }
         bluetoothKeyController.recordDiagnostic(BleDiagnosticEvent.CERTIFICATE_SYNC_STARTED)
         val scope = bluetoothGeneration
         val requestSession = sessionStore.load()
@@ -628,7 +638,7 @@ class MainActivity : ComponentActivity() {
                 if (!sync.canCommit(session, requestSession, certificate) ||
                     !sessionStore.completeBluetoothCertificateSync(sync, requestSession, certificate)) {
                     bluetoothKeyController.recordDiagnostic(BleDiagnosticEvent.CERTIFICATE_SYNC_FAILED)
-                    bluetoothCertificateMessage = "会话已变化，请重新同步钥匙"
+                    bluetoothCertificateMessage = if (silent) "" else "会话已变化，请重新同步钥匙"
                     return@launch
                 }
                 if (session.deviceId != requestSession.deviceId) {
@@ -647,16 +657,31 @@ class MainActivity : ComponentActivity() {
                 bluetoothCertificate = certificate
                 bluetoothKeyController.recordDiagnostic(BleDiagnosticEvent.CERTIFICATE_SYNCED, code = certificate.keyType)
                 updateBluetoothCertificateMessage()
+                if (silent) {
+                    android.util.Log.d("MainActivity", "数字钥匙安全凭证静默自动同步成功")
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
                 if (isCurrentBluetoothContext(identity, scope)) {
                     bluetoothKeyController.recordDiagnostic(BleDiagnosticEvent.CERTIFICATE_SYNC_FAILED)
-                    bluetoothCertificateMessage = "钥匙同步失败，请检查登录状态和网络后重试"
+                    if (!silent) {
+                        bluetoothCertificateMessage = "钥匙同步失败，请检查登录状态和网络后重试"
+                    }
                 }
             } finally {
                 if (scope == bluetoothGeneration) bluetoothCertificateLoading = false
             }
+        }
+    }
+
+    private fun checkAndAutoSyncBluetoothCertificate(vin: String? = null) {
+        val targetVin = vin ?: session.selectedVin
+        val accountId = session.oldAuth?.accountId
+        if (targetVin.isBlank() || accountId.isNullOrBlank() || !loggedIn || bluetoothBackgroundRunning) return
+        val existing = sessionStore.loadBluetoothKeyCertificate(accountId, targetVin)
+        if (!BleAccessPolicy.isCertificateReady(existing, targetVin) && !bluetoothCertificateLoading) {
+            syncBluetoothCertificate(silent = true)
         }
     }
 
@@ -1280,18 +1305,6 @@ class MainActivity : ComponentActivity() {
         pendingPinProtectedAction = null
         pendingPinProtectedCancelAction = null
         if (cancel) cancelAction?.invoke()
-    }
-
-    private fun saveWidgetOpacity(opacity: Int) {
-        sessionStore.saveWidgetOpacity(opacity)
-        widgetOpacity = opacity
-        ControlWidget.refreshAppearance(this)
-    }
-
-    private fun saveWidgetBackgroundStyle(style: Int) {
-        sessionStore.saveWidgetBackgroundStyle(style)
-        widgetBackgroundStyle = style
-        ControlWidget.refreshAppearance(this)
     }
 
     private fun saveWidget4x2Actions(actions: List<String>) {
@@ -2165,6 +2178,9 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
+                        // 异步静默预同步蓝牙数字钥匙凭证，保障开门控车零手动等待
+                        checkAndAutoSyncBluetoothCertificate(currentVin)
+
                         val completedTrip = tripStore.processTelemetry(
                             vin = currentVin,
                             totalMileageStr = parsed.totalMileage,
@@ -2473,6 +2489,7 @@ class MainActivity : ComponentActivity() {
         refreshStatus()
         refreshEnergy(force = true)
         syncVehicleImage(target.vin)
+        checkAndAutoSyncBluetoothCertificate(target.vin)
         toast("已切换至 ${target.nickname.ifBlank { target.carType }}")
     }
 
@@ -3061,17 +3078,25 @@ class MainActivity : ComponentActivity() {
             ?: formatPercentage(m.opt("fuelSoc"))
 
         val openWinLabels = WidgetStatusMapper.openWindowLabels(m, session.selectedCarType)
+        val selectedVin = session.selectedVin
+        val lastTargetPercent = if (selectedVin.isNotBlank()) sessionStore.loadLastTargetWindowPercent(selectedVin) else null
+        if (openWinLabels.isEmpty() && selectedVin.isNotBlank() && (lastTargetPercent ?: 0) > 0) {
+            sessionStore.saveLastTargetWindowPercent(selectedVin, 0)
+        }
         val parseWindowPercent = { key: String, legacyKey: String, label: String ->
             val raw = (m.opt(key) ?: m.opt(legacyKey))?.toString()?.trim()?.removeSuffix("%")?.toIntOrNull()
             if (raw != null && raw > 0) {
-                when (raw) {
+                val resolved = when (raw) {
                     in 1..3 -> 15   // 0~10 刻度下的通风微开 (如指令 2 对应 15% 微开开度)
                     in 4..6 -> 50   // 0~10 刻度下的半开 (如指令 5 对应 50% 半开开度)
                     in 7..10 -> 100 // 0~10 刻度下的全开 (如指令 10 对应 100% 全开)
                     else -> raw.coerceIn(0, 100) // 0~100 刻度下的真实百分比直接采用
                 }
+                if (selectedVin.isNotBlank()) sessionStore.saveLastTargetWindowPercent(selectedVin, resolved)
+                resolved
             } else if (openWinLabels.contains(label)) {
-                15 // 仅检测到开窗状态但无具体开度时，默认以微开通风(15%)呈现，杜绝误判为半开(50%)
+                // 车端处于开窗状态，但网关未返回具体百分比：优先取上次操作目标开度 (如半开 50%)，杜绝杀后台冷启动误判为微开
+                if (lastTargetPercent != null && lastTargetPercent > 0) lastTargetPercent else 15
             } else {
                 0
             }
@@ -3304,10 +3329,21 @@ class MainActivity : ComponentActivity() {
                     vehicleAddress = address
                 }
                 if (address.adcode.isNotBlank()) {
-                    val weather = com.leapauto.app.weather.AmapWeatherService.fetchLiveWeather(address.adcode)
-                    if (weather != null) {
+                    val currentVin = session.selectedVin
+                    if (com.leapauto.app.weather.AmapWeatherService.isWeatherServiceAuthorized(currentVin)) {
+                        val weather = com.leapauto.app.weather.AmapWeatherService.fetchLiveWeather(
+                            adcode = address.adcode,
+                            vin = currentVin,
+                            context = this@MainActivity
+                        )
+                        if (weather != null) {
+                            runOnMain(generation) {
+                                liveWeather = weather
+                            }
+                        }
+                    } else {
                         runOnMain(generation) {
-                            liveWeather = weather
+                            liveWeather = null
                         }
                     }
                 }
@@ -3434,8 +3470,16 @@ class MainActivity : ComponentActivity() {
 
         val preControlStatus = status
         when (effectiveCmdName) {
-            "lock" -> status = status?.copy(locked = true)
-            "unlock" -> status = status?.copy(locked = false)
+            "lock" -> {
+                status = status?.copy(locked = true)
+                sessionStore.updateWidgetLockState(session.selectedVin, locked = true)
+                com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this)
+            }
+            "unlock" -> {
+                status = status?.copy(locked = false)
+                sessionStore.updateWidgetLockState(session.selectedVin, locked = false)
+                com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this)
+            }
             "trunkOpen" -> {
                 optimisticTrunkState = TrunkState.OPEN
                 status = status?.copy(trunkState = TrunkState.OPEN)
@@ -3446,6 +3490,7 @@ class MainActivity : ComponentActivity() {
             }
             "windowVent" -> {
                 optimisticWindowPercent = 15
+                if (session.selectedVin.isNotBlank()) sessionStore.saveLastTargetWindowPercent(session.selectedVin, 15)
                 status = status?.copy(
                     leftFrontWindowPercent = 15,
                     rightFrontWindowPercent = 15,
@@ -3456,6 +3501,7 @@ class MainActivity : ComponentActivity() {
             }
             "windowOpen" -> {
                 optimisticWindowPercent = 50
+                if (session.selectedVin.isNotBlank()) sessionStore.saveLastTargetWindowPercent(session.selectedVin, 50)
                 status = status?.copy(
                     leftFrontWindowPercent = 50,
                     rightFrontWindowPercent = 50,
@@ -3466,6 +3512,7 @@ class MainActivity : ComponentActivity() {
             }
             "windowClose" -> {
                 optimisticWindowPercent = 0
+                if (session.selectedVin.isNotBlank()) sessionStore.saveLastTargetWindowPercent(session.selectedVin, 0)
                 status = status?.copy(
                     leftFrontWindowPercent = 0,
                     rightFrontWindowPercent = 0,
@@ -3562,7 +3609,8 @@ class MainActivity : ComponentActivity() {
                 }
                 val result = api.sendControl(command, savedPin)
                 sessionStore.save(session)
-                val shouldQueryControlResult = result.hasPollingId()
+                val isStraightCmd = commandName?.startsWith("straight") == true
+                val shouldQueryControlResult = !isStraightCmd && result.hasPollingId()
                 if (!shouldQueryControlResult) {
                     runOnMain(generation) {
                         controlFeedback = ControlFeedback(
@@ -3570,7 +3618,9 @@ class MainActivity : ComponentActivity() {
                             ControlFeedbackKind.SUCCESS
                         )
                     }
-                    refreshStatusAfterControl(generation)
+                    if (!isStraightCmd) {
+                        refreshStatusAfterControl(generation)
+                    }
                     if (commandName != null && ParkingAnomalyPolicy.shouldCheck(commandName, commandAccepted = true)) {
                         scheduleParkingAnomalyCheck(generation)
                     }

@@ -407,23 +407,6 @@ class SessionStore(context: Context) {
         )
     }
 
-    fun loadWidgetOpacity(): Int =
-        prefs.getInt("widget_opacity", WIDGET_OPACITY_OPAQUE).takeIf { it in WIDGET_OPACITY_OPTIONS }
-            ?: WIDGET_OPACITY_OPAQUE
-
-    fun saveWidgetOpacity(opacity: Int) {
-        require(opacity in WIDGET_OPACITY_OPTIONS) { "不支持的小组件透明度" }
-        prefs.edit().putInt("widget_opacity", opacity).apply()
-    }
-
-    fun loadWidgetBackgroundStyle(): Int =
-        prefs.getInt(WIDGET_BACKGROUND_STYLE, WIDGET_BG_STYLE_DEFAULT)
-
-    fun saveWidgetBackgroundStyle(style: Int) {
-        prefs.edit().putInt(WIDGET_BACKGROUND_STYLE, style).apply()
-        ControlWidget.refreshData(appContext)
-    }
-
     /** Shared with 我的: missing preference remains opt-in for verification by default. */
     fun loadWidgetSensitiveActionVerificationEnabled(): Boolean =
         appPrefs.getBoolean(
@@ -688,6 +671,38 @@ class SessionStore(context: Context) {
         return true
     }
 
+    /** Updates only the locally cached lock state after a confirmed lock/unlock command. */
+    fun updateWidgetLockState(vin: String, locked: Boolean): Boolean {
+        val snapshot = loadWidgetSnapshot(vin) ?: return false
+        saveWidgetSnapshot(
+            vin = snapshot.vin,
+            carType = snapshot.carType,
+            range = snapshot.range,
+            soc = snapshot.soc,
+            fuelSoc = snapshot.fuelSoc,
+            updated = snapshot.updated,
+            powerType = snapshot.powerType,
+            electricRange = snapshot.electricRange,
+            fuelRange = snapshot.fuelRange,
+            electricTotalRange = snapshot.electricTotalRange,
+            fuelTotalRange = snapshot.fuelTotalRange,
+            statusLabel = snapshot.statusLabel,
+            locked = locked,
+            acEnabled = snapshot.acEnabled,
+            chargingPower = snapshot.chargingPower,
+            chargeState = snapshot.chargeState,
+            chargeRemainTime = snapshot.chargeRemainTime,
+            capturedAt = snapshot.capturedAt,
+            lastSuccessAt = snapshot.lastSuccessAt,
+            sessionGeneration = snapshot.sessionGeneration,
+            driving = snapshot.driving,
+            trunkState = snapshot.trunkState,
+            sentryEnabled = snapshot.sentryEnabled,
+            windowOpen = snapshot.windowOpen
+        )
+        return true
+    }
+
     /** Updates the complete widget snapshot after a confirmed trunk command. */
     fun updateWidgetTrunkState(vin: String, trunkState: TrunkState): Boolean {
         val snapshot = loadWidgetSnapshot(vin) ?: return false
@@ -750,6 +765,17 @@ class SessionStore(context: Context) {
             windowOpen = windowOpen
         )
         return true
+    }
+
+    /** 保存车窗最后一次目标开度百分比 (如半开50%、微开15%、全关0%)，保障应用重启冷启动状态一致性 */
+    fun saveLastTargetWindowPercent(vin: String, percent: Int) {
+        if (vin.isBlank()) return
+        prefs.edit().putInt("last_target_window_percent_$vin", percent).apply()
+    }
+
+    fun loadLastTargetWindowPercent(vin: String): Int? {
+        if (vin.isBlank() || !prefs.contains("last_target_window_percent_$vin")) return null
+        return prefs.getInt("last_target_window_percent_$vin", 0)
     }
 
     /** Avoids re-enqueuing a sync when a launcher echoes our own widget render as an update broadcast. */
@@ -878,7 +904,6 @@ class SessionStore(context: Context) {
     }
 
     companion object {
-        const val WIDGET_BG_STYLE_CLASSIC = 0
         const val WIDGET_BG_STYLE_LANDSCAPE = 1
         const val WIDGET_BG_STYLE_DEFAULT = WIDGET_BG_STYLE_LANDSCAPE
         const val SESSION_GENERATION = "session_generation"
@@ -890,15 +915,12 @@ class SessionStore(context: Context) {
         const val WIDGET_SENSITIVE_ACTION_VERIFICATION_ENABLED =
             "widget_sensitive_action_verification_enabled"
         const val LAST_CHARGE_STATE = "last_charge_state"
-        const val WIDGET_OPACITY_OPAQUE = 100
-        const val WIDGET_BACKGROUND_STYLE = "widget_background_style"
 
         fun quickCommandOrderKey(vin: String): String = QUICK_COMMAND_ORDER_PREFIX + vin
         const val WIDGET_SYNC_SUPPRESSED_UNTIL = "widget_sync_suppressed_until"
         const val WIDGET_AUTH_INVALID = "widget_auth_invalid"
         const val POWER_PAGER_AUTO_PLAY_ENABLED = "power_pager_auto_play_enabled"
         const val WIDGET_4X2_ACTIONS = "widget_4x2_actions"
-        val WIDGET_OPACITY_OPTIONS = setOf(100, 75, 50, 25)
         val SESSION_LOCK = Any()
     }
 }
