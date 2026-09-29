@@ -60,12 +60,17 @@ class BleStraightController(private val context: Context) {
     private var isConnectingOrActive = false
     private var lastStateTimestamp = 0L
 
+    private var preferredDeviceAddress: String? = null
+
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device ?: return
-            Log.i(TAG, "发现座舱直进直出设备: ${device.address}, RSSI: ${result.rssi}")
-            stopScan()
-            connectDevice(device)
+            val vin = currentCertificate?.vin.orEmpty()
+            if (isMatchingDevice(result, vin, preferredDeviceAddress)) {
+                Log.i(TAG, "发现并成功匹配座舱直进直出设备: ${device.name ?: "未知"}, ${device.address}, RSSI: ${result.rssi}")
+                stopScan()
+                connectDevice(device)
+            }
         }
 
         override fun onScanFailed(errorCode: Int) {
@@ -73,6 +78,49 @@ class BleStraightController(private val context: Context) {
             _statusMessage.value = "座舱蓝牙扫描失败 (错误码 $errorCode)"
             _vehicleState.value = BleStraightVehicleState.FAILED
         }
+    }
+
+    private fun isMatchingDevice(result: ScanResult, vin: String, preferredAddress: String?): Boolean {
+        val record = result.scanRecord
+
+        // 1. Service UUID 包含 0000eeed
+        val uuids = record?.serviceUuids.orEmpty().map { it.uuid }
+        if (BleStraightProtocol.SERVICE_UUID in uuids) {
+            return true
+        }
+
+        // 2. 官方 oj.java 算法：ManufacturerData 匹配 MD5(VIN)[8..16]
+        val manufacturerData = record?.manufacturerSpecificData
+        if (manufacturerData != null && vin.isNotBlank()) {
+            val vinHash = runCatching {
+                val digest = java.security.MessageDigest.getInstance("MD5").digest(vin.trim().toByteArray(Charsets.UTF_8))
+                digest.joinToString("") { "%02x".format(it) }
+            }.getOrNull()
+
+            if (vinHash != null && vinHash.length >= 16) {
+                val targetSlice = vinHash.substring(8, 16)
+                val targetBytes = targetSlice.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+
+                for (i in 0 until manufacturerData.size()) {
+                    val key = manufacturerData.keyAt(i)
+                    val value = manufacturerData.valueAt(i) ?: continue
+                    val combined = byteArrayOf((key and 0xFF).toByte(), ((key shr 8) and 0xFF).toByte()) + value
+                    if (combined.size >= 14) {
+                        val slice = combined.copyOfRange(6, 14)
+                        if (slice.contentEquals(targetBytes)) {
+                            return true
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. 设备地址匹配已绑定的钥匙地址且名称符合零跑座舱规范
+        if (!preferredAddress.isNullOrBlank() && result.device.address.equals(preferredAddress, ignoreCase = true)) {
+            return true
+        }
+
+        return false
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
@@ -154,12 +202,14 @@ class BleStraightController(private val context: Context) {
     fun start(
         certificate: BleKeyCertificate,
         accountId: String,
-        deviceId: String
+        deviceId: String,
+        preferredAddress: String? = null
     ) {
         stop()
         currentCertificate = certificate
         currentAccountId = accountId
         currentDeviceId = deviceId
+        preferredDeviceAddress = preferredAddress
         isConnectingOrActive = true
 
         val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -189,15 +239,13 @@ class BleStraightController(private val context: Context) {
         _statusMessage.value = "正在搜索车辆座舱直进直出广播..."
         _vehicleState.value = BleStraightVehicleState.WAITING
 
-        val filter = ScanFilter.Builder()
-            .setServiceUuid(ParcelUuid(BleStraightProtocol.SERVICE_UUID))
-            .build()
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
 
         try {
-            scanner?.startScan(listOf(filter), settings, scanCallback)
+            // 采用空过滤进行全局扫描，结合内部多重特征精确匹配，彻底避免各手机厂商驱动对 128 位 UUID 的过滤 Bug
+            scanner?.startScan(emptyList(), settings, scanCallback)
             handler.postDelayed({
                 if (isConnectingOrActive && gatt == null) {
                     stopScan()

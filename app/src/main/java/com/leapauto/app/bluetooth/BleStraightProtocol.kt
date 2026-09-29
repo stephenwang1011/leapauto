@@ -151,35 +151,49 @@ object BleStraightProtocol {
     }
 
     /**
-     * 解密车端 EEE2 接收通知帧
-     * 官方格式: 0xAA 0xAC 业务码(1) 状态(2字节) 长度(4字节LE) + 密文载荷
+     * 解密车端 EEE2 接收通知帧 (自适应官方 0xAA 0xAB / 0xAA 0xAC 报文格式及纯 Base64 载荷)
      */
     fun decodeVehicleNotification(
         session: BleKeySession,
         frameBytes: ByteArray
     ): BleStraightStateUpdate? {
-        if (frameBytes.size < 11) return null
-        // 校验 0xAA 0xAC 头
-        if (frameBytes[0] != 0xAA.toByte() || frameBytes[1] != 0xAC.toByte()) return null
+        if (frameBytes.isEmpty()) return null
 
-        var payloadLen = 0L
-        for (i in 0 until 4) {
-            payloadLen = payloadLen or ((frameBytes[5 + i].toLong() and 0xFF) shl (i * 8))
+        // 模式 1: 带有 0xAA 0xAB 或 0xAA 0xAC 帧头
+        if (frameBytes.size >= 6 && frameBytes[0] == 0xAA.toByte() &&
+            (frameBytes[1] == 0xAB.toByte() || frameBytes[1] == 0xAC.toByte())) {
+            val headerOffset = if (frameBytes[1] == 0xAC.toByte() && frameBytes.size >= 9) 9 else 6
+            if (frameBytes.size > headerOffset) {
+                val payloadBytes = frameBytes.copyOfRange(headerOffset, frameBytes.size)
+                val decoded = runCatching {
+                    val str = String(payloadBytes, Charsets.US_ASCII).trim()
+                    val ciphertext = Base64.getDecoder().decode(str)
+                    val plain = session.crypt(ciphertext, Cipher.DECRYPT_MODE)
+                    String(plain, Charsets.UTF_8).trim()
+                }.getOrNull()
+
+                if (decoded != null) {
+                    val state = parseVehicleState(decoded)
+                    if (state != null) return state
+                }
+            }
         }
-        val intLen = payloadLen.toInt()
-        if (intLen <= 0 || frameBytes.size < 9 + intLen) return null
 
-        val rawPayload = frameBytes.copyOfRange(9, 9 + intLen)
-        val ciphertext = runCatching {
-            val str = String(rawPayload, Charsets.US_ASCII).trim()
-            Base64.getDecoder().decode(str)
-        }.getOrElse { rawPayload }
+        // 模式 2: 直接是 Base64 载荷
+        val directDecoded = runCatching {
+            val str = String(frameBytes, Charsets.US_ASCII).trim()
+            val ciphertext = Base64.getDecoder().decode(str)
+            val plain = session.crypt(ciphertext, Cipher.DECRYPT_MODE)
+            String(plain, Charsets.UTF_8).trim()
+        }.getOrNull()
 
-        val plainBytes = runCatching {
-            session.crypt(ciphertext, Cipher.DECRYPT_MODE)
-        }.getOrNull() ?: return null
+        if (directDecoded != null) {
+            val state = parseVehicleState(directDecoded)
+            if (state != null) return state
+        }
 
-        val plainText = String(plainBytes, Charsets.UTF_8).trim()
-        return parseVehicleState(plainText)
+        // 模式 3: 直接明文
+        val rawText = String(frameBytes, Charsets.UTF_8).trim()
+        return parseVehicleState(rawText)
     }
 }

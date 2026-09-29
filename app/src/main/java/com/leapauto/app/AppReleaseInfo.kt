@@ -6,8 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 彻底隔离直进直出专属座舱 BLE 链路，完全对齐官方 xp/a91 状态机架构\n" +
-        "2. 实现专属 EEED 扫描、握手与 AA AE 01 01 0A 5 字节座舱认证闭环\n" +
-        "3. 严格使用单字节动作控制帧（1=前进/2=后退/3=停止），0% 误触车门开锁\n" +
-        "4. 实时监听车端 0;2;0;0;0; 就绪状态，只有车辆真正就绪才允许按压挪车"
+        "1. 升级座舱蓝牙多维特征自适应匹配，支持 ServiceUUID、MD5(VIN) 与已绑定 MAC 瞬时捕获\n" +
+        "2. 强化车端 EEE2 接收通知解密解析器，全兼容 0xAA 0xAB/0xAA 0xAC 及纯载荷格式\n" +
+        "3. 直进直出扫描解除 128 位单一过滤限制，彻底消除部分机型蓝牙驱动丢包隐患"
 }

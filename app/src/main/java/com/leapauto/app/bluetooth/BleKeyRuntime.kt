@@ -59,7 +59,8 @@ class BleKeyRuntime private constructor(context: Context) {
     fun startStraightRemote(certificate: BleKeyCertificate? = null) {
         val currentIdentity = identity ?: return
         val cert = certificate ?: sessions.loadBluetoothKeyCertificate(currentIdentity.accountId, currentIdentity.vin) ?: return
-        straightController.start(cert, currentIdentity.accountId, currentIdentity.deviceId)
+        val boundAddr = managedKey.value?.device?.address
+        straightController.start(cert, currentIdentity.accountId, currentIdentity.deviceId, preferredAddress = boundAddr)
     }
 
     fun stopStraightRemote() {
