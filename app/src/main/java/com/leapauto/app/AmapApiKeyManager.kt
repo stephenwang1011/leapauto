@@ -32,28 +32,25 @@ object AmapApiKeyManager {
     private const val EXHAUST_COOLING_MS = 4 * 3600 * 1000L
 
     /**
-     * 获取当前可用的候选 Key 列表（按优先级排序：自定义 Key -> 未熔断的 Key -> 熔断已过冷却期的 Key）。
+     * 获取当前可用的候选 Key 列表（完全基于用户个人专属配置，不再依赖任何内置公共 Key）。
      */
     fun getCandidateKeys(context: Context? = null): List<String> {
         val now = System.currentTimeMillis()
         val customKey = context?.let { SessionStore(it).loadCustomAmapWebKey() }?.trim()?.takeIf { it.length == 32 }
-        val builtInKeys = ObfuscatedSecrets.getAmapWebKeys(context)
+            ?: return emptyList()
 
-        val allCandidates = buildList {
-            if (customKey != null) add(customKey)
-            addAll(builtInKeys)
-        }.distinct().filter { it.isNotBlank() }
-
-        if (allCandidates.isEmpty()) return emptyList()
-
-        // 筛选处于健康状态（未熔断或已过冷却期）的 Key
-        val healthy = allCandidates.filter { key ->
-            val exhaustedAt = exhaustedKeys[key] ?: 0L
-            now - exhaustedAt > EXHAUST_COOLING_MS
+        val exhaustedAt = exhaustedKeys[customKey] ?: 0L
+        if (now - exhaustedAt > EXHAUST_COOLING_MS) {
+            return listOf(customKey)
         }
-
-        return if (healthy.isNotEmpty()) healthy else allCandidates
+        return emptyList()
     }
+
+    /**
+     * 检查用户是否已配置有效的高德专属 Key。
+     */
+    fun hasConfiguredKey(context: Context? = null): Boolean =
+        context?.let { SessionStore(it).loadCustomAmapWebKey() }?.trim()?.length == 32
 
     /**
      * 判定高德 API 响应是否表示配额耗尽、被限流或 Key 无效。

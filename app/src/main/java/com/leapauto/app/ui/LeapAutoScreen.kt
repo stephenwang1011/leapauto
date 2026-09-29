@@ -2372,7 +2372,7 @@ private fun AmapWebKeyConfigCard() {
     var saveSuccessMessage by remember { mutableStateOf<String?>(null) }
 
     val hasCustomKey = !savedCustomKey.isNullOrBlank()
-    val activeStatusText = if (hasCustomKey) "已启用专属自定义 Key" else "双 Key 自动故障转移就绪"
+    val activeStatusText = if (hasCustomKey) "已启用专属 Key" else "未配置专属 Key (点击配置)"
 
     Surface(
         modifier = Modifier
@@ -2397,12 +2397,12 @@ private fun AmapWebKeyConfigCard() {
                 Surface(
                     modifier = Modifier.size(36.dp),
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    color = (if (hasCustomKey) MaterialTheme.statusGood else MaterialTheme.colorScheme.primary).copy(alpha = 0.12f)
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_location_pin),
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = if (hasCustomKey) MaterialTheme.statusGood else MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(8.dp)
                     )
                 }
@@ -2437,15 +2437,16 @@ private fun AmapWebKeyConfigCard() {
                 ) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            "服务说明与高可用保障：",
+                            "服务说明与独享额度：",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            "本应用内置高德 Web API 多 Key 故障转移池（主 Key + 备用 Key），当遇单日配额超限（10003）时会自动毫秒级零感知切换。您也可以填入自己的专属 Web 服务 Key（32位 Hex）享有独占额度。",
+                            "本应用不内置任何公共高德 API Key。车辆逆地理位置解析与实况天气需使用车主个人专属 Key。\n请前往「高德开放平台」(lbs.amap.com) 免费注册，创建应用并添加【Web 服务】类型的 Key，将生成的 32 位 Key 粘贴于此，即可独享每日 5,000 次免费配额。",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 16.sp
                         )
                     }
                 }
@@ -2458,8 +2459,8 @@ private fun AmapWebKeyConfigCard() {
                     },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text("自定义高德 Web 服务 Key") },
-                    placeholder = { Text("留空恢复使用内置高可用 Key 池") },
+                    label = { Text("专属高德 Web 服务 Key") },
+                    placeholder = { Text("请输入 32 位 Web 服务 Key") },
                     shape = RoundedCornerShape(12.dp),
                     trailingIcon = {
                         if (customKeyInput.isNotEmpty()) {
@@ -2496,12 +2497,12 @@ private fun AmapWebKeyConfigCard() {
                                 customKeyInput = ""
                                 savedCustomKey = null
                                 com.leapauto.app.AmapApiKeyManager.resetExhaustedState()
-                                saveSuccessMessage = "已恢复为内置双 Key 故障转移池"
+                                saveSuccessMessage = "已清除专属 Key"
                             },
                             modifier = Modifier.weight(1f).height(42.dp),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("恢复内置")
+                            Text("清除配置")
                         }
                     }
 
@@ -2512,12 +2513,12 @@ private fun AmapWebKeyConfigCard() {
                                 sessionStore.saveCustomAmapWebKey(null)
                                 savedCustomKey = null
                                 com.leapauto.app.AmapApiKeyManager.resetExhaustedState()
-                                saveSuccessMessage = "已清除自定义 Key，使用内置双 Key 池"
+                                saveSuccessMessage = "已清除 Key"
                             } else if (trimmed.length == 32) {
                                 sessionStore.saveCustomAmapWebKey(trimmed)
                                 savedCustomKey = trimmed
                                 com.leapauto.app.AmapApiKeyManager.resetExhaustedState()
-                                saveSuccessMessage = "自定义 Key 保存成功并已生效"
+                                saveSuccessMessage = "专属 Key 保存成功并已生效"
                             } else {
                                 saveSuccessMessage = "Key 格式错误：需为 32 位高德 Web 服务 Key"
                             }
@@ -2525,7 +2526,7 @@ private fun AmapWebKeyConfigCard() {
                         modifier = Modifier.weight(1f).height(42.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("保存设置")
+                        Text("保存生效")
                     }
                 }
             }

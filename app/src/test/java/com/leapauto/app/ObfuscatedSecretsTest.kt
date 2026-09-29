@@ -40,10 +40,10 @@ class ObfuscatedSecretsTest {
     }
 
     @Test
-    fun getAmapWebKeyReturnsDecryptedKey() {
+    fun getAmapWebKeyReturnsEmptyWhenNoBuiltinKey() {
         val key = ObfuscatedSecrets.getAmapWebKey()
-        assertTrue("高德 API Key 解密后不应为空", key.isNotBlank())
-        assertEquals(32, key.length)
+        // 彻底移除内置公共高德 Key，无内置时返回空字符串，不泄漏任何开发者敏感凭证
+        assertEquals("", key)
     }
 
     @Test

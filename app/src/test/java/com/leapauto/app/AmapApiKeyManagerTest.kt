@@ -33,13 +33,11 @@ class AmapApiKeyManagerTest {
     }
 
     @Test
-    fun `getCandidateKeys returns built-in keys when no custom key configured`() {
+    fun `getCandidateKeys returns empty when no custom key configured`() {
         val keys = AmapApiKeyManager.getCandidateKeys(null)
-        if (keys.isNotEmpty()) {
-            keys.forEach { key ->
-                assertEquals("Each API key must be 32 characters hex", 32, key.length)
-            }
-        }
+        // 彻底移除内置公共 Key：未配置时候选池必须严格为空，保护零敏感信息
+        assertTrue("When no custom key configured, candidate list must be empty", keys.isEmpty())
+        assertFalse(AmapApiKeyManager.hasConfiguredKey(null))
     }
 
     @Test
