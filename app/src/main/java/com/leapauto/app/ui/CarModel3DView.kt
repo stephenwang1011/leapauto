@@ -342,6 +342,9 @@ internal class CarModelWebView(
         obj.put("isDark", isDark)
 
         // 真实开合比例百分比 (0..100)
+        val sessionStore = com.leapauto.app.SessionStore(context)
+        val lastSavedPercent = if (vin.isNotBlank()) sessionStore.loadLastTargetWindowPercent(vin) else null
+
         val resolveWindowPercent = { explicitPercent: Int?, label: String ->
             if (explicitPercent != null && explicitPercent > 0) {
                 when (explicitPercent) {
@@ -351,7 +354,9 @@ internal class CarModelWebView(
                     else -> explicitPercent.coerceIn(0, 100)
                 }
             } else if (status?.openWindows?.contains(label) == true) {
-                50 // 仅有开窗标签状态但无具体开度时，以半开(50%)适中呈现，既不误判微开也不误判全开
+                // 车窗处于打开状态但网关未提供具体连续开度百分比：
+                // 严格遵循用户在 App 设定的目标开度（15%微开、50%半开、100%全开等），杜绝杀掉 App 重启后误变 50% 的硬编码缺陷
+                lastSavedPercent?.takeIf { it > 0 } ?: 15
             } else {
                 0
             }

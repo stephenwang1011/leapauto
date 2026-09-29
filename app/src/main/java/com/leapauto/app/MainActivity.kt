@@ -3108,9 +3108,10 @@ class MainActivity : ComponentActivity() {
             ?: formatPercentage(m.opt("fuelSoc"))
 
         val openWinLabels = WidgetStatusMapper.openWindowLabels(m, session.selectedCarType)
+        val hasWindowTelemetry = WidgetStatusMapper.hasWindowTelemetry(m, session.selectedCarType)
         val selectedVin = session.selectedVin
         val lastTargetPercent = if (selectedVin.isNotBlank()) sessionStore.loadLastTargetWindowPercent(selectedVin) else null
-        if (openWinLabels.isEmpty() && selectedVin.isNotBlank() && (lastTargetPercent ?: 0) > 0) {
+        if (hasWindowTelemetry && openWinLabels.isEmpty() && selectedVin.isNotBlank() && (lastTargetPercent ?: 0) > 0) {
             sessionStore.saveLastTargetWindowPercent(selectedVin, 0)
         }
         val parseWindowPercent = { key: String, legacyKey: String, statusKey: String, label: String ->
@@ -3130,8 +3131,8 @@ class MainActivity : ComponentActivity() {
                     0
                 } else if (openWinLabels.contains(label)) {
                     // 车窗处于打开状态但网关未提供具体连续开度百分比：
-                    // 仅当用户在 App 内明确下发过通风(15%)或半开(50%)时使用该开度，其余情况返回 null 客观呈现“车窗未关”，绝不盲猜错误百分比
-                    lastTargetPercent?.takeIf { it == 15 || it == 50 }
+                    // 严格保持用户在 App 内明确下发过的目标开度（15%微开、50%半开、100%全开等），杜绝冷启动后误变为50%半开
+                    lastTargetPercent?.takeIf { it > 0 } ?: 15
                 } else {
                     0
                 }
