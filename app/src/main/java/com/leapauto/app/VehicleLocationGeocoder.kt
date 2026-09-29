@@ -1,5 +1,6 @@
 package com.leapauto.app
 
+import android.content.Context
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -36,7 +37,8 @@ object VehicleLocationGeocoder {
     fun reverseGeocode(
         latitude: Double,
         longitude: Double,
-        apiKey: String = ObfuscatedSecrets.getAmapWebKey()
+        apiKey: String = ObfuscatedSecrets.getAmapWebKey(),
+        context: Context? = null
     ): GeocodedAddress? {
         val now = System.currentTimeMillis()
 
@@ -51,47 +53,72 @@ object VehicleLocationGeocoder {
             }
         }
 
-        if (apiKey.isBlank()) return null
-        val location = String.format(Locale.US, "%.6f,%.6f", longitude, latitude)
-        val urlString = "$REGEO_URL?key=$apiKey&location=$location&extensions=all"
-        val connection = (URL(urlString).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 3_500
-            readTimeout = 3_500
-            setRequestProperty("User-Agent", "LeapAuto/${BuildConfig.VERSION_NAME}")
+        val candidates = if (apiKey.isNotBlank() && apiKey != ObfuscatedSecrets.getAmapWebKey()) {
+            listOf(apiKey)
+        } else {
+            AmapApiKeyManager.getCandidateKeys(context)
         }
-        return try {
-            if (connection.responseCode !in 200..299) return null
-            val responseText = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            val json = JSONObject(responseText)
-            if (json.optString("status") != "1") return null
-            val regeocode = json.optJSONObject("regeocode") ?: return null
-            val addressComponent = regeocode.optJSONObject("addressComponent") ?: JSONObject()
-            val adcode = addressComponent.optString("adcode").trim()
-            val cityRaw = addressComponent.optString("city").trim().takeUnless { it == "[]" || it.isBlank() }
-                ?: addressComponent.optString("province").trim()
-            val shortAddr = formatShortAddress(regeocode)
-            val fullAddr = regeocode.optString("formatted_address").trim().ifBlank { shortAddr }
-            val result = GeocodedAddress(
-                shortAddress = shortAddr,
-                fullAddress = fullAddr,
-                adcode = adcode,
-                city = cityRaw
-            )
 
-            // 存入内存缓存
-            synchronized(this) {
-                if (cache.size >= MAX_CACHE_ENTRIES) {
-                    cache.removeAt(0)
+        if (candidates.isEmpty()) return null
+        val location = String.format(Locale.US, "%.6f,%.6f", longitude, latitude)
+
+        for (key in candidates) {
+            val urlString = "$REGEO_URL?key=$key&location=$location&extensions=all"
+            val connection = try {
+                (URL(urlString).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 3_500
+                    readTimeout = 3_500
+                    setRequestProperty("User-Agent", "LeapAuto/${BuildConfig.VERSION_NAME}")
                 }
-                cache.add(CachedGeo(latitude, longitude, result, now))
+            } catch (_: Exception) {
+                continue
             }
-            result
-        } catch (_: Exception) {
-            null
-        } finally {
-            connection.disconnect()
+
+            try {
+                if (connection.responseCode !in 200..299) continue
+                val responseText = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val json = JSONObject(responseText)
+                val status = json.optString("status")
+                val infocode = json.optString("infocode")
+
+                if (status != "1") {
+                    if (AmapApiKeyManager.isQuotaExhausted(status, infocode)) {
+                        AmapApiKeyManager.markQuotaExhausted(key, json.optString("info"))
+                        continue // 当前 Key 额度耗尽，循环自动切换下一个 Key 重试！
+                    }
+                    return null
+                }
+
+                val regeocode = json.optJSONObject("regeocode") ?: continue
+                val addressComponent = regeocode.optJSONObject("addressComponent") ?: JSONObject()
+                val adcode = addressComponent.optString("adcode").trim()
+                val cityRaw = addressComponent.optString("city").trim().takeUnless { it == "[]" || it.isBlank() }
+                    ?: addressComponent.optString("province").trim()
+                val shortAddr = formatShortAddress(regeocode)
+                val fullAddr = regeocode.optString("formatted_address").trim().ifBlank { shortAddr }
+                val result = GeocodedAddress(
+                    shortAddress = shortAddr,
+                    fullAddress = fullAddr,
+                    adcode = adcode,
+                    city = cityRaw
+                )
+
+                // 存入内存缓存
+                synchronized(this) {
+                    if (cache.size >= MAX_CACHE_ENTRIES) {
+                        cache.removeAt(0)
+                    }
+                    cache.add(CachedGeo(latitude, longitude, result, now))
+                }
+                return result
+            } catch (_: Exception) {
+                continue
+            } finally {
+                connection.disconnect()
+            }
         }
+        return null
     }
 
     private fun calculateDistanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

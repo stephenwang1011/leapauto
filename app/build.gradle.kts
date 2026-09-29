@@ -32,7 +32,7 @@ fun obfuscateSecret(plain: String?): String {
     return out.toString()
 }
 
-val rawAmapWebKey = localProperty("AMAP_WEB_KEY") ?: "468e462adad376c2aa08d252ae20fcba"
+val rawAmapWebKey = localProperty("AMAP_WEB_KEY") ?: "468e462adad376c2aa08d252ae20fcba,41c317c16afa9d53626a9d7c0513d956"
 val rawPgyerApiKey = localProperty("PGYER_API_KEY") ?: ""
 
 val releaseStorePath = localProperty("RELEASE_STORE_FILE")

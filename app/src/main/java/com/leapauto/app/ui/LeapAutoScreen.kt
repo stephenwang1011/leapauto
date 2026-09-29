@@ -1798,6 +1798,7 @@ private fun MyContent(
             onOpenUpdate = onOpenUpdate,
             onStartInAppUpdate = onStartInAppUpdate
         )
+        AmapWebKeyConfigCard()
         Spacer(Modifier.height(8.dp))
     }
 
@@ -2246,6 +2247,187 @@ private fun VersionUpdateCard(
                     modifier = Modifier.fillMaxWidth().height(42.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) { Text("检查更新") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AmapWebKeyConfigCard() {
+    val context = LocalContext.current
+    val sessionStore = remember { SessionStore(context) }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 90f else 0f,
+        animationSpec = tween(220),
+        label = "amapKeyCaretRotation"
+    )
+
+    var customKeyInput by rememberSaveable {
+        mutableStateOf(sessionStore.loadCustomAmapWebKey().orEmpty())
+    }
+    var savedCustomKey by remember {
+        mutableStateOf(sessionStore.loadCustomAmapWebKey())
+    }
+    var saveSuccessMessage by remember { mutableStateOf<String?>(null) }
+
+    val hasCustomKey = !savedCustomKey.isNullOrBlank()
+    val activeStatusText = if (hasCustomKey) "已启用专属自定义 Key" else "双 Key 自动故障转移就绪"
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = glassCardBorder(),
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier.size(36.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_location_pin),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "高德 Web 服务配置",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        activeStatusText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (hasCustomKey) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    painter = painterResource(R.drawable.ic_phosphor_caret_right),
+                    contentDescription = if (expanded) "收起" else "展开",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .size(16.dp)
+                        .rotate(arrowRotation)
+                )
+            }
+
+            if (expanded) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.glassInsetSurface
+                ) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "服务说明与高可用保障：",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "本应用内置高德 Web API 多 Key 故障转移池（主 Key + 备用 Key），当遇单日配额超限（10003）时会自动毫秒级零感知切换。您也可以填入自己的专属 Web 服务 Key（32位 Hex）享有独占额度。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = customKeyInput,
+                    onValueChange = {
+                        customKeyInput = it.trim()
+                        saveSuccessMessage = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("自定义高德 Web 服务 Key") },
+                    placeholder = { Text("留空恢复使用内置高可用 Key 池") },
+                    shape = RoundedCornerShape(12.dp),
+                    trailingIcon = {
+                        if (customKeyInput.isNotEmpty()) {
+                            IconButton(onClick = {
+                                customKeyInput = ""
+                                saveSuccessMessage = null
+                            }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_phosphor_x),
+                                    contentDescription = "清空",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                )
+
+                if (saveSuccessMessage != null) {
+                    Text(
+                        saveSuccessMessage.orEmpty(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.statusGood
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (hasCustomKey) {
+                        OutlinedButton(
+                            onClick = {
+                                sessionStore.saveCustomAmapWebKey(null)
+                                customKeyInput = ""
+                                savedCustomKey = null
+                                com.leapauto.app.AmapApiKeyManager.resetExhaustedState()
+                                saveSuccessMessage = "已恢复为内置双 Key 故障转移池"
+                            },
+                            modifier = Modifier.weight(1f).height(42.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("恢复内置")
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            val trimmed = customKeyInput.trim()
+                            if (trimmed.isEmpty()) {
+                                sessionStore.saveCustomAmapWebKey(null)
+                                savedCustomKey = null
+                                com.leapauto.app.AmapApiKeyManager.resetExhaustedState()
+                                saveSuccessMessage = "已清除自定义 Key，使用内置双 Key 池"
+                            } else if (trimmed.length == 32) {
+                                sessionStore.saveCustomAmapWebKey(trimmed)
+                                savedCustomKey = trimmed
+                                com.leapauto.app.AmapApiKeyManager.resetExhaustedState()
+                                saveSuccessMessage = "自定义 Key 保存成功并已生效"
+                            } else {
+                                saveSuccessMessage = "Key 格式错误：需为 32 位高德 Web 服务 Key"
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(42.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("保存设置")
+                    }
+                }
             }
         }
     }

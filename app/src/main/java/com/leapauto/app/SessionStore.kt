@@ -801,6 +801,18 @@ class SessionStore(context: Context) {
         appPrefs.edit().putString(APPEARANCE_MODE, mode.name).apply()
     }
 
+    fun loadCustomAmapWebKey(): String? =
+        appPrefs.getString(CUSTOM_AMAP_WEB_KEY, null)?.trim()?.takeIf { it.isNotEmpty() }
+
+    fun saveCustomAmapWebKey(key: String?) {
+        val clean = key?.trim().orEmpty()
+        if (clean.isEmpty()) {
+            appPrefs.edit().remove(CUSTOM_AMAP_WEB_KEY).apply()
+        } else {
+            appPrefs.edit().putString(CUSTOM_AMAP_WEB_KEY, clean).apply()
+        }
+    }
+
     fun loadPowerPagerAutoPlayEnabled(): Boolean =
         appPrefs.getBoolean(POWER_PAGER_AUTO_PLAY_ENABLED, false)
 
@@ -912,6 +924,7 @@ class SessionStore(context: Context) {
         const val QUICK_COMMAND_ORDER_PREFIX = "quick_command_order_"
         const val HANDLED_UPDATE_VERSION = "handled_update_version"
         const val APPEARANCE_MODE = "appearance_mode"
+        const val CUSTOM_AMAP_WEB_KEY = "custom_amap_web_key"
         const val WIDGET_SENSITIVE_ACTION_VERIFICATION_ENABLED =
             "widget_sensitive_action_verification_enabled"
         const val LAST_CHARGE_STATE = "last_charge_state"

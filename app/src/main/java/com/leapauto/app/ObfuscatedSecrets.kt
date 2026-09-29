@@ -17,22 +17,39 @@ object ObfuscatedSecrets {
     private var cachedAmapWebKey: String? = null
 
     @Volatile
+    private var cachedAmapWebKeys: List<String>? = null
+
+    @Volatile
     private var cachedPgyerApiKey: String? = null
 
     /**
-     * 获取高德 Web API Key（内存动态解混淆）
+     * 获取高德 Web API Key 完整列表（支持逗号分隔多 Key，内存动态解混淆）
      */
-    fun getAmapWebKey(context: Context? = null): String {
-        cachedAmapWebKey?.let { return it }
+    fun getAmapWebKeys(context: Context? = null): List<String> {
+        cachedAmapWebKeys?.let { return it }
 
         if (context != null && !AppSignatureGuard.isSignatureValid(context)) {
             Log.e(TAG, "安全告警：签名校验失败，拒绝解密高德 API Key")
-            return ""
+            return emptyList()
         }
 
         val decrypted = deobfuscate(BuildConfig.AMAP_WEB_KEY_ENCRYPTED)
-        cachedAmapWebKey = decrypted
-        return decrypted
+        val keys = decrypted.split(',')
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+
+        val result = if (keys.isNotEmpty()) keys else listOf(decrypted.trim()).filter { it.isNotBlank() }
+        cachedAmapWebKeys = result
+        if (result.isNotEmpty()) cachedAmapWebKey = result.first()
+        return result
+    }
+
+    /**
+     * 获取默认高德 Web API Key（内存动态解混淆）
+     */
+    fun getAmapWebKey(context: Context? = null): String {
+        cachedAmapWebKey?.let { return it }
+        return getAmapWebKeys(context).firstOrNull().orEmpty()
     }
 
     /**

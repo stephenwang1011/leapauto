@@ -3313,7 +3313,7 @@ class MainActivity : ComponentActivity() {
         lastGeocodedLocation = lat to lng
         val generation = operationGeneration
         asyncWorker.execute {
-            val address = VehicleLocationGeocoder.reverseGeocode(lat, lng)
+            val address = VehicleLocationGeocoder.reverseGeocode(lat, lng, context = this@MainActivity)
             if (address != null) {
                 runOnMain(generation) {
                     vehicleAddress = address

@@ -259,7 +259,7 @@ object AmapWeatherService {
     ): LiveWeather? {
         if (!isWeatherServiceAuthorized(vin)) return null
         val cleanAdcode = adcode.trim()
-        if (cleanAdcode.isBlank() || apiKey.isBlank()) return null
+        if (cleanAdcode.isBlank()) return null
 
         // 1. 命中 90 分钟有效缓存直接返回（0 网络开销）
         getCached(cleanAdcode, context)?.let { return it }
@@ -270,37 +270,58 @@ object AmapWeatherService {
             // 双重检查
             getCached(cleanAdcode, context)?.let { return it }
 
-            val urlString = "$WEATHER_URL?key=$apiKey&city=$cleanAdcode&extensions=base"
-            val connection = try {
-                (URL(urlString).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = 3_500
-                    readTimeout = 3_500
-                    setRequestProperty("User-Agent", "LeapAuto/${BuildConfig.VERSION_NAME}")
-                }
-            } catch (_: Exception) {
-                return getStaleFallback(cleanAdcode, context)
+            val candidates = if (apiKey.isNotBlank() && apiKey != ObfuscatedSecrets.getAmapWebKey()) {
+                listOf(apiKey)
+            } else {
+                com.leapauto.app.AmapApiKeyManager.getCandidateKeys(context)
             }
 
-            return try {
-                if (connection.responseCode !in 200..299) {
-                    return getStaleFallback(cleanAdcode, context)
-                }
-                val responseText = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val parsed = parseWeatherJson(responseText)
-                if (parsed != null) {
-                    memoryCache[cleanAdcode] = parsed
-                    if (context != null) {
-                        saveToDisk(context, parsed)
+            if (candidates.isEmpty()) return getStaleFallback(cleanAdcode, context)
+
+            for (key in candidates) {
+                val urlString = "$WEATHER_URL?key=$key&city=$cleanAdcode&extensions=base"
+                val connection = try {
+                    (URL(urlString).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = 3_500
+                        readTimeout = 3_500
+                        setRequestProperty("User-Agent", "LeapAuto/${BuildConfig.VERSION_NAME}")
                     }
-                    parsed
-                } else {
-                    getStaleFallback(cleanAdcode, context)
+                } catch (_: Exception) {
+                    continue
                 }
-            } catch (_: Exception) {
-                getStaleFallback(cleanAdcode, context)
-            } finally {
-                connection.disconnect()
+
+                try {
+                    if (connection.responseCode !in 200..299) continue
+                    val responseText = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                    val json = JSONObject(responseText)
+                    val status = json.optString("status")
+                    val infocode = json.optString("infocode")
+
+                    if (status != "1") {
+                        if (com.leapauto.app.AmapApiKeyManager.isQuotaExhausted(status, infocode)) {
+                            com.leapauto.app.AmapApiKeyManager.markQuotaExhausted(key, json.optString("info"))
+                            continue // 额度超限，尝试下一个 Key
+                        }
+                        continue
+                    }
+
+                    val parsed = parseWeatherJson(responseText)
+                    if (parsed != null) {
+                        memoryCache[cleanAdcode] = parsed
+                        if (context != null) {
+                            saveToDisk(context, parsed)
+                        }
+                        return parsed
+                    }
+                } catch (_: Exception) {
+                    continue
+                } finally {
+                    connection.disconnect()
+                }
+            }
+
+            return getStaleFallback(cleanAdcode, context).also {
                 inFlightLocks.remove(cleanAdcode)
             }
         }
