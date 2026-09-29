@@ -4313,7 +4313,8 @@ fun VehicleHero(
                     onStraightRemoteActiveChange = onStraightRemoteActiveChange,
                     straightVehicleState = straightVehicleState,
                     straightStatusMessage = straightStatusMessage,
-                    straightCanMove = straightCanMove
+                    straightCanMove = straightCanMove,
+                    bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled
                 )
             }
             Spacer(Modifier.height(8.dp))
@@ -5324,7 +5325,8 @@ private fun QuickVehicleActions(
     onStraightRemoteActiveChange: (Boolean) -> Unit = {},
     straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
     straightStatusMessage: String = "",
-    straightCanMove: Boolean = false
+    straightCanMove: Boolean = false,
+    bluetoothKeyFeatureEnabled: Boolean = false
 ) {
     val context = LocalContext.current
     val sessionStore = remember(context) { SessionStore(context) }
@@ -5345,7 +5347,7 @@ private fun QuickVehicleActions(
     val trunkState = status?.trunkState ?: TrunkState.UNKNOWN
     val isDrivingGear = VehicleDrivingSafetyPolicy.isDrivingGear(status?.gearStatus)
     val commandsPerPage = 5
-    val availableCommands = remember(vehicleVin, vehicleModel, status?.sentryMode) {
+    val availableCommands = remember(vehicleVin, vehicleModel, status?.sentryMode, bluetoothKeyFeatureEnabled) {
         val supportsWindowGroup = !vehicleModel.contains("T03", ignoreCase = true)
         val supportsFrunk = VehicleQuickControlCapabilities.supportsFrunk(vehicleModel)
         val windowGroup = if (supportsWindowGroup) {
@@ -5362,7 +5364,7 @@ private fun QuickVehicleActions(
             emptyList()
         }
         val extraCommands = allCommands.filterNot { it.name == "windowOpen" || it.name == "windowClose" }
-        val straightRemoteCmd = if (com.leapauto.app.bluetooth.BleStraightProtocol.isAuthorized(vehicleVin)) {
+        val straightRemoteCmd = if (bluetoothKeyFeatureEnabled && com.leapauto.app.bluetooth.BleStraightProtocol.isAuthorized(vehicleVin)) {
             listOf(Cmd("straightRemote", "直进直出", R.drawable.ic_straight_remote))
         } else {
             emptyList()
