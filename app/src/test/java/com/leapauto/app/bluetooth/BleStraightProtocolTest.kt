@@ -53,18 +53,18 @@ class BleStraightProtocolTest {
                 deviceId = "dev-456",
                 epochSeconds = 1700000000L
             )
-            // 官方标准帧头校验 0xAA 0xAE
-            assertArrayEquals(byteArrayOf(0xAA.toByte(), 0xAE.toByte()), frame.copyOfRange(0, 2))
-            // 长度在 2..3 (uint16 LE)
-            val length = (frame[2].toInt() and 0xFF) or ((frame[3].toInt() and 0xFF) shl 8)
-            assertEquals(frame.size - 4, length)
-            // sessionId 在 4..7
-            assertEquals(0x78.toByte(), frame[4])
-            assertEquals(0x56.toByte(), frame[5])
-            assertEquals(0x34.toByte(), frame[6])
-            assertEquals(0x12.toByte(), frame[7])
-            // 临时公钥在 8..72 (65字节)
-            assertArrayEquals(session.publicKey, frame.copyOfRange(8, 73))
+            // 官方座舱标准帧头校验 0xAA 0xAE 0x01 0x01 0x0A (5字节)
+            assertArrayEquals(byteArrayOf(0xAA.toByte(), 0xAE.toByte(), 0x01, 0x01, 0x0A), frame.copyOfRange(0, 5))
+            // 长度在 5..6 (uint16 LE)
+            val length = (frame[5].toInt() and 0xFF) or ((frame[6].toInt() and 0xFF) shl 8)
+            assertEquals(frame.size - 7, length)
+            // sessionId 在 7..10
+            assertEquals(0x78.toByte(), frame[7])
+            assertEquals(0x56.toByte(), frame[8])
+            assertEquals(0x34.toByte(), frame[9])
+            assertEquals(0x12.toByte(), frame[10])
+            // 临时公钥在 11..75 (65字节)
+            assertArrayEquals(session.publicKey, frame.copyOfRange(11, 76))
         }
     }
 

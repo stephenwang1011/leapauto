@@ -6,8 +6,8 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 修复直进直出控制报文编码，彻底解决点击前进误触发车辆解锁问题\n" +
-        "2. 控制明文严格对齐官方单字节动作规范，杜绝与车门锁协议重叠冲突\n" +
-        "3. 优化长按按压与松手刹停调度，消除 BLE 数据包堆叠并提升挪车响应度\n" +
-        "4. 直进直出抽屉唤醒时自动探测挂载专属 EEED 座舱通道"
+        "1. 彻底隔离直进直出专属座舱 BLE 链路，完全对齐官方 xp/a91 状态机架构\n" +
+        "2. 实现专属 EEED 扫描、握手与 AA AE 01 01 0A 5 字节座舱认证闭环\n" +
+        "3. 严格使用单字节动作控制帧（1=前进/2=后退/3=停止），0% 误触车门开锁\n" +
+        "4. 实时监听车端 0;2;0;0;0; 就绪状态，只有车辆真正就绪才允许按压挪车"
 }

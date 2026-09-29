@@ -49,7 +49,12 @@ object BleStraightProtocol {
      * 加密载荷: Base64( SM4/AES_Encrypt([4字节明文长度 + 明文 + 签名]) )
      */
     /**
-     * 构造直进直出认证帧 (严格复用经过实车验证的官方标准认证帧算法)
+     * 构造直进直出专属座舱认证帧 (严格对齐官方源码 a91.java:37 方法 b 规范)
+     * 帧头: 0xAA 0xAE 0x01 0x01 0x0A (5字节)
+     * 长度: 2字节小端序 uint16 (payload.size + 69)
+     * 会话ID: 4字节小端序 sessionId
+     * 公钥材料: 65字节临时公钥
+     * 加密载荷: Base64( Cipher(4字节明文长度 + 认证文本 + 签名) )
      */
     fun buildAuthenticationFrame(
         session: BleKeySession,
@@ -58,16 +63,29 @@ object BleStraightProtocol {
         deviceId: String,
         epochSeconds: Long = System.currentTimeMillis() / 1_000L
     ): ByteArray {
-        return session.buildAuthentication(
-            certificate = certificate,
-            accountId = accountId,
-            deviceId = deviceId,
-            protocolMinor = BleKeyProtocol.LEAP3_PROTOCOL_MINOR,
-            epochSeconds = epochSeconds,
-            configuration = BlePassiveConfiguration.MANUAL.copy(calibration = BleCalibration.C16_DEFAULT),
-            textProfile = BleAuthenticationTextProfile.ONE_PAO_V010,
-            supportsButton = true
-        )
+        val fields = certificate.plainText.split(';').toMutableList()
+        if (fields.size > 2) {
+            fields[1] = accountId
+            fields[2] = deviceId
+        }
+        val textStr = "$epochSeconds;${fields.joinToString(";")};"
+        val textBytes = textStr.toByteArray(Charsets.UTF_8)
+        val signature = Base64.getDecoder().decode(certificate.signResult)
+
+        val plain = littleEndian(textBytes.size.toLong(), 4) + textBytes + signature
+        val ciphertext = session.crypt(plain, Cipher.ENCRYPT_MODE)
+        val payload = Base64.getEncoder().encode(ciphertext)
+        plain.fill(0)
+        ciphertext.fill(0)
+
+        val length = payload.size + 69
+        require(length <= 0xFFFF) { "直进直出认证载荷过长" }
+
+        return byteArrayOf(0xAA.toByte(), 0xAE.toByte(), 0x01, 0x01, 0x0A) +
+            littleEndian(length.toLong(), 2) +
+            littleEndian(session.sessionId, 4) +
+            session.publicKey +
+            payload
     }
 
     /**

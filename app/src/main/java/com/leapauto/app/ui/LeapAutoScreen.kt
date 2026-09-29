@@ -403,6 +403,9 @@ fun LeapAutoScreen(
     onRetryDownload3D: () -> Unit = {},
     onStraightMove: (com.leapauto.app.bluetooth.BleStraightAction) -> Unit = {},
     onStraightRemoteActiveChange: (Boolean) -> Unit = {},
+    straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
+    straightStatusMessage: String = "",
+    straightCanMove: Boolean = false,
     onFetchParkingPhoto: ((ChassisParkingPhoto?, Bitmap?) -> Unit) -> Unit = {}
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
@@ -916,6 +919,9 @@ fun LeapAutoScreen(
                         bluetoothState = bluetoothState,
                         onStraightMove = onStraightMove,
                         onStraightRemoteActiveChange = onStraightRemoteActiveChange,
+                        straightVehicleState = straightVehicleState,
+                        straightStatusMessage = straightStatusMessage,
+                        straightCanMove = straightCanMove,
                         onOpenBluetoothKey = onOpenBluetoothKey
                     )
                 }
@@ -1371,6 +1377,9 @@ private fun HomeContent(
     bluetoothState: BleConnectionState = BleConnectionState(),
     onStraightMove: (com.leapauto.app.bluetooth.BleStraightAction) -> Unit = {},
     onStraightRemoteActiveChange: (Boolean) -> Unit = {},
+    straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
+    straightStatusMessage: String = "",
+    straightCanMove: Boolean = false,
     onOpenBluetoothKey: (() -> Unit)? = null
 ) {
     var showAddressNavigationDialog by rememberSaveable { mutableStateOf(false) }
@@ -1457,6 +1466,9 @@ private fun HomeContent(
                         bluetoothState = bluetoothState,
                         onStraightMove = onStraightMove,
                         onStraightRemoteActiveChange = onStraightRemoteActiveChange,
+                        straightVehicleState = straightVehicleState,
+                        straightStatusMessage = straightStatusMessage,
+                        straightCanMove = straightCanMove,
                         onOpenBluetoothKey = onOpenBluetoothKey
                     )
 
@@ -3368,6 +3380,9 @@ fun VehicleHero(
     bluetoothState: BleConnectionState? = null,
     onStraightMove: (com.leapauto.app.bluetooth.BleStraightAction) -> Unit = {},
     onStraightRemoteActiveChange: (Boolean) -> Unit = {},
+    straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
+    straightStatusMessage: String = "",
+    straightCanMove: Boolean = false,
     onOpenBluetoothKey: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -4205,7 +4220,10 @@ fun VehicleHero(
                     onOpenHealthCheck = onOpenHealthCheck,
                     bluetoothState = bluetoothState ?: BleConnectionState(),
                     onStraightMove = onStraightMove,
-                    onStraightRemoteActiveChange = onStraightRemoteActiveChange
+                    onStraightRemoteActiveChange = onStraightRemoteActiveChange,
+                    straightVehicleState = straightVehicleState,
+                    straightStatusMessage = straightStatusMessage,
+                    straightCanMove = straightCanMove
                 )
             }
             Spacer(Modifier.height(8.dp))
@@ -5213,7 +5231,10 @@ private fun QuickVehicleActions(
     onOpenHealthCheck: () -> Unit = {},
     bluetoothState: BleConnectionState = BleConnectionState(),
     onStraightMove: (com.leapauto.app.bluetooth.BleStraightAction) -> Unit = {},
-    onStraightRemoteActiveChange: (Boolean) -> Unit = {}
+    onStraightRemoteActiveChange: (Boolean) -> Unit = {},
+    straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
+    straightStatusMessage: String = "",
+    straightCanMove: Boolean = false
 ) {
     val context = LocalContext.current
     val sessionStore = remember(context) { SessionStore(context) }
@@ -5811,8 +5832,10 @@ private fun QuickVehicleActions(
                 onControl("straightDeactivate")
                 showStraightRemoteSheet = false
             },
-            canControl = bluetoothState.canControl,
+            canControl = straightCanMove || bluetoothState.canControl,
             bluetoothPhase = bluetoothState.phase,
+            statusText = straightStatusMessage,
+            vehicleState = straightVehicleState,
             onStartMoving = { action ->
                 onStraightMove(action)
             },

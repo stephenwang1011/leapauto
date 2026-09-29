@@ -97,6 +97,8 @@ fun StraightRemoteBottomSheet(
     onDismissRequest: () -> Unit,
     canControl: Boolean,
     bluetoothPhase: BleConnectionPhase,
+    statusText: String = "",
+    vehicleState: BleStraightVehicleState = BleStraightVehicleState.WAITING,
     onStartMoving: (BleStraightAction) -> Unit,
     onStopMoving: () -> Unit
 ) {
@@ -107,10 +109,11 @@ fun StraightRemoteBottomSheet(
 
     val statusMessage = when {
         isMoving -> if (currentDirection == BleStraightAction.FORWARD) "正在向前直进中..." else "正在向后倒车中..."
-        canControl -> "蓝牙钥匙已就绪，长按方向键挪车"
+        statusText.isNotBlank() && statusText != "未连接" -> statusText
+        canControl -> "座舱已就绪，长按方向键即可挪车"
         bluetoothPhase in setOf(BleConnectionPhase.CONNECTING, BleConnectionPhase.DISCOVERING,
-            BleConnectionPhase.SUBSCRIBING, BleConnectionPhase.AUTHENTICATING) -> "正在连接车辆蓝牙钥匙..."
-        else -> "蓝牙钥匙未连接，请靠近车辆"
+            BleConnectionPhase.SUBSCRIBING, BleConnectionPhase.AUTHENTICATING) -> "正在搜索连接车辆座舱..."
+        else -> "等待车辆座舱就绪中..."
     }
 
     ModalBottomSheet(
@@ -236,7 +239,7 @@ fun StraightRemoteBottomSheet(
                     VehicleTopDownBlueprint(
                         isMoving = isMoving,
                         currentDirection = currentDirection,
-                        vehicleState = if (canControl) BleStraightVehicleState.READY else BleStraightVehicleState.WAITING
+                        vehicleState = if (canControl) BleStraightVehicleState.READY else vehicleState
                     )
 
                     // 后退按钮 (长按按压式)

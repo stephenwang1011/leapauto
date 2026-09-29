@@ -47,6 +47,8 @@ class BleKeyRuntime private constructor(context: Context) {
     private var blockedGeneration: Long? = null
     private var inCarMediaActive = false
 
+    val straightController = BleStraightController(appContext)
+
     fun setInCarMediaActive(active: Boolean) {
         inCarMediaActive = active
         if (active && connectionValue.value.phase == BleConnectionPhase.IDLE) {
@@ -54,12 +56,22 @@ class BleKeyRuntime private constructor(context: Context) {
         }
     }
 
+    fun startStraightRemote(certificate: BleKeyCertificate? = null) {
+        val currentIdentity = identity ?: return
+        val cert = certificate ?: sessions.loadBluetoothKeyCertificate(currentIdentity.accountId, currentIdentity.vin) ?: return
+        straightController.start(cert, currentIdentity.accountId, currentIdentity.deviceId)
+    }
+
+    fun stopStraightRemote() {
+        straightController.stop()
+    }
+
     fun straightControl(action: BleStraightAction) {
-        controller.straightControl(action)
+        straightController.control(action)
     }
 
     fun refreshStraightServices() {
-        controller.refreshStraightServices()
+        startStraightRemote()
     }
 
     fun attachSession(session: Session) {

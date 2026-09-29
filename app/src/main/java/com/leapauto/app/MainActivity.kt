@@ -267,6 +267,9 @@ class MainActivity : ComponentActivity() {
     private var bluetoothPermissionsGranted by mutableStateOf(false)
     private var bluetoothState by mutableStateOf(BleConnectionState())
     private var straightRemoteActive by mutableStateOf(false)
+    private var straightVehicleState by mutableStateOf(com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING)
+    private var straightStatusMessage by mutableStateOf("未连接")
+    private var straightCanMove by mutableStateOf(false)
     private var bluetoothSessionIdentity: BleSessionIdentity? = null
     private var bluetoothControlConfirmation by mutableStateOf<BleControlConfirmation?>(null)
     private var bluetoothPinRequestPending = false
@@ -344,6 +347,9 @@ class MainActivity : ComponentActivity() {
         }
         lifecycleScope.launch { bluetoothRuntime.managedKey.collect { bluetoothManagedKey = it } }
         lifecycleScope.launch { bluetoothRuntime.backgroundRunning.collect { bluetoothBackgroundRunning = it } }
+        lifecycleScope.launch { bluetoothRuntime.straightController.vehicleState.collect { straightVehicleState = it } }
+        lifecycleScope.launch { bluetoothRuntime.straightController.statusMessage.collect { straightStatusMessage = it } }
+        lifecycleScope.launch { bluetoothRuntime.straightController.canMove.collect { straightCanMove = it } }
         hvacCapability = session.hvacCapability
         availableVehicles = sessionStore.loadVehicles()
         val defaultPower = VehiclePowerTypeResolver.fromCarType(session.selectedCarType)
@@ -488,9 +494,14 @@ class MainActivity : ComponentActivity() {
                         straightRemoteActive = active
                         updateAutoRefreshLoop()
                         if (active) {
-                            bluetoothRuntime.refreshStraightServices()
+                            bluetoothRuntime.startStraightRemote(bluetoothCertificate)
+                        } else {
+                            bluetoothRuntime.stopStraightRemote()
                         }
                     },
+                    straightVehicleState = straightVehicleState,
+                    straightStatusMessage = straightStatusMessage,
+                    straightCanMove = straightCanMove,
                     onFridgeControl = ::handleFridgeControl,
                     onApplyClimateSettings = ::applyClimateSettings,
                     onDismissControlFeedback = { controlFeedback = null },
