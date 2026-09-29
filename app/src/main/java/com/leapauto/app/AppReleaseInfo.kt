@@ -6,8 +6,8 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 高德 Web API 升级多 Key 故障转移池，主备双活保障高可用\n" +
-        "2. 逆地理编码与实况天气遇单日配额超限（10003）自动无感切换备用 Key\n" +
-        "3. 系统设置新增高德 Web 服务配置卡片，支持进阶车主填入专属 Key\n" +
-        "4. 解除城市实况天气车架号限制，面向全系车型与全部车辆开放"
+        "1. 修复直进直出控制报文编码，彻底解决点击前进误触发车辆解锁问题\n" +
+        "2. 控制明文严格对齐官方单字节动作规范，杜绝与车门锁协议重叠冲突\n" +
+        "3. 优化长按按压与松手刹停调度，消除 BLE 数据包堆叠并提升挪车响应度\n" +
+        "4. 直进直出抽屉唤醒时自动探测挂载专属 EEED 座舱通道"
 }

@@ -71,15 +71,16 @@ object BleStraightProtocol {
     }
 
     /**
-     * 构造直进直出控制帧 (严格对齐官方源码 0xAA 0xAB 控制报文规范)
+     * 构造直进直出控制帧 (严格对齐官方源码 xp.java:414 / a91.java:59 规范)
+     * 明文为单字节动作状态字: 1=前进, 2=后退, 3=停止, 4=恢复控制
+     * 帧头: 0xAA 0xAB + 4字节小端序长度 + Base64(Cipher(plain))
      */
     fun buildControlFrame(
         session: BleKeySession,
         action: BleStraightAction,
         epochSeconds: Long = System.currentTimeMillis() / 1_000L
     ): ByteArray {
-        val command = littleEndian(epochSeconds, 8) + byteArrayOf(action.code.toByte())
-        val plain = byteArrayOf(BleKeyProtocol.crc8(command).toByte()) + command
+        val plain = byteArrayOf(action.code.toByte())
         val ciphertext = session.crypt(plain, Cipher.ENCRYPT_MODE)
         val payload = Base64.getEncoder().encode(ciphertext)
         plain.fill(0)

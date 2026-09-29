@@ -484,9 +484,12 @@ class MainActivity : ComponentActivity() {
                     onLogout = ::logout,
                     onControl = { control(it) },
                     onStraightMove = { bluetoothRuntime.straightControl(it) },
-                    onStraightRemoteActiveChange = {
-                        straightRemoteActive = it
+                    onStraightRemoteActiveChange = { active ->
+                        straightRemoteActive = active
                         updateAutoRefreshLoop()
+                        if (active) {
+                            bluetoothRuntime.refreshStraightServices()
+                        }
                     },
                     onFridgeControl = ::handleFridgeControl,
                     onApplyClimateSettings = ::applyClimateSettings,

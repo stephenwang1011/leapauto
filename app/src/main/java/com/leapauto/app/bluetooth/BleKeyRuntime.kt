@@ -58,6 +58,10 @@ class BleKeyRuntime private constructor(context: Context) {
         controller.straightControl(action)
     }
 
+    fun refreshStraightServices() {
+        controller.refreshStraightServices()
+    }
+
     fun attachSession(session: Session) {
         val account = session.oldAuth?.accountId.orEmpty()
         currentCarType = session.selectedCarType

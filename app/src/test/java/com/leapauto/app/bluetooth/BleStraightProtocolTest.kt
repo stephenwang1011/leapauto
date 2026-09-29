@@ -90,6 +90,28 @@ class BleStraightProtocolTest {
     }
 
     @Test
+    fun `control frame encrypts single byte action code strictly matching official app spec`() {
+        testSession().use { session ->
+            listOf(
+                BleStraightAction.FORWARD to 1,
+                BleStraightAction.BACKWARD to 2,
+                BleStraightAction.STOP to 3,
+                BleStraightAction.RESUME to 4
+            ).forEach { (action, expectedCode) ->
+                val frame = BleStraightProtocol.buildControlFrame(session, action)
+                assertEquals(0xAA.toByte(), frame[0])
+                assertEquals(0xAB.toByte(), frame[1])
+                val payloadBytes = frame.drop(6).toByteArray()
+                val ciphertext = java.util.Base64.getDecoder().decode(payloadBytes)
+                val decrypted = session.crypt(ciphertext, javax.crypto.Cipher.DECRYPT_MODE)
+                // 单字节明文：解密后严格为 1 字节动作状态字，且绝不包含时间戳或 CRC8，杜绝被车端误认为车锁 UNLOCK
+                assertEquals(1, decrypted.size)
+                assertEquals(expectedCode.toByte(), decrypted[0])
+            }
+        }
+    }
+
+    @Test
     fun `chunking splits long frame into exact 20 byte slices`() {
         val data = ByteArray(45) { it.toByte() }
         val chunks = BleStraightProtocol.chunkFrame(data, 20)

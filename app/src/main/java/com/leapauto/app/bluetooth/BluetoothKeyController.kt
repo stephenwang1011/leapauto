@@ -239,10 +239,27 @@ class BluetoothKeyController(
         val chunks = BleKeyProtocol.chunks(frame, mtu, compatibilityProfile.chunkProfile)
         recordDiagnostic(BleDiagnosticEvent.COMMAND_STARTED, action.code, extra = "直进直出物理指令: ${action.label}")
 
-        straightChunks.clear()
+        if (action == BleStraightAction.STOP) {
+            // STOP 刹停具有最高抢占优先级，立刻清空此前可能积压的前进/后退报文
+            straightChunks.clear()
+        }
         chunks.forEach(straightChunks::addLast)
         if (!straightWriteInProgress) {
             writeNextStraightChunk(client, target)
+        }
+    }
+
+    fun refreshStraightServices() {
+        val client = gatt ?: return
+        if (straightCharacteristic == null) {
+            val straightService = client.getService(BleStraightProtocol.SERVICE_UUID)
+            val char = straightService?.getCharacteristic(BleStraightProtocol.CHARACTERISTIC_UUID)
+            if (char != null) {
+                straightCharacteristic = char
+                recordDiagnostic(BleDiagnosticEvent.SERVICES_DISCOVERED, extra = "已捕获并挂载直进直出专属通道")
+            } else {
+                client.discoverServices()
+            }
         }
     }
 
