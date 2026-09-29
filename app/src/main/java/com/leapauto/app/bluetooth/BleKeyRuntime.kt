@@ -288,7 +288,7 @@ class BleKeyRuntime private constructor(context: Context) {
         } else {
             ScanSettings.SCAN_MODE_LOW_POWER // 确认远离车辆且在后台：进入超低功耗模式省电
         }
-        val probeDuration = if (foreground || consecutiveMissCount <= 2) 5_000L else 3_000L
+        val probeDuration = if (foreground || consecutiveMissCount <= 2) 5_000L else 4_000L
 
         controller.recordDiagnostic(BleDiagnosticEvent.PROBE_STARTED, extra = "正在探测车辆广播(${probeDuration / 1000}秒)...")
         controller.updateStateMessage("正在探查附近车辆...")
@@ -534,12 +534,12 @@ object BleReconnectPolicy {
     }
 
     fun probeDelayMillis(foreground: Boolean, inCarMediaActive: Boolean, consecutiveMissCount: Int): Long = when {
-        inCarMediaActive -> 60_000L
-        foreground -> 2_000L
+        inCarMediaActive -> 30_000L
+        foreground -> 1_500L
         consecutiveMissCount <= 0 -> 1_500L
         consecutiveMissCount == 1 -> 3_000L
         consecutiveMissCount == 2 -> 5_000L
-        consecutiveMissCount in 3..5 -> 15_000L
-        else -> 45_000L
+        consecutiveMissCount in 3..5 -> 8_000L
+        else -> 12_000L
     }
 }

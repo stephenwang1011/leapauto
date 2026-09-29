@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 优化蓝牙钥匙后台探查机制，解除单一 MAC 过滤并支持 ServiceUUID 动态识别\n" +
-        "2. 增加探查未命中直接物理直连自愈兜底，彻底消灭“车旁无法检测到广播”问题\n" +
-        "3. 全系车型首页首屏直进直出极速直达，完善数字钥匙凭证缺位静默同步闭环"
+        "1. 彻底优化蓝牙钥匙后台探查退避机制，将 45 秒长休眠压缩至 8~12 秒均衡自愈\n" +
+        "2. 探查窗口提升至 4~5 秒，极大提升走近车辆拉车门时的极速秒连成功率\n" +
+        "3. 强化多维广播指纹与 RPA 随机私有地址自适应穿透识别"
 }
