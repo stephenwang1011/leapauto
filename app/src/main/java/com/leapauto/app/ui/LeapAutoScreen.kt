@@ -328,6 +328,8 @@ fun LeapAutoScreen(
     pinSetupErrorMessage: String = "",
     showVehicleConfigConfirmationPrompt: Boolean,
     bluetoothState: BleConnectionState = BleConnectionState(),
+    bluetoothKeyFeatureEnabled: Boolean = false,
+    onBluetoothKeyFeatureEnabledChange: (Boolean) -> Unit = {},
     widget4x2Actions: List<String> = Widget4x2ActionPolicy.DEFAULT_ACTIONS,
     onWidget4x2ActionsChange: (List<String>) -> Unit = {},
     appearanceMode: AppearanceMode,
@@ -484,7 +486,7 @@ fun LeapAutoScreen(
             selectedTab = MainNavigationTabs.ACCOUNT
             showVehicleLocation = false
             showClimateControl = false
-            onOpenBluetoothKey()
+            onOpenBluetoothKey?.invoke()
         }
     }
 
@@ -922,6 +924,7 @@ fun LeapAutoScreen(
                         straightVehicleState = straightVehicleState,
                         straightStatusMessage = straightStatusMessage,
                         straightCanMove = straightCanMove,
+                        bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled,
                         onOpenBluetoothKey = onOpenBluetoothKey
                     )
                 }
@@ -1000,7 +1003,8 @@ fun LeapAutoScreen(
                                 vehicleImageVersion = vehicleImageVersion,
                                 onSelectCustomVehicleImage = onSelectCustomVehicleImage,
                                 onResetCustomVehicleImage = onResetCustomVehicleImage,
-                                showBluetoothKeyEntry = settingsTitleTapCount >= 5,
+                                bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled,
+                                onBluetoothKeyFeatureEnabledChange = onBluetoothKeyFeatureEnabledChange,
                                 onOpenBluetoothKey = onOpenBluetoothKey,
                                 onPowerTypeChange = onPowerTypeChange,
                                 onLogout = onLogout
@@ -1380,6 +1384,7 @@ private fun HomeContent(
     straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
     straightStatusMessage: String = "",
     straightCanMove: Boolean = false,
+    bluetoothKeyFeatureEnabled: Boolean = false,
     onOpenBluetoothKey: (() -> Unit)? = null
 ) {
     var showAddressNavigationDialog by rememberSaveable { mutableStateOf(false) }
@@ -1469,6 +1474,7 @@ private fun HomeContent(
                         straightVehicleState = straightVehicleState,
                         straightStatusMessage = straightStatusMessage,
                         straightCanMove = straightCanMove,
+                        bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled,
                         onOpenBluetoothKey = onOpenBluetoothKey
                     )
 
@@ -1708,8 +1714,9 @@ private fun MyContent(
     vehicleImageVersion: Int = 0,
     onSelectCustomVehicleImage: (Uri) -> Unit = {},
     onResetCustomVehicleImage: () -> Unit = {},
-    showBluetoothKeyEntry: Boolean = false,
-    onOpenBluetoothKey: () -> Unit = {},
+    bluetoothKeyFeatureEnabled: Boolean = false,
+    onBluetoothKeyFeatureEnabledChange: (Boolean) -> Unit = {},
+    onOpenBluetoothKey: (() -> Unit)? = null,
     onPowerTypeChange: (SessionStore.VehiclePowerType) -> Unit = {},
     onLogout: () -> Unit = {}
 ) {
@@ -1774,7 +1781,54 @@ private fun MyContent(
             }
         }
 
-        if (showBluetoothKeyEntry) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+            shape = RoundedCornerShape(16.dp),
+            color = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            border = glassCardBorder(),
+            shadowElevation = 0.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier.size(36.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_phosphor_key),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "蓝牙数字钥匙",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "开启后可在主页查看蓝牙状态，并支持近场直连控锁与无感解闭锁",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = bluetoothKeyFeatureEnabled,
+                    onCheckedChange = onBluetoothKeyFeatureEnabledChange
+                )
+            }
+        }
+
+        if (bluetoothKeyFeatureEnabled && onOpenBluetoothKey != null) {
             BluetoothKeyEntry(onClick = onOpenBluetoothKey)
         }
 
@@ -3383,6 +3437,7 @@ fun VehicleHero(
     straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
     straightStatusMessage: String = "",
     straightCanMove: Boolean = false,
+    bluetoothKeyFeatureEnabled: Boolean = false,
     onOpenBluetoothKey: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -3950,7 +4005,7 @@ fun VehicleHero(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        if (onOpenBluetoothKey != null) {
+                        if (bluetoothKeyFeatureEnabled && onOpenBluetoothKey != null) {
                             HeroBluetoothStatusButton(
                                 phase = bluetoothState?.phase ?: BleConnectionPhase.IDLE,
                                 onClick = onOpenBluetoothKey

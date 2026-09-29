@@ -7,7 +7,7 @@ plugins {
 }
 
 val apkDisplayName = "零跑智控"
-val apkVersionName = "3.6.67"
+val apkVersionName = "3.6.68"
 
 val localProperties = Properties().apply {
     val localPropertiesFile = rootProject.file("local.properties")
@@ -32,7 +32,7 @@ fun obfuscateSecret(plain: String?): String {
     return out.toString()
 }
 
-val rawAmapWebKey = localProperty("AMAP_WEB_KEY") ?: "468e462adad376c2aa08d252ae20fcba,41c317c16afa9d53626a9d7c0513d956"
+val rawAmapWebKey = localProperty("AMAP_WEB_KEY") ?: ""
 val rawPgyerApiKey = localProperty("PGYER_API_KEY") ?: ""
 
 val releaseStorePath = localProperty("RELEASE_STORE_FILE")
@@ -55,7 +55,7 @@ android {
         applicationId = "com.leapauto.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3006067
+        versionCode = 3006068
         versionName = apkVersionName
         buildConfigField("String", "AMAP_WEB_KEY_ENCRYPTED", "\"${obfuscateSecret(rawAmapWebKey)}\"")
         buildConfigField("String", "PGYER_API_KEY_ENCRYPTED", "\"${obfuscateSecret(rawPgyerApiKey)}\"")

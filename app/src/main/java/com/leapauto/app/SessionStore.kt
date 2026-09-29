@@ -813,6 +813,13 @@ class SessionStore(context: Context) {
         }
     }
 
+    fun loadBluetoothKeyFeatureEnabled(): Boolean =
+        appPrefs.getBoolean(BLUETOOTH_KEY_FEATURE_ENABLED, false)
+
+    fun saveBluetoothKeyFeatureEnabled(enabled: Boolean) {
+        appPrefs.edit().putBoolean(BLUETOOTH_KEY_FEATURE_ENABLED, enabled).apply()
+    }
+
     fun loadPowerPagerAutoPlayEnabled(): Boolean =
         appPrefs.getBoolean(POWER_PAGER_AUTO_PLAY_ENABLED, false)
 
@@ -925,6 +932,7 @@ class SessionStore(context: Context) {
         const val HANDLED_UPDATE_VERSION = "handled_update_version"
         const val APPEARANCE_MODE = "appearance_mode"
         const val CUSTOM_AMAP_WEB_KEY = "custom_amap_web_key"
+        const val BLUETOOTH_KEY_FEATURE_ENABLED = "bluetooth_key_feature_enabled"
         const val WIDGET_SENSITIVE_ACTION_VERIFICATION_ENABLED =
             "widget_sensitive_action_verification_enabled"
         const val LAST_CHARGE_STATE = "last_charge_state"

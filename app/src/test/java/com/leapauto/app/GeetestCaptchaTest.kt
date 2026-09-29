@@ -102,18 +102,20 @@ class GeetestCaptchaTest {
     @Test
     fun `extracts deviceId from curl or json if present`() {
         val input = """
-            {"identifier":"728504145190903808","security":"A87EE68BF4C7466AB4FFA8EAE27DEAC9","deviceID":"159272b1e9e64753b0411474ebb8fb10"}
+            {"identifier":"100000000000000000","security":"00000000000000000000000000000000","deviceID":"00000000000000000000000000000000"}
         """.trimIndent()
         val json = JSONObject(input)
-        assertEquals("159272b1e9e64753b0411474ebb8fb10", json.optString("deviceID"))
-        assertEquals("728504145190903808", json.optString("identifier"))
-        assertEquals("A87EE68BF4C7466AB4FFA8EAE27DEAC9", json.optString("security"))
+        assertEquals("00000000000000000000000000000000", json.optString("deviceID"))
+        assertEquals("100000000000000000", json.optString("identifier"))
+        assertEquals("00000000000000000000000000000000", json.optString("security"))
     }
 
     @Test
     fun `extracts deviceId from gateway jwt token payload`() {
-        val jwt = "eyJub25jZSI6IjMwNmI2ZGFmODM1ZTQxZDViMWY4Y2YyNWIyM2Y1MDVjIiwiYWxnIjoiSFMyNTYiLCJ0eXAiOiJKV1QifQ.eyJ1c2VyX25hbWUiOiJhY2NvdW50SWQ6NzI4NTA0MTQ1MTkwOTAzODA4LDEsZGV2aWNlSWQ6MTU5MjcyYjFlOWU2NDc1M2IwNDExNDc0ZWJiOGZiMTAscGFzc3dvcmQ6Iiwic2NvcGUiOlsicmVhZCJdLCJleHAiOjE3ODkxMTYyNTUsImF1dGhvcml0aWVzIjpbImFjY291bnRJZDo3Mjg1MDQxNDUxOTA5MDM4MDgiXSwianRpIjoiNzEzMzRiYzMtYTgxOS00NTliLWJiZjctODk0Y2E2NDdiOGRkIiwic2lnbl90aW1lIjoxNzg5MTA5MDU1LCJjbGllbnRfaWQiOiJIelRtY3NCZyJ9.gr4qb8KJLkeEog4sdGQDp3g6XwSCkH_4qYoN1AcWB9w"
-        assertEquals("159272b1e9e64753b0411474ebb8fb10", Crypto.jwtDeviceId(jwt))
+        val header = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString("""{"alg":"HS256","typ":"JWT"}""".toByteArray())
+        val payload = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString("""{"user_name":"accountId:100000000000000000,1,deviceId:00000000000000000000000000000000,password:"}""".toByteArray())
+        val jwt = "$header.$payload.DUMMY_SIGNATURE"
+        assertEquals("00000000000000000000000000000000", Crypto.jwtDeviceId(jwt))
     }
 
     @Test
@@ -149,9 +151,9 @@ class GeetestCaptchaTest {
     @Test
     fun `extracts smDeviceId from json or string if present`() {
         val input = """
-            {"identifier":"728504145190903808","security":"A87EE68BF4C7466AB4FFA8EAE27DEAC9","deviceID":"159272b1e9e64753b0411474ebb8fb10","smDeviceId":"BtuFPatpuhYEnHSCJjatnQbsYId7c6LGc4vWXe0ZzLCf21mXdDS"}
+            {"identifier":"100000000000000000","security":"00000000000000000000000000000000","deviceID":"00000000000000000000000000000000","smDeviceId":"TEST_SM_DEVICE_ID"}
         """.trimIndent()
         val json = JSONObject(input)
-        assertEquals("BtuFPatpuhYEnHSCJjatnQbsYId7c6LGc4vWXe0ZzLCf21mXdDS", json.optString("smDeviceId"))
+        assertEquals("TEST_SM_DEVICE_ID", json.optString("smDeviceId"))
     }
 }

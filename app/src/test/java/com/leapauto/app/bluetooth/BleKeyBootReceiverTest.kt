@@ -8,7 +8,7 @@ import org.junit.Test
 class BleKeyBootReceiverTest {
 
     private val accountId = "test-account"
-    private val vin = "LFZ63AZ55SH023503"
+    private val vin = "TESTVIN0000000001"
 
     @Test
     fun `auto start succeeds on boot completed with valid session and background enabled`() {

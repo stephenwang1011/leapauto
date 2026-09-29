@@ -28,7 +28,7 @@ class VehicleOtaTest {
     fun `parse real official fota getCurrentVersion response`() {
         val json = JSONObject("""
             {
-                "vin": "LFZ63AZ55SH023503",
+                "vin": "TESTVIN0000000001",
                 "versionNo": "3.06.40",
                 "logContent": "本次OTA新增功能：\n1.城市领航辅助\n2.一键泊车",
                 "updateTime": "2026.05.24"

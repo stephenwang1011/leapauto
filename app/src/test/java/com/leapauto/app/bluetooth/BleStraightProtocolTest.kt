@@ -162,7 +162,7 @@ class BleStraightProtocolTest {
         assertEquals("ALL_VEHICLES", BleStraightProtocol.AUTHORIZED_VIN)
 
         // 无论何种车型或 VIN 状态，直进直出均全面开放，永不隐藏
-        assertTrue(BleStraightProtocol.isAuthorized("LFZ63AZ55SH023503"))
+        assertTrue(BleStraightProtocol.isAuthorized("LFZ63AZ55SH123456"))
         assertTrue(BleStraightProtocol.isAuthorized("LFZ63AZ55SH000000"))
         assertTrue(BleStraightProtocol.isAuthorized("LFZ63AZ55SH999999"))
         assertTrue(BleStraightProtocol.isAuthorized("TESTVIN0000000001"))

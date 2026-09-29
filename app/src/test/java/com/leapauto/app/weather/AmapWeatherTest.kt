@@ -203,8 +203,8 @@ class AmapWeatherTest {
     @Test
     fun `weather service is available for all vehicles without vin restriction`() {
         // 全系所有车辆均授权可用
-        assertTrue(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH023503"))
-        assertTrue(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH023504"))
+        assertTrue(AmapWeatherService.isWeatherServiceAuthorized("TESTVIN0000000001"))
+        assertTrue(AmapWeatherService.isWeatherServiceAuthorized("TESTVIN0000000002"))
         assertTrue(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH000000"))
         assertTrue(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH999999"))
         assertTrue(AmapWeatherService.isWeatherServiceAuthorized(""))

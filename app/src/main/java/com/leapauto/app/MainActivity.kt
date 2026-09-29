@@ -265,6 +265,7 @@ class MainActivity : ComponentActivity() {
     private var bluetoothSettingsRequestId by mutableStateOf(0L)
     private var showBluetoothKey by mutableStateOf(false)
     private var bluetoothPermissionsGranted by mutableStateOf(false)
+    private var bluetoothKeyFeatureEnabled by mutableStateOf(false)
     private var bluetoothState by mutableStateOf(BleConnectionState())
     private var straightRemoteActive by mutableStateOf(false)
     private var straightVehicleState by mutableStateOf(com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING)
@@ -301,6 +302,7 @@ class MainActivity : ComponentActivity() {
         sessionStore = SessionStore(this)
         energyCacheStore = EnergyCacheStore(this)
         session = sessionStore.load()
+        bluetoothKeyFeatureEnabled = sessionStore.loadBluetoothKeyFeatureEnabled()
         // 启动时零延迟预热最新天气（面向所有车辆开放）
         runCatching {
             val selectedVin = session.selectedVin
@@ -417,6 +419,8 @@ class MainActivity : ComponentActivity() {
                     availableVehicles = availableVehicles,
                     onSwitchVehicle = ::switchVehicle,
                     bluetoothState = bluetoothState,
+                    bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled,
+                    onBluetoothKeyFeatureEnabledChange = ::updateBluetoothKeyFeatureEnabled,
                     appearanceMode = appearanceMode,
                     energyState = energyState,
                     healthyChargeLimitSoc = healthyChargeLimitSoc,
@@ -587,6 +591,27 @@ class MainActivity : ComponentActivity() {
         appearanceMode = mode
         sessionStore.saveAppearanceMode(mode)
         ControlWidget.refreshAppearance(this)
+    }
+
+    private fun updateBluetoothKeyFeatureEnabled(enabled: Boolean) {
+        bluetoothKeyFeatureEnabled = enabled
+        sessionStore.saveBluetoothKeyFeatureEnabled(enabled)
+        if (enabled) {
+            runCatching { bluetoothRuntime.restoreBackground() }
+            val accountId = session.oldAuth?.accountId.orEmpty()
+            val vin = session.selectedVin
+            if (accountId.isNotBlank() && vin.isNotBlank()) {
+                val cert = sessionStore.loadBluetoothKeyCertificate(accountId, vin)
+                if (cert != null) {
+                    bluetoothCertificate = cert
+                } else {
+                    syncBluetoothCertificate(silent = true)
+                }
+            }
+        } else {
+            bluetoothRuntime.stopBackground()
+            bluetoothKeyController.disconnect()
+        }
     }
 
     private fun openBluetoothKey() {
@@ -982,7 +1007,7 @@ class MainActivity : ComponentActivity() {
         activityResumed = true
         bluetoothRuntime.attachSession(session)
         bluetoothRuntime.setForeground(true)
-        if (loggedIn || session.selectedVin.isNotBlank()) runCatching { bluetoothRuntime.restoreBackground() }
+        if ((loggedIn || session.selectedVin.isNotBlank()) && bluetoothKeyFeatureEnabled) runCatching { bluetoothRuntime.restoreBackground() }
         if (intent.getBooleanExtra(BleKeyService.EXTRA_OPEN_KEY, false)) {
             intent.removeExtra(BleKeyService.EXTRA_OPEN_KEY)
             bluetoothSettingsRequestId++
