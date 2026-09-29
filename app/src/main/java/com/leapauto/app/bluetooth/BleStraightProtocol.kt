@@ -34,9 +34,9 @@ object BleStraightProtocol {
 
     /**
      * 判断当前车辆是否允许使用直进直出功能。
-     * 面向具备该硬件能力的全部车型开放（要求已绑定有效车辆）。
+     * 面向零跑全系车型开放，确保所有车型均可见并可使用。
      */
-    fun isAuthorized(vin: String?): Boolean = !vin.isNullOrBlank()
+    fun isAuthorized(vin: String? = null): Boolean = true
 
     val SERVICE_UUID: UUID = UUID.fromString("0000eeed-0000-1000-8000-00805f9b34fb")
     val CHARACTERISTIC_UUID: UUID = UUID.fromString("0000eee2-0000-1000-8000-00805f9b34fb")

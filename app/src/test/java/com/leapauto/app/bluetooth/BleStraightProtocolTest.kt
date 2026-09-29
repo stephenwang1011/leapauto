@@ -161,16 +161,14 @@ class BleStraightProtocolTest {
     fun `straight remote entry is available for all vehicles with valid vin`() {
         assertEquals("ALL_VEHICLES", BleStraightProtocol.AUTHORIZED_VIN)
 
-        // 有效车辆全系开放
+        // 无论何种车型或 VIN 状态，直进直出均全面开放，永不隐藏
         assertTrue(BleStraightProtocol.isAuthorized("LFZ63AZ55SH023503"))
         assertTrue(BleStraightProtocol.isAuthorized("LFZ63AZ55SH000000"))
         assertTrue(BleStraightProtocol.isAuthorized("LFZ63AZ55SH999999"))
         assertTrue(BleStraightProtocol.isAuthorized("TESTVIN0000000001"))
-
-        // 空 VIN 拒绝
-        org.junit.Assert.assertFalse(BleStraightProtocol.isAuthorized(""))
-        org.junit.Assert.assertFalse(BleStraightProtocol.isAuthorized("   "))
-        org.junit.Assert.assertFalse(BleStraightProtocol.isAuthorized(null))
+        assertTrue(BleStraightProtocol.isAuthorized(""))
+        assertTrue(BleStraightProtocol.isAuthorized("   "))
+        assertTrue(BleStraightProtocol.isAuthorized(null))
     }
 
     @Test

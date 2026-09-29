@@ -494,7 +494,15 @@ class MainActivity : ComponentActivity() {
                         straightRemoteActive = active
                         updateAutoRefreshLoop()
                         if (active) {
-                            bluetoothRuntime.startStraightRemote(bluetoothCertificate)
+                            val accountId = session.oldAuth?.accountId.orEmpty()
+                            val vin = session.selectedVin
+                            val cert = bluetoothCertificate ?: sessionStore.loadBluetoothKeyCertificate(accountId, vin)
+                            if (cert != null) {
+                                bluetoothCertificate = cert
+                                bluetoothRuntime.startStraightRemote(cert)
+                            } else {
+                                syncBluetoothCertificate(silent = true)
+                            }
                         } else {
                             bluetoothRuntime.stopStraightRemote()
                         }
@@ -667,6 +675,9 @@ class MainActivity : ComponentActivity() {
                     if (it != identity) bluetoothCloud.refreshMetadata()
                 }
                 bluetoothCertificate = certificate
+                if (straightRemoteActive) {
+                    bluetoothRuntime.startStraightRemote(certificate)
+                }
                 bluetoothKeyController.recordDiagnostic(BleDiagnosticEvent.CERTIFICATE_SYNCED, code = certificate.keyType)
                 updateBluetoothCertificateMessage()
                 if (silent) {
