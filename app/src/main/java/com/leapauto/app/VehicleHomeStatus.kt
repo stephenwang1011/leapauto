@@ -65,6 +65,7 @@ object VehicleHomeStatus {
         val statusText = when {
             !isOpen -> "已完全关闭"
             percent != null && percent in 1..25 -> "微开通风 ${percent}%"
+            percent != null && percent >= 100 -> "已全开 100%"
             percent != null && percent > 25 -> "已开启 ${percent}%"
             else -> "车窗未关"
         }

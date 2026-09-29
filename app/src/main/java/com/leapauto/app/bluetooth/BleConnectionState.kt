@@ -21,6 +21,7 @@ data class BleConnectionState(
     val devices: List<BleNearbyDevice> = emptyList(),
     val deviceName: String = "",
     val message: String = "",
+    val pendingAction: BleLockAction? = null,
     val confirmedAction: BleLockAction? = null,
     val diagnostics: List<BleDiagnosticEntry> = emptyList()
 ) {

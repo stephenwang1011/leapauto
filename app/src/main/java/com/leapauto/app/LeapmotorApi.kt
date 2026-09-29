@@ -57,6 +57,7 @@ class LeapmotorApi internal constructor(
         const val BLUETOOTH_VEHICLE_METADATA_PATH = "/carownerservice/v3/api/vehicleinfo/commonConfig"
         const val BLUETOOTH_CONFIGURATION_PATH = "/app/app-global-service/v3/api/commoninfo/transparent/conf/upload"
         const val BLUETOOTH_CALIBRATION_PATH = "/app/app-global-service/v3/api/bluetoothkey/uploadAutonomyCalibrateParams"
+        const val BLUETOOTH_UPLOAD_RECORDS_PATH = "/carownerservice/v3/api/bluetoothkey/uploadRecords"
         private const val BLUETOOTH_METADATA_STAGE = "ble_vehicle_metadata"
         private const val BLUETOOTH_CONFIGURATION_STAGE = "ble_cloud_configuration"
         private const val BLUETOOTH_CALIBRATION_STAGE = "ble_cloud_calibration"
@@ -1068,25 +1069,7 @@ class LeapmotorApi internal constructor(
         runCatching { ensureFreshOldToken() }
 
         fun attempt(): JSONObject {
-            // 优先直接查询单 VIN（对齐官方抓包日志，新网关返回完整 7 日及累计能耗明细）
-            val singleVinSigned = oldSignedParams(
-                params = mapOf("vin" to session.selectedVin),
-                includeTimespan = true
-            )
-            val singleVinHeaders = combinedAppAndGatewayHeaders(singleVinSigned, needLogin = true)
-            for (host in mileageEnergyHosts()) {
-                try {
-                    val resp = http(
-                        "$host$MILEAGE_ENERGY_DETAIL_PATH",
-                        headers = singleVinHeaders,
-                        query = singleVinSigned
-                    )
-                    val data = resp.optJSONObject("data")
-                    if (data?.optJSONArray("detail") != null) return resp
-                } catch (_: Exception) {}
-            }
-
-            // 备用：带 recent 7-day 时间范围参数
+            // 对齐官方 App 抓包标准契约：带 recent 7-day 时间范围参数
             val range = DrivingRecordTimeRange.recentMileageRange(nowMs)
             val signed = oldSignedParams(
                 params = recentMileageEnergyDetailBusinessParameters(session.selectedVin, range),
@@ -1469,6 +1452,49 @@ class LeapmotorApi internal constructor(
             BLUETOOTH_CALIBRATION_PATH, bluetoothCalibrationParameters(params, model),
             BLUETOOTH_CALIBRATION_STAGE, upload = true
         )
+
+    /**
+     * 上报蓝牙钥匙锁控操作记录 (对齐官方实车抓包 uploadRecords 规范)。
+     * optDesc: "0" = 解锁, "1" = 上锁
+     * optResult: "0" = 成功
+     * sendType: "4" = 蓝牙物理直连通道
+     */
+    fun uploadBluetoothRecord(action: com.leapauto.app.bluetooth.BleLockAction, optTimeEpochMs: Long = System.currentTimeMillis()) {
+        if (session.selectedVin.isBlank() || session.deviceId.isBlank()) return
+        val optDesc = if (action == com.leapauto.app.bluetooth.BleLockAction.LOCK) "1" else "0"
+        val item = JSONObject()
+            .put("optDesc", optDesc)
+            .put("optResult", "0")
+            .put("optTime", optTimeEpochMs.toString())
+            .put("optType", "1")
+            .put("sendType", "4")
+            .put("vin", session.selectedVin)
+        val records = JSONObject()
+            .put("devType", "Android")
+            .put("list", JSONArray().put(item))
+        val params = linkedMapOf(
+            "records" to records.toString()
+        )
+        val fields = oldSignedParams(params)
+        val url = "$DRIVING_RECORD_HOST$BLUETOOTH_UPLOAD_RECORDS_PATH".toHttpUrlOrNull() ?: return
+        val body = FormBody.Builder().apply {
+            fields.forEach { (k, v) -> add(k, v) }
+        }.build()
+        val request = Request.Builder()
+            .url(url)
+            .post(body)
+            .apply {
+                newGatewayHeaders(fields, needLogin = true).forEach { (k, v) -> header(k, v) }
+            }
+            .build()
+        runCatching {
+            bluetoothCertificateHttpClient.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    android.util.Log.w("LeapmotorApi", "蓝牙控车记录上报失败: HTTP ${resp.code}")
+                }
+            }
+        }
+    }
 
     private fun bluetoothCalibrationParameters(params: String?, model: String): Map<String, String> = try {
         BleCloudApiModels.calibrationParameters(session.selectedVin, params, model)
@@ -2153,7 +2179,7 @@ class LeapmotorApi internal constructor(
         }
     }
 
-    private fun ensureFreshOldToken() {
+    fun ensureFreshOldToken() {
         val old = session.oldAuth ?: throw ApiException("未登录")
         val expiresAt = old.expiresAt()
         if (expiresAt > 0 && expiresAt - System.currentTimeMillis() <= OLD_REFRESH_LEEWAY_MS) {

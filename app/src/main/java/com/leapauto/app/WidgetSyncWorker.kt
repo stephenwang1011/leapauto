@@ -6,7 +6,6 @@ import android.content.Context
 import android.widget.RemoteViews
 import androidx.work.Worker
 import androidx.work.WorkerParameters
-import com.leapauto.app.trip.TripStore
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -36,33 +35,6 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                 val config = store.loadVehicleConfig(current.selectedVin)
                 val status = LeapmotorApi(current).getVehicleState()
                 ChargeNotificationManager.process(context, store, current.selectedVin, status)
-
-                // 桌面小组件后台自动喂入行程状态机 (兜底无感记录)
-                runCatching {
-                    val tripStore = TripStore(context)
-                    if (tripStore.isTripRecordEnabled()) {
-                        val totalMileage = status.opt("totalMileage")?.toString()
-                        val preciseSoc = VehicleStatusMapper.displayPreciseSoc(status.opt("preciseSoc"))
-                            ?: status.opt("preciseSoc")?.toString()
-                            ?: status.opt("soc")?.toString()
-                        val speed = status.opt("speed")?.toString()
-                        val gearStatus = status.opt("gearStatus")?.toString()
-                        val isDriving = WidgetStatusMapper.isDriving(status)
-                        val isShutDown = status.optInt("vehicleState", -1) == 0
-                        val currentAddress = com.leapauto.app.trip.TripLocationHelper.resolveAddressFromStatus(status)
-                        tripStore.processTelemetry(
-                            vin = current.selectedVin,
-                            totalMileageStr = totalMileage,
-                            socStr = preciseSoc,
-                            speedStr = speed,
-                            gearStatus = gearStatus,
-                            isDriving = isDriving,
-                            isShutDown = isShutDown,
-                            currentAddress = currentAddress,
-                            nowEpochMs = System.currentTimeMillis()
-                        )
-                    }
-                }
 
                 val workerPowerType = VehiclePowerTypeResolver.fromStatus(
                     status, config.powerType, current.selectedCarType

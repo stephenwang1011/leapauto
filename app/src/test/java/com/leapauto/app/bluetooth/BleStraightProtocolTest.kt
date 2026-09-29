@@ -152,4 +152,21 @@ class BleStraightProtocolTest {
         org.junit.Assert.assertFalse(BleStraightProtocol.isAuthorized("   "))
         org.junit.Assert.assertFalse(BleStraightProtocol.isAuthorized(null))
     }
+
+    @Test
+    fun `verified straight activate and deactivate commands use cmdid 410 on3 payload`() {
+        val activate = com.leapauto.app.Commands.build("straightActivate")
+        assertEquals("410", activate.cmdid)
+        assertEquals("""{"on3":"on"}""", activate.stateJson)
+        assertEquals("激活直进直出", activate.label)
+        assertEquals("正在激活直进直出...", com.leapauto.app.ControlFeedbackFormatter.inProgress("straightActivate", activate.label))
+        assertEquals("直进直出已激活", com.leapauto.app.ControlFeedbackFormatter.success("straightActivate", activate.label))
+
+        val deactivate = com.leapauto.app.Commands.build("straightDeactivate")
+        assertEquals("410", deactivate.cmdid)
+        assertEquals("""{"on3":"off"}""", deactivate.stateJson)
+        assertEquals("退出直进直出", deactivate.label)
+        assertEquals("正在退出直进直出...", com.leapauto.app.ControlFeedbackFormatter.inProgress("straightDeactivate", deactivate.label))
+        assertEquals("直进直出已退出", com.leapauto.app.ControlFeedbackFormatter.success("straightDeactivate", deactivate.label))
+    }
 }

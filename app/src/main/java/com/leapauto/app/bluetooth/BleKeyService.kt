@@ -5,10 +5,13 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import com.leapauto.app.MainActivity
 import com.leapauto.app.R
 import kotlinx.coroutines.CoroutineScope
@@ -27,8 +30,16 @@ class BleKeyService : Service() {
     override fun onCreate() {
         super.onCreate()
         runtime = BleKeyRuntime.get(this)
-        getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL, "蓝牙钥匙后台连接", NotificationManager.IMPORTANCE_LOW))
+        val nm = getSystemService(NotificationManager::class.java)
+        // 删除旧版非静默通知渠道，确保状态栏无残留
+        runCatching { nm.deleteNotificationChannel(LEGACY_CHANNEL) }
+        val channel = NotificationChannel(CHANNEL, "蓝牙钥匙后台连接", NotificationManager.IMPORTANCE_MIN).apply {
+            description = "用于车辆蓝牙钥匙后台感应保活。关闭此通知不影响蓝牙钥匙正常解锁。"
+            setShowBadge(false)
+            enableLights(false)
+            enableVibration(false)
+        }
+        nm.createNotificationChannel(channel)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -82,12 +93,35 @@ class BleKeyService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL).setContentTitle("蓝牙钥匙")
             .setContentText(text).setSmallIcon(R.drawable.ic_phosphor_key).setContentIntent(open)
-            .setOngoing(true).setOnlyAlertOnce(true).setCategory(Notification.CATEGORY_SERVICE).build()
+            .setOngoing(true).setOnlyAlertOnce(true).setShowWhen(false)
+            .setCategory(Notification.CATEGORY_SERVICE).build()
     }
 
     companion object {
         const val EXTRA_OPEN_KEY = "open_bluetooth_key_settings"
-        private const val CHANNEL = "leapauto.bluetooth.key"
+        const val CHANNEL = "leapauto.bluetooth.key.silent"
+        private const val LEGACY_CHANNEL = "leapauto.bluetooth.key"
         private const val ID = 1033
+
+        fun openNotificationSettings(context: Context) {
+            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    putExtra(Settings.EXTRA_CHANNEL_ID, CHANNEL)
+                }
+            } else {
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", context.packageName, null)
+                }
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            runCatching { context.startActivity(intent) }.onFailure {
+                val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", context.packageName, null)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                runCatching { context.startActivity(fallback) }
+            }
+        }
     }
 }

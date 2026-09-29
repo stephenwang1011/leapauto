@@ -162,4 +162,36 @@ class RecentMileageEnergyTest {
         assertEquals("2026-09-11", parsed.mileage.last().day)
         assertEquals(18.5, parsed.mileage.last().mileageKm, 0.01)
     }
+
+    @Test
+    fun `parses real capture lhlc 318 response correctly including totalmileage`() {
+        val json = """
+        {
+          "code": 0,
+          "result": 0,
+          "message": "请求成功",
+          "data": {
+            "totalAccumulatedMileage": 542,
+            "totalmileage": 21149,
+            "deliveryDays": 445,
+            "totalEnergy": 3594,
+            "detail": [
+              {"currentMileage": 20616, "accumulatedMileage": 10, "accumulatedEnergyConsume": 0, "day": "2026-09-22"},
+              {"currentMileage": 20626, "accumulatedMileage": 10, "accumulatedEnergyConsume": 0, "day": "2026-09-23"},
+              {"currentMileage": 20635, "accumulatedMileage": 10, "accumulatedEnergyConsume": 0, "day": "2026-09-24"},
+              {"currentMileage": 20727, "accumulatedMileage": 91, "accumulatedEnergyConsume": 7, "day": "2026-09-25"},
+              {"currentMileage": 20773, "accumulatedMileage": 46, "accumulatedEnergyConsume": 2, "day": "2026-09-26"},
+              {"currentMileage": 21149, "accumulatedMileage": 375, "accumulatedEnergyConsume": 70, "day": "2026-09-27"},
+              {"currentMileage": 21149, "accumulatedMileage": 0, "accumulatedEnergyConsume": 0, "day": "2026-09-28"}
+            ]
+          }
+        }
+        """.trimIndent()
+        val parsed = RecentMileageEnergyParser.parse(JSONObject(json))
+        assertEquals(445, parsed.deliveryDays)
+        assertEquals(3594.0, parsed.totalEnergyKwh ?: 0.0, 0.01)
+        assertEquals("21149", parsed.vehicleTotalMileage)
+        assertEquals(7, parsed.mileage.size)
+        assertEquals((10 + 10 + 10 + 91 + 46 + 375 + 0), parsed.totalMileageKm)
+    }
 }

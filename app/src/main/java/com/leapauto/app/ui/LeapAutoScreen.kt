@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Paint
 import android.net.Uri
 import android.widget.Toast
-import com.leapauto.app.trip.TripRecord
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -331,8 +330,6 @@ fun LeapAutoScreen(
     bluetoothState: BleConnectionState = BleConnectionState(),
     widget4x2Actions: List<String> = Widget4x2ActionPolicy.DEFAULT_ACTIONS,
     onWidget4x2ActionsChange: (List<String>) -> Unit = {},
-    tripRecords: List<TripRecord> = emptyList(),
-    onClearTrips: () -> Unit = {},
     appearanceMode: AppearanceMode,
     energyState: EnergyAnalyticsState = EnergyAnalyticsState.Idle,
     healthyChargeLimitSoc: Int = 80,
@@ -401,12 +398,11 @@ fun LeapAutoScreen(
     onResetCustomVehicleImage: () -> Unit = {},
     onUpdateNickname: (String) -> Unit = {},
     bluetoothSettingsRequestId: Long = 0,
-    tripJournalRequestId: Long = 0,
-    tripRecordEnabled: Boolean = false,
-    onTripRecordEnabledChange: (Boolean) -> Unit = {},
     onPowerTypeChange: (SessionStore.VehiclePowerType) -> Unit = {},
     onOpenBluetoothKey: () -> Unit = {},
     onRetryDownload3D: () -> Unit = {},
+    onStraightMove: (com.leapauto.app.bluetooth.BleStraightAction) -> Unit = {},
+    onStraightRemoteActiveChange: (Boolean) -> Unit = {},
     onFetchParkingPhoto: ((ChassisParkingPhoto?, Bitmap?) -> Unit) -> Unit = {}
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
@@ -486,16 +482,6 @@ fun LeapAutoScreen(
             showVehicleLocation = false
             showClimateControl = false
             onOpenBluetoothKey()
-        }
-    }
-
-    var openTripJournalTrigger by remember { mutableStateOf(0L) }
-    LaunchedEffect(loggedIn, tripJournalRequestId) {
-        if (loggedIn && tripJournalRequestId > 0) {
-            selectedTab = MainNavigationTabs.VEHICLE
-            showVehicleLocation = false
-            showClimateControl = false
-            openTripJournalTrigger = tripJournalRequestId
         }
     }
 
@@ -927,11 +913,9 @@ fun LeapAutoScreen(
                         hvacCapability = hvacCapability,
                         onApplyClimateSettings = onApplyClimateSettings,
                         onRetryDownload3D = onRetryDownload3D,
-                        tripRecords = tripRecords,
-                        onClearTrips = onClearTrips,
-                        openTripJournalTrigger = openTripJournalTrigger,
-                        tripRecordEnabled = tripRecordEnabled,
                         bluetoothState = bluetoothState,
+                        onStraightMove = onStraightMove,
+                        onStraightRemoteActiveChange = onStraightRemoteActiveChange,
                         onOpenBluetoothKey = onOpenBluetoothKey
                     )
                 }
@@ -1012,8 +996,6 @@ fun LeapAutoScreen(
                                 onResetCustomVehicleImage = onResetCustomVehicleImage,
                                 showBluetoothKeyEntry = settingsTitleTapCount >= 5,
                                 onOpenBluetoothKey = onOpenBluetoothKey,
-                                tripRecordEnabled = tripRecordEnabled,
-                                onTripRecordEnabledChange = onTripRecordEnabledChange,
                                 onPowerTypeChange = onPowerTypeChange,
                                 onLogout = onLogout
                             )
@@ -1386,24 +1368,15 @@ private fun HomeContent(
     hvacCapability: HvacCapability = HvacCapability.fallback(),
     onApplyClimateSettings: (AirConditioningCommand) -> Unit = {},
     onRetryDownload3D: () -> Unit = {},
-    tripRecords: List<TripRecord> = emptyList(),
-    onClearTrips: () -> Unit = {},
-    openTripJournalTrigger: Long = 0L,
-    tripRecordEnabled: Boolean = false,
     bluetoothState: BleConnectionState = BleConnectionState(),
+    onStraightMove: (com.leapauto.app.bluetooth.BleStraightAction) -> Unit = {},
+    onStraightRemoteActiveChange: (Boolean) -> Unit = {},
     onOpenBluetoothKey: (() -> Unit)? = null
 ) {
     var showAddressNavigationDialog by rememberSaveable { mutableStateOf(false) }
     var showParkingDetailDialog by rememberSaveable { mutableStateOf(false) }
     var showFridgeControlBottomSheet by rememberSaveable { mutableStateOf(false) }
     var showClimateControlBottomSheet by rememberSaveable { mutableStateOf(false) }
-    var showTripJournalBottomSheet by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(openTripJournalTrigger) {
-        if (openTripJournalTrigger > 0L) {
-            showTripJournalBottomSheet = true
-        }
-    }
 
     var isPullRefreshing by remember { mutableStateOf(false) }
     LaunchedEffect(isRefreshing) {
@@ -1482,6 +1455,8 @@ private fun HomeContent(
                         controlFeedback = controlFeedback,
                         onDismissControlFeedback = onDismissControlFeedback,
                         bluetoothState = bluetoothState,
+                        onStraightMove = onStraightMove,
+                        onStraightRemoteActiveChange = onStraightRemoteActiveChange,
                         onOpenBluetoothKey = onOpenBluetoothKey
                     )
 
@@ -1571,8 +1546,6 @@ private fun HomeContent(
                     vehicleTotalMileage = status?.totalMileage,
                     vehicleModel = vehicleDisplayModel.ifBlank { vehicleModel },
                     seamless = false,
-                    tripRecordEnabled = tripRecordEnabled,
-                    onOpenTripJournal = { showTripJournalBottomSheet = true },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(dynamicCardHeight)
@@ -1616,14 +1589,6 @@ private fun HomeContent(
             onApplyClimateSettings = onApplyClimateSettings,
             controlFeedback = controlFeedback,
             onDismissControlFeedback = onDismissControlFeedback
-        )
-    }
-
-    if (showTripJournalBottomSheet) {
-        TripJournalBottomSheet(
-            trips = tripRecords,
-            onClearTrips = onClearTrips,
-            onDismissRequest = { showTripJournalBottomSheet = false }
         )
     }
 }
@@ -1708,8 +1673,8 @@ private fun MyContent(
     onCancelPinSetup: () -> Unit,
     widget4x2Actions: List<String> = Widget4x2ActionPolicy.DEFAULT_ACTIONS,
     onWidget4x2ActionsChange: (List<String>) -> Unit = {},
-    appearanceMode: AppearanceMode,
-    onAppearanceModeChange: (AppearanceMode) -> Unit,
+    appearanceMode: AppearanceMode = AppearanceMode.SYSTEM,
+    onAppearanceModeChange: (AppearanceMode) -> Unit = {},
     vehicleModel: String,
     vehicleConfig: SessionStore.VehicleConfig,
     onSaveVehicleConfig: (String, String, SessionStore.VehiclePowerType?, String, String) -> Unit,
@@ -1733,8 +1698,6 @@ private fun MyContent(
     onResetCustomVehicleImage: () -> Unit = {},
     showBluetoothKeyEntry: Boolean = false,
     onOpenBluetoothKey: () -> Unit = {},
-    tripRecordEnabled: Boolean = false,
-    onTripRecordEnabledChange: (Boolean) -> Unit = {},
     onPowerTypeChange: (SessionStore.VehiclePowerType) -> Unit = {},
     onLogout: () -> Unit = {}
 ) {
@@ -1810,16 +1773,11 @@ private fun MyContent(
             onResetToDefault = onResetCustomVehicleImage
         )
 
-        AppearanceModeCard(appearanceMode, onAppearanceModeChange)
         Widget4x2ActionsCard(
             actions = widget4x2Actions,
             onActionsChange = onWidget4x2ActionsChange
         )
         QuickSettingsTileCard()
-        TripRecordSettingCard(
-            enabled = tripRecordEnabled,
-            onEnabledChange = onTripRecordEnabledChange
-        )
 
         SettingsSectionTitle("系统与更新")
         val isSubAccount = availableVehicles.find { it.vin == vehicleVin }?.isSharedAccount == true
@@ -2132,6 +2090,11 @@ private fun VersionUpdateCard(
     onStartInAppUpdate: ((PgyerRelease) -> Unit)? = null
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 90f else 0f,
+        animationSpec = tween(220),
+        label = "versionCaretRotation"
+    )
     val statusColor = when (state) {
         is VersionUpdateState.UpToDate -> MaterialTheme.statusGood
         is VersionUpdateState.UpdateAvailable -> MaterialTheme.colorScheme.primary
@@ -2187,13 +2150,12 @@ private fun VersionUpdateCard(
                     Text(statusText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Icon(
-                    painter = painterResource(
-                        if (expanded) R.drawable.ic_phosphor_arrow_clockwise
-                        else R.drawable.ic_phosphor_arrow_clockwise
-                    ),
-                    contentDescription = null,
+                    painter = painterResource(R.drawable.ic_phosphor_caret_right),
+                    contentDescription = if (expanded) "收起" else "展开",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier
+                        .size(16.dp)
+                        .rotate(arrowRotation)
                 )
             }
             if (expanded) {
@@ -2290,174 +2252,6 @@ private fun VersionUpdateCard(
 }
 
 @Composable
-private fun TripRecordSettingCard(
-    enabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit
-) {
-    var showDisclaimerDialog by remember { mutableStateOf(false) }
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        color = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = glassCardBorder(),
-        shadowElevation = 0.dp
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        "自驾行程自动记录",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Surface(
-                        shape = RoundedCornerShape(percent = 50),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                    ) {
-                        Text(
-                            "实验性",
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-                Text(
-                    "上车连接车载蓝牙锁定起点，停车断开后自动归档里程与能耗",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = enabled,
-                onCheckedChange = { nextState ->
-                    if (nextState) {
-                        showDisclaimerDialog = true
-                    } else {
-                        onEnabledChange(false)
-                    }
-                }
-            )
-        }
-    }
-
-    if (showDisclaimerDialog) {
-        AlertDialog(
-            onDismissRequest = { showDisclaimerDialog = false },
-            modifier = solidDialogModifier(shape = RoundedCornerShape(24.dp)),
-            containerColor = MaterialTheme.colorScheme.surface,
-            tonalElevation = 0.dp,
-            shape = RoundedCornerShape(24.dp),
-            title = {
-                Text(
-                    text = "开启自驾行程记录功能",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "本功能为个人开发者实验性功能，非零跑官方车载行程服务。使用前请仔细了解以下说明与规则：",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 16.sp
-                    )
-
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.glassInsetSurface,
-                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                "📋 使用规则与机制",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                "1. 零触碰自动触发：手机连上零跑车载蓝牙时自动在本地锁定出发起点，到达目的地熄火离车断开蓝牙约 15 秒后自动结算并归档。\n" +
-                                "2. 全程无感运行：行驶途中无需打开 App，手机锁屏放在口袋即可，后台进程即使被系统回收起点数据也不会丢失。\n" +
-                                "3. 首页快捷直达：开启后，爱车首页「能耗里程」卡片右上角将显示【行程记录】快捷入口，方便随时查阅历史行程。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 12.sp,
-                                lineHeight = 17.sp
-                            )
-                        }
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.glassInsetSurface,
-                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                "⚠️ 注意事项与系统设置",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.statusWarn
-                            )
-                            Text(
-                                "1. 蓝牙设备权限：开启时请在系统弹窗中允许「附近设备/蓝牙连接」权限，用于识别车载蓝牙。\n" +
-                                "2. 后台保活建议：部分定制系统（如小米 HyperOS、华为鸿蒙、vivo、OPPO 等）省电策略激进，建议在手机应用设置中开启「允许自启动」并将电池优化设为「无限制」，防止系统阻断蓝牙广播。\n" +
-                                "3. 隐私保护承诺：所有自驾行程、里程与电耗数据 100% 仅保存在本机私有存储中，绝不向任何第三方云端上传。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 12.sp,
-                                lineHeight = 17.sp
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showDisclaimerDialog = false
-                        onEnabledChange(true)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Text("同意并开启", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showDisclaimerDialog = false }
-                ) {
-                    Text("取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        )
-    }
-}
-
-@Composable
 private fun VehicleCustomImageCard(
     vehicleVin: String,
     vehicleImageVersion: Int,
@@ -2471,11 +2265,55 @@ private fun VehicleCustomImageCard(
     var showResetConfirmDialog by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(false) }
 
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
             onSelectImageUri(uri)
+        }
+    }
+
+    val generalPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val uri = result.data?.data
+            if (uri != null) {
+                onSelectImageUri(uri)
+            }
+        }
+    }
+
+    val launchPicker = {
+        try {
+            // Tier 1: 优先尝试官方照片选择器 (Android 13+ Photo Picker，免存储权限)
+            photoPickerLauncher.launch(
+                androidx.activity.result.PickVisualMediaRequest(
+                    ActivityResultContracts.PickVisualMedia.ImageOnly
+                )
+            )
+        } catch (e1: Throwable) {
+            try {
+                // Tier 2: 降级尝试系统相册 ACTION_PICK (所有自带图库相册的手机均支持)
+                val pickIntent = android.content.Intent(
+                    android.content.Intent.ACTION_PICK,
+                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                ).apply {
+                    setDataAndType(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*")
+                }
+                generalPickerLauncher.launch(pickIntent)
+            } catch (e2: Throwable) {
+                try {
+                    // Tier 3: 降级尝试 ACTION_GET_CONTENT
+                    val getContentIntent = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).apply {
+                        type = "image/*"
+                    }
+                    generalPickerLauncher.launch(getContentIntent)
+                } catch (fatal: Throwable) {
+                    // Tier 4: 终极安全拦截，绝对不闪退
+                    android.widget.Toast.makeText(context, "未找到可用系统相册，请检查相册权限或应用", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
@@ -2523,7 +2361,7 @@ private fun VehicleCustomImageCard(
                         }
                     }
                     TextButton(
-                        onClick = { imagePickerLauncher.launch("image/*") },
+                        onClick = { launchPicker() },
                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
                     ) {
                         Text(
@@ -2753,59 +2591,6 @@ private fun VehicleCustomImageGuideDialog(
             }
         }
     )
-}
-
-@Composable
-private fun AppearanceModeCard(
-    mode: AppearanceMode,
-    onModeChange: (AppearanceMode) -> Unit
-) {
-    val description = when (mode) {
-        AppearanceMode.SYSTEM -> "自动使用手机当前浅色或深色外观"
-        AppearanceMode.LIGHT -> "始终使用浅色外观"
-        AppearanceMode.DARK -> "始终使用深色外观"
-    }
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        color = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = glassCardBorder(),
-        shadowElevation = 0.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("外观模式", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(mode.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            }
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                AppearanceMode.entries.forEachIndexed { index, option ->
-                    SegmentedButton(
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = AppearanceMode.entries.size),
-                        onClick = { onModeChange(option) },
-                        selected = mode == option,
-                        colors = SegmentedButtonDefaults.colors(
-                            activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            activeBorderColor = MaterialTheme.colorScheme.primary,
-                            inactiveContainerColor = MaterialTheme.colorScheme.surface,
-                            inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant
-                        ),
-                        label = { Text(option.label, style = MaterialTheme.typography.labelSmall) }
-                    )
-                }
-            }
-        }
-    }
 }
 
 @Composable
@@ -3399,6 +3184,8 @@ fun VehicleHero(
     controlFeedback: ControlFeedback? = null,
     onDismissControlFeedback: () -> Unit = {},
     bluetoothState: BleConnectionState? = null,
+    onStraightMove: (com.leapauto.app.bluetooth.BleStraightAction) -> Unit = {},
+    onStraightRemoteActiveChange: (Boolean) -> Unit = {},
     onOpenBluetoothKey: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -4234,7 +4021,9 @@ fun VehicleHero(
                     activeControlCommand = activeControlCommand,
                     embedded = true,
                     onOpenHealthCheck = onOpenHealthCheck,
-                    bluetoothState = bluetoothState ?: BleConnectionState()
+                    bluetoothState = bluetoothState ?: BleConnectionState(),
+                    onStraightMove = onStraightMove,
+                    onStraightRemoteActiveChange = onStraightRemoteActiveChange
                 )
             }
             Spacer(Modifier.height(8.dp))
@@ -5240,7 +5029,9 @@ private fun QuickVehicleActions(
     seamless: Boolean = false,
     embedded: Boolean = false,
     onOpenHealthCheck: () -> Unit = {},
-    bluetoothState: BleConnectionState = BleConnectionState()
+    bluetoothState: BleConnectionState = BleConnectionState(),
+    onStraightMove: (com.leapauto.app.bluetooth.BleStraightAction) -> Unit = {},
+    onStraightRemoteActiveChange: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val sessionStore = remember(context) { SessionStore(context) }
@@ -5248,6 +5039,10 @@ private fun QuickVehicleActions(
     var windowMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var sunshadeMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var showStraightRemoteSheet by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(showStraightRemoteSheet) {
+        onStraightRemoteActiveChange(showStraightRemoteSheet)
+    }
     var windowButtonTopLeft by remember { mutableStateOf(Offset.Zero) }
     var windowButtonWidth by remember { mutableStateOf(0f) }
     var windowButtonHeight by remember { mutableStateOf(0f) }
@@ -5545,7 +5340,10 @@ private fun QuickVehicleActions(
                                                 when (command.name) {
                                                     "diagnostics" -> onOpenHealthCheck()
                                                     "sentry" -> onControl(SentryModeControlPolicy.commandName(status?.sentryMode))
-                                                    "straightRemote" -> showStraightRemoteSheet = true
+                                                    "straightRemote" -> {
+                                                        showStraightRemoteSheet = true
+                                                        onControl("straightActivate")
+                                                    }
                                                     else -> onControl(command.name)
                                                 }
                                             }
@@ -5827,20 +5625,17 @@ private fun QuickVehicleActions(
     if (showStraightRemoteSheet && com.leapauto.app.bluetooth.BleStraightProtocol.isAuthorized(vehicleVin)) {
         StraightRemoteBottomSheet(
             onDismissRequest = {
-                onControl("straightStop")
+                onStraightMove(com.leapauto.app.bluetooth.BleStraightAction.STOP)
+                onControl("straightDeactivate")
                 showStraightRemoteSheet = false
             },
             canControl = bluetoothState.canControl,
             bluetoothPhase = bluetoothState.phase,
             onStartMoving = { action ->
-                if (action == com.leapauto.app.bluetooth.BleStraightAction.FORWARD) {
-                    onControl("straightForward")
-                } else if (action == com.leapauto.app.bluetooth.BleStraightAction.BACKWARD) {
-                    onControl("straightBackward")
-                }
+                onStraightMove(action)
             },
             onStopMoving = {
-                onControl("straightStop")
+                onStraightMove(com.leapauto.app.bluetooth.BleStraightAction.STOP)
             }
         )
     }
@@ -7812,9 +7607,7 @@ fun EnergyHomePagerCard(
     vehicleTotalMileage: String? = null,
     vehicleModel: String = "",
     modifier: Modifier = Modifier,
-    seamless: Boolean = false,
-    tripRecordEnabled: Boolean = false,
-    onOpenTripJournal: () -> Unit = {}
+    seamless: Boolean = false
 ) {
     val pagerState = rememberPagerState(initialPage = EnergyHomePage.SUMMARY.ordinal) { EnergyHomePage.entries.size }
     val goodColor = MaterialTheme.statusGood
@@ -7918,50 +7711,6 @@ fun EnergyHomePagerCard(
                                 .clip(RoundedCornerShape(1.5.dp))
                                 .background(indicatorColor)
                         )
-                    }
-                }
-            }
-
-            // 微晶胶囊：【行程记录 ➔】（仅在启用行程记录且在“能耗里程”Tab展示，右上角贴边包裹紧凑样式，复刻【已驻车】设计语言）
-            if (tripRecordEnabled && pagerState.currentPage == EnergyHomePage.SUMMARY.ordinal) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 10.dp, end = 12.dp)
-                        .zIndex(5f)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(5.dp),
-                        color = MaterialTheme.glassInsetSurface.copy(alpha = 0.85f),
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                        border = BorderStroke(
-                            0.5.dp,
-                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
-                        ),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(5.dp))
-                            .clickable(onClick = onOpenTripJournal)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_trip_route),
-                                contentDescription = null,
-                                modifier = Modifier.size(11.dp),
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "行程记录",
-                                style = MaterialTheme.typography.labelSmall.copy(lineHeight = 11.sp),
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1
-                            )
-                        }
                     }
                 }
             }

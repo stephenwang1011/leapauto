@@ -524,6 +524,8 @@
 | `fotaDownload` | `390` | `{"taskId":"{taskId}"}` | 触发车机开始下载新版固件包 | 4位操作密码 |
 | `fotaInstall` | `391` | `{"taskId":"{taskId}"}` | 触发车机就地刷写安装固件 | 4位操作密码 |
 | `fotaSchedule` | `392` | `{"taskId":"{taskId}","scheduleTime":"2026-09-24 03:00:00"}` | 预约车机在凌晨静默升级 | 4位操作密码 |
+| `straightActivate` | `410` | `{"on3":"on"}` | 激活直进直出模式（BCM ON3 唤醒就绪并释放手刹） | 4位操作密码 |
+| `straightDeactivate` | `410` | `{"on3":"off"}` | 退出直进直出模式 | 4位操作密码 |
 
 ---
 
@@ -716,6 +718,32 @@
 * **AA EE 快速重连**：重连明文为 `timestamp(UInt64LE)+token+9字节配置+account长度(UInt16LE)+account`，外层包含 sessionId、65 字节临时公钥、尾部 `01 09` 和摘要前 16 字节；P-256 使用 SHA-256，SM2 使用 SM3；
 * **凭证安全**：车辆回包 `1;<hexToken>` 仅接受非空、偶数长度、最多 1024 个十六进制字符，并按账号、VIN、deviceId、证书指纹和兼容策略使用 Android Keystore 加密存储；车辆返回 3、4、7 或快速认证超时会清除凭证并回退完整认证；
 * **证据边界**：以上格式来自 `D:/young/work/hackapp/1PAO_0.10_BLUETOOTH_ANALYSIS_2026-09-24.md` 与反编译静态源码对照，尚不能证明特定 C10/C16 车辆一定接受该格式；实车日志仍需确认。
+
+### 接口 24：蓝牙钥匙锁控操作上报 (uploadRecords)
+* **URL**: `POST {appCenter}/carownerservice/v3/api/bluetoothkey/uploadRecords`
+* **说明**: 官方 App 在通过本地 BLE 蓝牙完成门锁控制（开锁/上锁）并收到车端确认后，向云端静默上报的操作审计日志。
+* **参数格式** (x-www-form-urlencoded):
+  - `deviceID`: 手机设备标识
+  - `nonce`: 随机数
+  - `timespan`: 毫秒时间戳
+  - `signStr`: MD5 签名
+  - `records`: JSON 字符串，结构如下：
+    ```json
+    {
+      "devType": "Android",
+      "list": [
+        {
+          "optDesc": "1",
+          "optResult": "0",
+          "optTime": "1790601140209",
+          "optType": "1",
+          "sendType": "4",
+          "vin": "{vin}"
+        }
+      ]
+    }
+    ```
+* **车端信号联动验证**: 抓包证实蓝牙控锁成功后约 800ms~1200ms，信号 `1298` (driverDoorLockStatus) 变为 1(锁死)/0(开锁)，防盗系统 `1255` 同步生效。
 
 ---
 

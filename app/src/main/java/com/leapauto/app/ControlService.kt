@@ -104,6 +104,72 @@ class ControlService : Service() {
                 }
                 val isWinOpen = snapshot?.windowOpen == true
                 val effectiveCommand = WidgetWindowTogglePolicy.resolveCommand(command, isWinOpen)
+                val isLockCmd = effectiveCommand == "lock" || effectiveCommand == "unlock"
+                val bleRuntime = com.leapauto.app.bluetooth.BleKeyRuntime.get(this)
+                val bleController = bleRuntime.controller
+                if (isLockCmd && bleController.state.canControl) {
+                    val isLock = effectiveCommand == "lock"
+                    val action = if (isLock) com.leapauto.app.bluetooth.BleLockAction.LOCK else com.leapauto.app.bluetooth.BleLockAction.UNLOCK
+                    val appContext = applicationContext
+                    ControlWidget.showControlStatus(appContext, if (isLock) "蓝牙上锁中…" else "蓝牙解锁中…", locked = isLock)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        bleController.control(action)
+                    }
+
+                    // 等待车端蓝牙物理回执确认 (车端通常在 100ms 内极速回执，最多等待 1500ms)
+                    var bleConfirmed = false
+                    val startWait = System.currentTimeMillis()
+                    while (System.currentTimeMillis() - startWait < 1500L) {
+                        Thread.sleep(50L)
+                        val currentState = bleController.state
+                        if (currentState.confirmedAction == action) {
+                            bleConfirmed = true
+                            break
+                        }
+                        if (currentState.phase == com.leapauto.app.bluetooth.BleConnectionPhase.FAILED) {
+                            break
+                        }
+                    }
+
+                    if (bleConfirmed) {
+                        store.updateWidgetLockState(session.selectedVin, locked = isLock)
+                        com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(appContext)
+                        val text = if (isLock) "蓝牙上锁成功" else "蓝牙解锁成功"
+                        ControlWidget.showControlStatus(appContext, text, locked = isLock)
+                        notifyResult(text)
+                        // 异步静默上报蓝牙控锁记录 (对齐官方 uploadRecords 审计上报)
+                        Thread {
+                            try {
+                                LeapmotorApi(session).uploadBluetoothRecord(action)
+                            } catch (_: Exception) {}
+                        }.start()
+                        // 1.2 秒对齐官方实车信号刷新，拉取车身 1298 物理门锁信号完成闭环
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            ControlWidget.enqueueCommandSync(appContext)
+                        }, 1200L)
+                        if (isLock) {
+                            Thread {
+                                try {
+                                    Thread.sleep(ParkingAnomalyPolicy.POST_LOCK_CHECK_DELAY_MS)
+                                    val currentSession = store.load()
+                                    if (currentSession.oldAuth != null && currentSession.selectedVin == session.selectedVin) {
+                                        val api = LeapmotorApi(session)
+                                        val latest = api.getVehicleState()
+                                        ParkingAnomalyNotificationManager.notifyIfNeeded(
+                                            appContext,
+                                            store,
+                                            session.selectedCarType,
+                                            latest
+                                        )
+                                    }
+                                } catch (_: Exception) {}
+                            }.start()
+                        }
+                        return@Thread
+                    }
+                    // 若蓝牙因信号受阻或车端未在 1.5 秒内确认，自动无缝平滑回退至下方 4G 云端通道进行兜底控锁
+                    ControlWidget.showControlStatus(appContext, "切换云端控车中…")
+                }
                 val api = LeapmotorApi(session)
                 val cmd = Commands.build(effectiveCommand)
                 val result = api.sendControl(cmd, pin)

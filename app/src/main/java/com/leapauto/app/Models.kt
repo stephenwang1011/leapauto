@@ -411,6 +411,7 @@ object ControlFeedbackFormatter {
             key == "straightBackward" -> "正在向后倒车..."
             key == "straightStop" -> "正在刹停车辆..."
             key == "straightActivate" -> "正在激活直进直出..."
+            key == "straightDeactivate" -> "正在退出直进直出..."
             key == "batteryPreheat" || key == "电池预热" -> "开启电池预热中..."
             key == "horn" || key == "鸣笛" || key == "鸣笛寻车" -> "鸣笛寻车中..."
             key == "fridgeOn" || key == "开启冰箱" -> {
@@ -482,6 +483,7 @@ object ControlFeedbackFormatter {
             key == "straightBackward" -> "倒车挪车中"
             key == "straightStop" -> "车辆已刹停"
             key == "straightActivate" -> "直进直出已激活"
+            key == "straightDeactivate" -> "直进直出已退出"
             key == "batteryPreheat" || key == "电池预热" -> "电池预热已开启"
             key == "horn" || key == "鸣笛" || key == "鸣笛寻车" -> "鸣笛寻车已完成"
             key == "fridgeOn" || key == "开启冰箱" -> {
@@ -954,7 +956,8 @@ object Commands {
         "straightForward" -> ControlCommand("150", """{"value":"forward"}""", "直进挪车")
         "straightBackward" -> ControlCommand("150", """{"value":"backward"}""", "倒车挪车")
         "straightStop" -> ControlCommand("150", """{"value":"stop"}""", "停止挪车")
-        "straightActivate" -> ControlCommand("150", """{"value":"findCar"}""", "激活直进直出")
+        "straightActivate" -> ControlCommand("410", """{"on3":"on"}""", "激活直进直出")
+        "straightDeactivate" -> ControlCommand("410", """{"on3":"off"}""", "退出直进直出")
         "startCharging" -> ControlCommand("193", """{"value":"start"}""", "开始充电")
         "stopCharging" -> ControlCommand("193", """{"value":"stop"}""", "停止充电")
         "unlockCharger" -> ControlCommand("192", """{"operation":"unlock"}""", "解锁充电枪")

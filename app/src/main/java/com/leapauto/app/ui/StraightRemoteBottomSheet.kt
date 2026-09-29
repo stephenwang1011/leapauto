@@ -82,6 +82,8 @@ import com.leapauto.app.bluetooth.BleConnectionPhase
 import com.leapauto.app.bluetooth.BleStraightAction
 import com.leapauto.app.bluetooth.BleStraightVehicleState
 import com.leapauto.app.ui.theme.statusGood
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import com.leapauto.app.ui.theme.statusWarn
 
 /**
@@ -102,6 +104,18 @@ fun StraightRemoteBottomSheet(
     val haptic = LocalHapticFeedback.current
     var isMoving by remember { mutableStateOf(false) }
     var currentDirection by remember { mutableStateOf<BleStraightAction?>(null) }
+
+    // 直进直出核心心跳脉冲：按住期间每 250ms 发送一帧控制报文维持车辆前行，松手协程自动取消
+    val currentOnStartMoving by rememberUpdatedState(onStartMoving)
+    LaunchedEffect(isMoving, currentDirection) {
+        if (isMoving && currentDirection != null) {
+            val movingAction = currentDirection!!
+            while (isActive) {
+                currentOnStartMoving(movingAction)
+                delay(250L)
+            }
+        }
+    }
 
     val statusMessage = when {
         isMoving -> if (currentDirection == BleStraightAction.FORWARD) "正在向前直进中..." else "正在向后倒车中..."
@@ -220,7 +234,6 @@ fun StraightRemoteBottomSheet(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             isMoving = true
                             currentDirection = BleStraightAction.FORWARD
-                            onStartMoving(BleStraightAction.FORWARD)
                         },
                         onStopMove = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -246,7 +259,6 @@ fun StraightRemoteBottomSheet(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             isMoving = true
                             currentDirection = BleStraightAction.BACKWARD
-                            onStartMoving(BleStraightAction.BACKWARD)
                         },
                         onStopMove = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)

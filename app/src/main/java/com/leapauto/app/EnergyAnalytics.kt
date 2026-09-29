@@ -37,7 +37,8 @@ data class MileageEnergyDetail(
     val mileage: List<DailyMileage>,
     val totalMileageKm: Int,
     val totalEnergyKwh: Double?,
-    val deliveryDays: Int?
+    val deliveryDays: Int?,
+    val vehicleTotalMileage: String? = null
 )
 
 data class EnergyCategory(
@@ -123,8 +124,8 @@ data class EnergyAnalyticsData(
     val recentMileage: EnergyMetric?,
     val trend: List<EnergySeriesPoint>,
     val mileageTrend: List<EnergySeriesPoint>,
-    val composition: List<EnergyCategory>,
-    val otherFields: List<Pair<String, String>>,
+    val composition: List<EnergyCategory> = emptyList(),
+    val otherFields: List<Pair<String, String>> = emptyList(),
     val capturedAt: Long,
     val rankLabel: String? = null,
     val rankError: String? = null,
@@ -535,12 +536,19 @@ object RecentMileageEnergyParser {
             .coerceIn(0.0, Int.MAX_VALUE.toDouble())
             .toInt()
 
+        val vehicleTotalMileage = data.opt("totalmileage")
+            ?.takeIf { it != JSONObject.NULL }
+            ?.toString()
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+
         return MileageEnergyDetail(
             networkRows = networkRows,
             mileage = displayedRows,
             totalMileageKm = totalMileageKm,
             totalEnergyKwh = parseNonNegativeNumber(data.opt("totalEnergy")),
-            deliveryDays = parseNonNegativeInt(data.opt("deliveryDays"))
+            deliveryDays = parseNonNegativeInt(data.opt("deliveryDays")),
+            vehicleTotalMileage = vehicleTotalMileage
         )
     }
 

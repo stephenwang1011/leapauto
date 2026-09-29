@@ -46,9 +46,9 @@ enum class CalibrationPreset(val label: String, val desc: String) {
 }
 
 private fun getPresetCalibration(preset: CalibrationPreset, isC16: Boolean): BleCalibration = when (preset) {
-    CalibrationPreset.CLOSE -> if (isC16) BleCalibration(75, 100, 3, 25) else BleCalibration(65, 200, 6, 20)
+    CalibrationPreset.CLOSE -> if (isC16) BleCalibration(69, 100, 3, 21) else BleCalibration(56, 200, 6, 16)
     CalibrationPreset.STANDARD -> if (isC16) BleCalibration.C16_DEFAULT else BleCalibration.DEFAULT
-    CalibrationPreset.FAR -> if (isC16) BleCalibration(62, 100, 6, 18) else BleCalibration(48, 200, 10, 14)
+    CalibrationPreset.FAR -> if (isC16) BleCalibration(69, 100, 7, 21) else BleCalibration(56, 200, 11, 16)
 }
 
 internal data class BluetoothCalibrationInput(
@@ -166,7 +166,7 @@ internal fun BluetoothCalibrationEditor(
                 Text("参数超出编码范围或格式无效", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error)
             }
-            Button(onClick = { parsed?.let(onSave) }, enabled = !busy && parsed != null && parsed != calibration,
+            Button(onClick = { parsed?.let(onSave) }, enabled = !busy && parsed != null,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                 Text("应用并保存标定")
             }

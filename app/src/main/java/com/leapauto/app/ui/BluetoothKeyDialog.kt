@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,7 +23,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,6 +50,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.leapauto.app.R
@@ -58,11 +62,13 @@ import com.leapauto.app.bluetooth.BleCloudSyncState
 import com.leapauto.app.bluetooth.BleConnectionPhase
 import com.leapauto.app.bluetooth.BleConnectionState
 import com.leapauto.app.bluetooth.BleDiagnosticEntry
+import com.leapauto.app.bluetooth.BleKeyService
 import com.leapauto.app.bluetooth.BleLockAction
 import com.leapauto.app.bluetooth.BleNearbyDevice
 import com.leapauto.app.bluetooth.BlePassiveConfiguration
 import com.leapauto.app.bluetooth.BleVehicleMetadata
 import com.leapauto.app.ui.theme.statusGood
+import com.leapauto.app.ui.theme.statusWarn
 import java.text.DateFormat
 import java.util.Date
 
@@ -169,7 +175,8 @@ fun BluetoothKeyDialog(
                         onDisconnect = onDisconnect,
                         onResumeBackground = onResumeBackground,
                         onConnect = onConnect,
-                        onScan = onScan
+                        onScan = onScan,
+                        onControl = onControl
                     )
 
                     // 2. 智能无感钥匙日常开关舱 (微晶卡片)
@@ -307,11 +314,52 @@ fun BluetoothKeyDialog(
                                         }
                                     }
                                 }
+                                val isOfficialAppInstalled = remember(context) {
+                                    runCatching { context.packageManager.getPackageInfo("com.dahua.leapmotor", 0) != null }.getOrDefault(false)
+                                }
+                                if (isOfficialAppInstalled) {
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.statusWarn.copy(alpha = 0.10f),
+                                        border = BorderStroke(0.6.dp, MaterialTheme.statusWarn.copy(alpha = 0.35f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_phosphor_warning),
+                                                contentDescription = null,
+                                                tint = MaterialTheme.statusWarn,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Text(
+                                                text = "检测到本机已安装官方零跑 App。若遇到蓝牙连接频繁断开，建议在官方 App 中关闭其无感钥匙，避免两端争抢同一物理信道。",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                lineHeight = 15.sp
+                                            )
+                                        }
+                                    }
+                                }
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                                 // 云端设置同步状态
                                 BluetoothCloudStatus(cloudState, onRetryCloudSync)
-                                TextButton(onClick = onOpenSettings, modifier = Modifier.align(Alignment.End)) {
-                                    Text(if (permissionsGranted) "系统权限设置" else "开启附近设备权限")
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TextButton(onClick = { BleKeyService.openNotificationSettings(context) }) {
+                                        Text("关闭通知栏提醒", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    TextButton(onClick = onOpenSettings) {
+                                        Text(if (permissionsGranted) "系统权限设置" else "开启附近设备权限")
+                                    }
                                 }
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                                 // 连接诊断日志
@@ -395,7 +443,8 @@ private fun BluetoothConnectionHeroCard(
     onDisconnect: () -> Unit,
     onResumeBackground: () -> Unit,
     onConnect: (BleNearbyDevice) -> Unit,
-    onScan: () -> Unit
+    onScan: () -> Unit,
+    onControl: (BleLockAction) -> Unit = {}
 ) {
     val isConnected = state.phase == BleConnectionPhase.READY || state.phase == BleConnectionPhase.SENDING
     val isConnecting = state.isBusy || state.phase == BleConnectionPhase.SCANNING
@@ -511,6 +560,61 @@ private fun BluetoothConnectionHeroCard(
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold
                         )
+                    }
+                }
+            }
+
+            // 蓝牙一键控锁快捷面板 (就绪待命或发送中时呈现)
+            val canOperate = state.canControl
+            val isSending = state.phase == BleConnectionPhase.SENDING
+            val isUnlocking = isSending && state.pendingAction == BleLockAction.UNLOCK
+            val isLocking = isSending && state.pendingAction == BleLockAction.LOCK
+            if (canOperate || isSending) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    FilledTonalButton(
+                        onClick = { onControl(BleLockAction.UNLOCK) },
+                        enabled = canOperate,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).height(40.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        if (isUnlocking) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(6.dp))
+                            Text("解锁中...", style = MaterialTheme.typography.labelMedium)
+                        } else {
+                            Icon(painterResource(R.drawable.ic_phosphor_lock_open), contentDescription = null, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("蓝牙解锁", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    FilledTonalButton(
+                        onClick = { onControl(BleLockAction.LOCK) },
+                        enabled = canOperate,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).height(40.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        if (isLocking) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(6.dp))
+                            Text("上锁中...", style = MaterialTheme.typography.labelMedium)
+                        } else {
+                            Icon(painterResource(R.drawable.ic_phosphor_lock), contentDescription = null, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("蓝牙上锁", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
             }

@@ -20,6 +20,7 @@
     <queries>
         <package android:name="com.autonavi.minimap" />
         <package android:name="com.baidu.BaiduMap" />
+        <package android:name="com.dahua.leapmotor" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="geo" />
@@ -79,16 +80,6 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/compact_appwidget_provider_info" />
-        </receiver>
-
-        <receiver
-            android:name=".trip.BluetoothTripReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
-                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
-                <action android:name="android.bluetooth.device.action.BOND_STATE_CHANGED" />
-            </intent-filter>
         </receiver>
 
         <receiver

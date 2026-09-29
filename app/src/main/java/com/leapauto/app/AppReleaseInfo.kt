@@ -6,7 +6,9 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 优化车门锁控制响应速度：消除桌面插件等待延迟，指令反馈大幅提速\n" +
-        "2. 桌面插件与控制中心实时同步门锁状态，落锁与解锁即按即变\n" +
-        "3. 锁车防盗安全检测异步后台化，保证操作流畅零阻塞"
+        "1. 直进直出全面接入物理蓝牙射频通道，修复长按前进后退车辆无响应问题\n" +
+        "2. 实现车规级 250ms 连续心跳脉冲与松手刹停，保障遥控移动安全平稳\n" +
+        "3. 开启直进直出自动同步 3 秒车况高频刷新，实时捕捉手刹解除与实际车速\n" +
+        "4. 彻底修复车窗全开却误显为微开 15% 的问题，实现状态枚举与全开比例准确呈现\n" +
+        "5. 蓝牙锁控成功后自动异步对齐官方 uploadRecords 审计上报闭环"
 }

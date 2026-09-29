@@ -351,7 +351,7 @@ internal class CarModelWebView(
                     else -> explicitPercent.coerceIn(0, 100)
                 }
             } else if (status?.openWindows?.contains(label) == true) {
-                15 // 仅有开窗标签状态但无具体开度时，默认以通风微开(15%)呈现，消除半开误判
+                50 // 仅有开窗标签状态但无具体开度时，以半开(50%)适中呈现，既不误判微开也不误判全开
             } else {
                 0
             }

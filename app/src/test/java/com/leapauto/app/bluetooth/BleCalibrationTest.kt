@@ -80,4 +80,12 @@ class BleCalibrationTest {
         assertEquals("56;2.00;08;16", BleCalibration.DEFAULT.toProtocolText())
         assertArrayEquals(byteArrayOf(56, 0xC8.toByte(), 0, 8, 16), BleCalibration.DEFAULT.encoded())
     }
+
+    @Test
+    fun `verified c16 far calibration matches captured protocol 69 1 00 07 21`() {
+        val far = BleCalibration(69, 100, 7, 21)
+        assertEquals("69;1.00;07;21", far.toProtocolText())
+        assertArrayEquals(byteArrayOf(69, 100, 0, 7, 21), far.encoded())
+        assertEquals(far, BleCalibration.parseOrNull("69;1.00;07;21"))
+    }
 }

@@ -54,6 +54,10 @@ class BleKeyRuntime private constructor(context: Context) {
         }
     }
 
+    fun straightControl(action: BleStraightAction) {
+        controller.straightControl(action)
+    }
+
     fun attachSession(session: Session) {
         val account = session.oldAuth?.accountId.orEmpty()
         currentCarType = session.selectedCarType
@@ -73,7 +77,18 @@ class BleKeyRuntime private constructor(context: Context) {
 
     fun setForeground(value: Boolean) {
         foreground = value
-        if (!value && !runningValue.value) controller.disconnect()
+        if (value) {
+            // 前台唤醒：若后台钥匙已开启但未处于已就绪或连接中状态，立即取消等待发起极速探测
+            if (runningValue.value && !controller.state.isBusy &&
+                controller.state.phase != BleConnectionPhase.READY &&
+                controller.state.phase != BleConnectionPhase.SCANNING &&
+                controller.state.phase != BleConnectionPhase.CONFIGURING) {
+                cancelRetry()
+                reconnectManaged()
+            }
+        } else {
+            if (!runningValue.value) controller.disconnect()
+        }
     }
 
     fun connectManually(device: BleNearbyDevice, certificate: BleKeyCertificate, session: Session) {
@@ -250,12 +265,12 @@ class BleKeyRuntime private constructor(context: Context) {
             return
         }
 
-        val scanMode = if (consecutiveMissCount <= 2) {
-            ScanSettings.SCAN_MODE_BALANCED // 黄金恢复期 (刚断开的前2次)：采用平衡扫描模式，确保 100% 秒级捕获车机广播
+        val scanMode = if (foreground || consecutiveMissCount <= 2) {
+            ScanSettings.SCAN_MODE_BALANCED // 前台可见或黄金恢复期：采用平衡扫描模式，确保秒级捕获广播
         } else {
-            ScanSettings.SCAN_MODE_LOW_POWER // 确认远离车辆后：进入超低功耗模式省电
+            ScanSettings.SCAN_MODE_LOW_POWER // 确认远离车辆且在后台：进入超低功耗模式省电
         }
-        val probeDuration = if (consecutiveMissCount <= 2) 5_000L else 3_000L
+        val probeDuration = if (foreground || consecutiveMissCount <= 2) 5_000L else 3_000L
 
         controller.recordDiagnostic(BleDiagnosticEvent.PROBE_STARTED, extra = "正在探测车辆广播(${probeDuration / 1000}秒)...")
         controller.updateStateMessage("正在探查附近车辆...")
@@ -319,14 +334,7 @@ class BleKeyRuntime private constructor(context: Context) {
 
     private fun scheduleProbeRetry() {
         if (retry != null || !runningValue.value) return
-        val delayMs = when {
-            inCarMediaActive -> 60_000L // 车载音频连接中：人在车内，延长至 60 秒低频嗅探，纯净让出信道
-            consecutiveMissCount == 0 -> 1_500L  // 刚断开第0次：1.5 秒后极速重探
-            consecutiveMissCount == 1 -> 3_000L  // 第1次未中：3 秒后再次探查
-            consecutiveMissCount == 2 -> 5_000L  // 第2次未中：5 秒后再次探查
-            consecutiveMissCount in 3..5 -> 15_000L // 车主正在走开：15 秒探查
-            else -> 45_000L // 确认远离：45 秒深度休眠
-        }
+        val delayMs = BleReconnectPolicy.probeDelayMillis(foreground, inCarMediaActive, consecutiveMissCount)
         retry = Runnable {
             retry = null
             reconnectManaged()
@@ -484,5 +492,15 @@ object BleReconnectPolicy {
         2 -> 10_000L
         3 -> 20_000L
         else -> 30_000L
+    }
+
+    fun probeDelayMillis(foreground: Boolean, inCarMediaActive: Boolean, consecutiveMissCount: Int): Long = when {
+        inCarMediaActive -> 60_000L
+        foreground -> 2_000L
+        consecutiveMissCount <= 0 -> 1_500L
+        consecutiveMissCount == 1 -> 3_000L
+        consecutiveMissCount == 2 -> 5_000L
+        consecutiveMissCount in 3..5 -> 15_000L
+        else -> 45_000L
     }
 }

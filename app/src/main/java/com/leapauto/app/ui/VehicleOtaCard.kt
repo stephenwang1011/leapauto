@@ -504,44 +504,8 @@ fun VehicleOtaCard(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 4.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.glassInsetSurface,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(12.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    text = "当前系统版本：${data.currentVersion}",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.statusGood
-                                                )
-                                                if (data.updateTime.isNotBlank()) {
-                                                    Text(
-                                                        text = data.updateTime,
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                            }
-                                            Text(
-                                                text = "您的爱车车机系统已是最新版本，无需升级。",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-
                                     if (data.releaseNotes.isNotBlank()) {
                                         var notesExpanded by rememberSaveable { mutableStateOf(false) }
                                         val notesArrowRotation by animateFloatAsState(
@@ -559,11 +523,20 @@ fun VehicleOtaCard(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.SpaceBetween
                                             ) {
-                                                Text(
-                                                    text = "当前版本功能与优化说明",
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    fontWeight = FontWeight.SemiBold
-                                                )
+                                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                    Text(
+                                                        text = "当前版本功能与优化说明",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                    if (data.updateTime.isNotBlank()) {
+                                                        Text(
+                                                            text = "更新时间：${data.updateTime}",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                }
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -598,6 +571,13 @@ fun VehicleOtaCard(
                                                 }
                                             }
                                         }
+                                    } else if (data.updateTime.isNotBlank()) {
+                                        Text(
+                                            text = "系统更新时间：${data.updateTime}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(start = 2.dp)
+                                        )
                                     }
 
                                     OutlinedButton(
@@ -605,7 +585,7 @@ fun VehicleOtaCard(
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        Text("重新检查更新")
+                                        Text("检查更新")
                                     }
                                 }
                             }
