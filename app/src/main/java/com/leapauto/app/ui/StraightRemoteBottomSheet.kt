@@ -95,7 +95,7 @@ import com.leapauto.app.ui.theme.statusWarn
 @Composable
 fun StraightRemoteBottomSheet(
     onDismissRequest: () -> Unit,
-    canControl: Boolean,
+    straightCanMove: Boolean,
     bluetoothPhase: BleConnectionPhase,
     statusText: String = "",
     vehicleState: BleStraightVehicleState = BleStraightVehicleState.WAITING,
@@ -107,14 +107,21 @@ fun StraightRemoteBottomSheet(
     var isMoving by remember { mutableStateOf(false) }
     var currentDirection by remember { mutableStateOf<BleStraightAction?>(null) }
 
-    val statusMessage = when {
-        isMoving -> if (currentDirection == BleStraightAction.FORWARD) "正在向前直进中..." else "正在向后倒车中..."
-        statusText.isNotBlank() && statusText != "未连接" -> statusText
-        canControl -> "座舱已就绪，长按方向键即可挪车"
-        bluetoothPhase in setOf(BleConnectionPhase.CONNECTING, BleConnectionPhase.DISCOVERING,
-            BleConnectionPhase.SUBSCRIBING, BleConnectionPhase.AUTHENTICATING) -> "正在搜索连接车辆座舱..."
-        else -> "等待车辆座舱就绪中..."
+    // 通道就绪态一旦失效，立刻撤销本地"正在前进"显示，禁止 UI 伪造移动状态
+    LaunchedEffect(straightCanMove) {
+        if (com.leapauto.app.bluetooth.StraightRemoteUiPolicy.shouldResetMoving(isMoving, straightCanMove)) {
+            currentDirection = null
+            isMoving = false
+        }
     }
+
+    val statusMessage = com.leapauto.app.bluetooth.StraightRemoteUiPolicy.statusMessage(
+        isMoving = isMoving,
+        isMovingForward = currentDirection == BleStraightAction.FORWARD,
+        statusText = statusText,
+        straightCanMove = straightCanMove,
+        bluetoothPhase = bluetoothPhase
+    )
 
     ModalBottomSheet(
         onDismissRequest = {
@@ -174,7 +181,7 @@ fun StraightRemoteBottomSheet(
                             style = MaterialTheme.typography.labelSmall,
                             color = when {
                                 isMoving -> MaterialTheme.colorScheme.primary
-                                canControl -> MaterialTheme.statusGood
+                                straightCanMove -> MaterialTheme.statusGood
                                 else -> MaterialTheme.colorScheme.onSurfaceVariant
                             },
                             fontWeight = FontWeight.Medium
@@ -219,7 +226,7 @@ fun StraightRemoteBottomSheet(
                     // 前进按钮 (长按按压式)
                     HoldControlButton(
                         action = BleStraightAction.FORWARD,
-                        enabled = canControl && (!isMoving || currentDirection == BleStraightAction.FORWARD),
+                        enabled = straightCanMove && (!isMoving || currentDirection == BleStraightAction.FORWARD),
                         isCurrentMoving = isMoving && currentDirection == BleStraightAction.FORWARD,
                         onStartMove = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -239,13 +246,13 @@ fun StraightRemoteBottomSheet(
                     VehicleTopDownBlueprint(
                         isMoving = isMoving,
                         currentDirection = currentDirection,
-                        vehicleState = if (canControl) BleStraightVehicleState.READY else vehicleState
+                        vehicleState = if (straightCanMove) BleStraightVehicleState.READY else vehicleState
                     )
 
                     // 后退按钮 (长按按压式)
                     HoldControlButton(
                         action = BleStraightAction.BACKWARD,
-                        enabled = canControl && (!isMoving || currentDirection == BleStraightAction.BACKWARD),
+                        enabled = straightCanMove && (!isMoving || currentDirection == BleStraightAction.BACKWARD),
                         isCurrentMoving = isMoving && currentDirection == BleStraightAction.BACKWARD,
                         onStartMove = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)

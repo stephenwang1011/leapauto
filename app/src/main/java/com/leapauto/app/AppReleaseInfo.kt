@@ -5,5 +5,5 @@ object AppReleaseInfo {
         get() = BuildConfig.VERSION_NAME
 
     // Update this text together with apkVersionName before each delivery package.
-    const val currentReleaseNotes = "1. 蓝牙数字钥匙开关联动控制直进直出按钮显示与隐藏"
+    const val currentReleaseNotes = "1. 修复直进直出显示就绪但长按方向键车辆无动作的问题"
 }

@@ -58,8 +58,15 @@ class BleKeyRuntime private constructor(context: Context) {
     }
 
     fun startStraightRemote(certificate: BleKeyCertificate? = null) {
-        val currentIdentity = identity ?: return
-        val cert = certificate ?: sessions.loadBluetoothKeyCertificate(currentIdentity.accountId, currentIdentity.vin) ?: return
+        val currentIdentity = identity ?: run {
+            straightController.markNotReady("账号身份未就绪，无法启动直进直出")
+            return
+        }
+        val cert = certificate ?: sessions.loadBluetoothKeyCertificate(currentIdentity.accountId, currentIdentity.vin)
+            ?: run {
+                straightController.markNotReady("直进直出证书缺失，请先同步数字钥匙")
+                return
+            }
         val boundAddr = managedKey.value?.device?.address
         straightController.start(cert, currentIdentity.accountId, currentIdentity.deviceId, preferredAddress = boundAddr)
     }

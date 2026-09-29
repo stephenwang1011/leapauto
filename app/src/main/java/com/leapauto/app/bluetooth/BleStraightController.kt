@@ -40,6 +40,8 @@ class BleStraightController(private val context: Context) {
     companion object {
         private const val TAG = "BleStraightController"
         private const val CONNECT_TIMEOUT_MS = 35_000L
+        private const val WRITE_RETRY_DELAY_MS = 50L
+        private const val MAX_PENDING_CHUNKS = 64
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -205,6 +207,17 @@ class BleStraightController(private val context: Context) {
     }
 
     /**
+     * 建连尚未开始 (身份或证书缺失) 时写入可见原因，
+     * 避免抽屉停留在初始扫描文案造成"已就绪"错觉。
+     */
+    fun markNotReady(reason: String) {
+        handler.removeCallbacks(retryWriteRunnable)
+        _canMove.value = false
+        _vehicleState.value = BleStraightVehicleState.WAITING
+        _statusMessage.value = reason
+    }
+
+    /**
      * 启动座舱直进直出建连流程
      */
     fun start(
@@ -307,11 +320,24 @@ class BleStraightController(private val context: Context) {
 
     /**
      * 发送前进、后退或刹停物理控制指令 (严格按官方单字节封装)
+     *
+     * 通道未建立时严禁静默丢弃：必须写入可见状态并撤销就绪态，
+     * 否则抽屉会伪造"正在前进"而实际一帧都未发出。
      */
     fun control(action: BleStraightAction) {
-        val currentSession = session ?: return
-        val characteristic = straightChar ?: return
-        if (gatt == null) return
+        val currentSession = session
+        if (currentSession == null || straightChar == null || gatt == null) {
+            _canMove.value = false
+            if (action != BleStraightAction.STOP) {
+                _statusMessage.value = "座舱通道未就绪，请等待连接完成后再按住方向键"
+                Log.w(
+                    TAG,
+                    "control($action) 被拒绝: session=${currentSession != null}, " +
+                        "char=${straightChar != null}, gatt=${gatt != null}"
+                )
+            }
+            return
+        }
 
         val frame = BleStraightProtocol.buildControlFrame(currentSession, action)
         val chunks = BleStraightProtocol.chunkFrame(frame, BleStraightProtocol.CHUNK_SIZE)
@@ -329,26 +355,45 @@ class BleStraightController(private val context: Context) {
     }
 
     private fun writeNextChunk() {
-        val client = gatt ?: return
-        val target = straightChar ?: return
-        if (txQueue.isEmpty()) {
+        synchronized(txQueue) {
+            val client = gatt
+            val target = straightChar
+            if (client == null || target == null) {
+                // GATT 已释放：清空残余报文，避免 isWriting 永久卡死
+                isWriting = false
+                txQueue.clear()
+                return
+            }
+            if (txQueue.isEmpty()) {
+                isWriting = false
+                return
+            }
+            isWriting = true
+            val chunk = txQueue.removeFirst()
+            val type = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            val accepted = if (Build.VERSION.SDK_INT >= 33) {
+                client.writeCharacteristic(target, chunk, type) == BluetoothStatusCodes.SUCCESS
+            } else {
+                @Suppress("DEPRECATION")
+                target.value = chunk
+                target.writeType = type
+                @Suppress("DEPRECATION")
+                client.writeCharacteristic(target)
+            }
+            if (accepted) return
+            // 写入被 GATT 拒绝 (常见于刚建连时的 BUSY)：不得丢帧，回退队首并延迟重试，
+            // 否则首帧丢失且队列停摆，表现为"长按方向键车不动"。
+            if (txQueue.size < MAX_PENDING_CHUNKS) txQueue.addFirst(chunk)
             isWriting = false
-            return
+            handler.postDelayed(retryWriteRunnable, WRITE_RETRY_DELAY_MS)
         }
-        isWriting = true
-        val chunk = txQueue.removeFirst()
-        val type = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        val accepted = if (Build.VERSION.SDK_INT >= 33) {
-            client.writeCharacteristic(target, chunk, type) == BluetoothStatusCodes.SUCCESS
-        } else {
-            @Suppress("DEPRECATION")
-            target.value = chunk
-            target.writeType = type
-            @Suppress("DEPRECATION")
-            client.writeCharacteristic(target)
-        }
-        if (!accepted) {
-            isWriting = false
+    }
+
+    private val retryWriteRunnable = Runnable {
+        synchronized(txQueue) {
+            if (gatt != null && straightChar != null && txQueue.isNotEmpty() && !isWriting) {
+                writeNextChunk()
+            }
         }
     }
 
@@ -490,6 +535,7 @@ class BleStraightController(private val context: Context) {
     }
 
     private fun cleanupGatt() {
+        handler.removeCallbacks(retryWriteRunnable)
         try {
             gatt?.disconnect()
             gatt?.close()

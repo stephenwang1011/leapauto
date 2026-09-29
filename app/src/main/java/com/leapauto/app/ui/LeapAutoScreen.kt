@@ -5924,7 +5924,7 @@ private fun QuickVehicleActions(
                 onControl("straightDeactivate")
                 showStraightRemoteSheet = false
             },
-            canControl = straightCanMove || bluetoothState.canControl,
+            straightCanMove = straightCanMove,
             bluetoothPhase = bluetoothState.phase,
             statusText = straightStatusMessage,
             vehicleState = straightVehicleState,

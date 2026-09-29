@@ -658,10 +658,19 @@ class MainActivity : ComponentActivity() {
     private fun syncBluetoothCertificate(silent: Boolean = false) {
         if (bluetoothBackgroundRunning) {
             if (!silent) toast("请先关闭后台钥匙并等待车辆确认")
+            if (silent && straightRemoteActive) {
+                straightStatusMessage = "直进直出证书未同步：请先关闭后台钥匙后重试"
+            }
             return
         }
         if (!isBluetoothForegroundContext(requireManagement = !silent) ||
-            !BleAccessPolicy.canSyncCertificate(bluetoothState.phase, bluetoothCertificateLoading)) return
+            !BleAccessPolicy.canSyncCertificate(bluetoothState.phase, bluetoothCertificateLoading)) {
+            // 直进直出抽屉依赖该证书建连，静默失败会让用户面对"长按无反应"，必须给出可见原因
+            if (silent && straightRemoteActive) {
+                straightStatusMessage = "直进直出证书未就绪，无法建立座舱连接，请稍后重试"
+            }
+            return
+        }
         bluetoothPermissionGeneration = null
         bluetoothScanAfterPermissionGeneration = null
         if (!silent) {
