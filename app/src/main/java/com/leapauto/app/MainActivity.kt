@@ -298,14 +298,10 @@ class MainActivity : ComponentActivity() {
         sessionStore = SessionStore(this)
         energyCacheStore = EnergyCacheStore(this)
         session = sessionStore.load()
-        // 启动时零延迟预热最新天气（仅针对独占授权车辆 VIN 提供）
+        // 启动时零延迟预热最新天气（面向所有车辆开放）
         runCatching {
             val selectedVin = session.selectedVin
-            if (com.leapauto.app.weather.AmapWeatherService.isWeatherServiceAuthorized(selectedVin)) {
-                liveWeather = com.leapauto.app.weather.AmapWeatherService.getLatestWeather(this, vin = selectedVin)
-            } else {
-                liveWeather = null
-            }
+            liveWeather = com.leapauto.app.weather.AmapWeatherService.getLatestWeather(this, vin = selectedVin)
         }
         bluetoothRuntime = BleKeyRuntime.get(applicationContext)
         runCatching {
@@ -3320,20 +3316,14 @@ class MainActivity : ComponentActivity() {
                 }
                 if (address.adcode.isNotBlank()) {
                     val currentVin = session.selectedVin
-                    if (com.leapauto.app.weather.AmapWeatherService.isWeatherServiceAuthorized(currentVin)) {
-                        val weather = com.leapauto.app.weather.AmapWeatherService.fetchLiveWeather(
-                            adcode = address.adcode,
-                            vin = currentVin,
-                            context = this@MainActivity
-                        )
-                        if (weather != null) {
-                            runOnMain(generation) {
-                                liveWeather = weather
-                            }
-                        }
-                    } else {
+                    val weather = com.leapauto.app.weather.AmapWeatherService.fetchLiveWeather(
+                        adcode = address.adcode,
+                        vin = currentVin,
+                        context = this@MainActivity
+                    )
+                    if (weather != null) {
                         runOnMain(generation) {
-                            liveWeather = null
+                            liveWeather = weather
                         }
                     }
                 }

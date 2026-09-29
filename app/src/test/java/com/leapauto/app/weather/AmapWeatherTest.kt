@@ -201,26 +201,14 @@ class AmapWeatherTest {
     }
 
     @Test
-    fun `weather service is exclusively authorized for vin LFZ63AZ55SH023503`() {
-        assertEquals("LFZ63AZ55SH023503", AmapWeatherService.AUTHORIZED_VIN)
-
-        // 授权通过
+    fun `weather service is available for all vehicles without vin restriction`() {
+        // 全系所有车辆均授权可用
         assertTrue(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH023503"))
-        assertTrue(AmapWeatherService.isWeatherServiceAuthorized("lfz63az55sh023503"))
-        assertTrue(AmapWeatherService.isWeatherServiceAuthorized("  LFZ63AZ55SH023503  "))
-
-        // 其他车辆一律拒绝
-        assertFalse(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH023504"))
-        assertFalse(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH000000"))
-        assertFalse(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH999999"))
-        assertFalse(AmapWeatherService.isWeatherServiceAuthorized(""))
-        assertFalse(AmapWeatherService.isWeatherServiceAuthorized("   "))
-        assertFalse(AmapWeatherService.isWeatherServiceAuthorized(null))
-
-        // 未授权车辆调用接口直接拦截返回 null
-        assertNull(AmapWeatherService.fetchLiveWeather("330100", vin = "OTHER_VIN", context = null))
-        assertNull(AmapWeatherService.fetchLiveWeather("330100", vin = null, context = null))
-        assertNull(AmapWeatherService.getLatestWeather(context = null, vin = "OTHER_VIN"))
-        assertNull(AmapWeatherService.getLatestWeather(context = null, vin = null))
+        assertTrue(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH023504"))
+        assertTrue(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH000000"))
+        assertTrue(AmapWeatherService.isWeatherServiceAuthorized("LFZ63AZ55SH999999"))
+        assertTrue(AmapWeatherService.isWeatherServiceAuthorized(""))
+        assertTrue(AmapWeatherService.isWeatherServiceAuthorized("   "))
+        assertTrue(AmapWeatherService.isWeatherServiceAuthorized(null))
     }
 }

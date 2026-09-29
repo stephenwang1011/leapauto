@@ -105,13 +105,13 @@ object WeatherVisualResolver {
 
 object AmapWeatherService {
     private const val WEATHER_URL = "https://restapi.amap.com/v3/weather/weatherInfo"
-    // 独占授权白名单 VIN：仅为该指定车辆提供城市实况气象服务，其余车辆坚决不请求、不展示
-    const val AUTHORIZED_VIN = "LFZ63AZ55SH023503"
+    // 天气服务现已面向全系车型与全部车辆开放
+    const val AUTHORIZED_VIN = "ALL_VEHICLES"
 
-    fun isWeatherServiceAuthorized(vin: String?): Boolean {
-        if (vin.isNullOrBlank()) return false
-        return vin.trim().equals(AUTHORIZED_VIN, ignoreCase = true)
-    }
+    /**
+     * 天气服务现已面向全系车型开放，所有车辆均可使用。
+     */
+    fun isWeatherServiceAuthorized(vin: String? = null): Boolean = true
 
     // 90分钟高能有效期：严密保护高德免费配额（日消耗暴降至个位数），同时保证城市级气象实时度
     const val CACHE_TTL_MS = 90 * 60 * 1000L
@@ -154,14 +154,13 @@ object AmapWeatherService {
     }
 
     /**
-     * 快速获取最近一次有效天气（冷启动预热，瞬间首屏渲染，独占白名单判定）
+     * 快速获取最近一次有效天气（冷启动预热，瞬间首屏渲染）
      */
     fun getLatestWeather(
         context: Context?,
         vin: String? = null,
         maxAgeMs: Long = STALE_FALLBACK_TTL_MS
     ): LiveWeather? {
-        if (!isWeatherServiceAuthorized(vin)) return null
         val now = System.currentTimeMillis()
         val mem = memoryCache.values.maxByOrNull { it.fetchedAtEpochMs }
         if (mem != null && now - mem.fetchedAtEpochMs < maxAgeMs) {
@@ -257,7 +256,6 @@ object AmapWeatherService {
         context: Context? = null,
         apiKey: String = ObfuscatedSecrets.getAmapWebKey()
     ): LiveWeather? {
-        if (!isWeatherServiceAuthorized(vin)) return null
         val cleanAdcode = adcode.trim()
         if (cleanAdcode.isBlank()) return null
 
