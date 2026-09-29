@@ -1828,10 +1828,6 @@ private fun MyContent(
             }
         }
 
-        if (bluetoothKeyFeatureEnabled && onOpenBluetoothKey != null) {
-            BluetoothKeyEntry(onClick = onOpenBluetoothKey)
-        }
-
         VehicleCustomImageCard(
             vehicleVin = vehicleVin,
             vehicleImageVersion = vehicleImageVersion,

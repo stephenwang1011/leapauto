@@ -6,6 +6,6 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 修复车窗开度比例持久化联动，解决杀掉应用重启后 3D 车模误显示为半开的问题\n" +
-        "2. 无论应用冷启动或进程重启，3D 车模与车况卡片严格精准呈现微开/半开/全关设定"
+        "1. 优化设置中心交互，开启蓝牙数字钥匙后仅在主页右上角显现状态图标\n" +
+        "2. 统一收敛蓝牙钥匙管理入口，点击主页右上角图标即可一键进入配置"
 }
