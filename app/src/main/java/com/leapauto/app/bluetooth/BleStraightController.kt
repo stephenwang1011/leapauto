@@ -10,34 +10,36 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.os.ParcelUuid
 import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.security.MessageDigest
 import java.util.ArrayDeque
+import java.util.Base64
+import javax.crypto.Cipher
 
 /**
- * 零跑官方座舱级直进直出 BLE 控制器 (完全对齐官方源码 xp.java / a91.java 架构)：
+ * 零跑官方座舱级直进直出 BLE 控制器 (完全对齐官方源码 xp.java / a91.java / th1.java 架构)：
  * 1. 独立扫描并连接车辆专属座舱蓝牙服务 (UUID: 0000eeed-0000-1000-8000-00805f9b34fb)；
  * 2. 独立订阅 EEE2 特征值通知 (UUID: 0000eee2-0000-1000-8000-00805f9b34fb)；
  * 3. 独立完成座舱专属认证握手 (帧头: 0xAA 0xAE 0x01 0x01 0x0A)；
- * 4. 实时监听车端就绪状态 (Ready / Paused / Waiting)，并在 Ready 态下发送单字节加密控制帧 (1=前进, 2=后退, 3=停止)；
- * 5. 彻底与普通车门锁通道隔离，杜绝控制挪车误触发车锁开锁/关锁。
+ * 4. 内置基于官方 th1.java 的流式接收分片拼装器，100% 完整解析车端 0xAA 0xAC 状态报文；
+ * 5. 实时监听车端就绪状态 (Ready / Paused / Waiting)，并在 Ready 态下发送单字节加密控制帧 (1=前进, 2=后退, 3=停止)；
+ * 6. 彻底与普通车门锁通道隔离，杜绝控制挪车误触发车锁开锁/关锁。
  */
 class BleStraightController(private val context: Context) {
 
     companion object {
         private const val TAG = "BleStraightController"
-        private const val CONNECT_TIMEOUT_MS = 30_000L
+        private const val CONNECT_TIMEOUT_MS = 35_000L
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -60,6 +62,12 @@ class BleStraightController(private val context: Context) {
     private var isConnectingOrActive = false
     private var lastStateTimestamp = 0L
 
+    // 官方 th1.d 分片流拼装缓冲区
+    private var rxBuffer = byteArrayOf()
+
+    private var currentCertificate: BleKeyCertificate? = null
+    private var currentAccountId: String = ""
+    private var currentDeviceId: String = ""
     private var preferredDeviceAddress: String? = null
 
     private val scanCallback = object : ScanCallback() {
@@ -93,7 +101,7 @@ class BleStraightController(private val context: Context) {
         val manufacturerData = record?.manufacturerSpecificData
         if (manufacturerData != null && vin.isNotBlank()) {
             val vinHash = runCatching {
-                val digest = java.security.MessageDigest.getInstance("MD5").digest(vin.trim().toByteArray(Charsets.UTF_8))
+                val digest = MessageDigest.getInstance("MD5").digest(vin.trim().toByteArray(Charsets.UTF_8))
                 digest.joinToString("") { "%02x".format(it) }
             }.getOrNull()
 
@@ -126,9 +134,13 @@ class BleStraightController(private val context: Context) {
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothGatt.STATE_CONNECTED) {
-                Log.i(TAG, "已连上座舱蓝牙设备，正在发现服务...")
+                Log.i(TAG, "已连上座舱蓝牙设备，延迟100ms等待协商参数后发现服务...")
                 _statusMessage.value = "已连接座舱设备，正在初始化通道..."
-                handler.post { gatt.discoverServices() }
+                handler.postDelayed({
+                    if (this@BleStraightController.gatt === gatt) {
+                        gatt.discoverServices()
+                    }
+                }, 100L)
             } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
                 Log.w(TAG, "座舱蓝牙连接断开: status=$status")
                 _statusMessage.value = "座舱蓝牙连接已断开"
@@ -191,10 +203,6 @@ class BleStraightController(private val context: Context) {
             handleNotificationData(value)
         }
     }
-
-    private var currentCertificate: BleKeyCertificate? = null
-    private var currentAccountId: String = ""
-    private var currentDeviceId: String = ""
 
     /**
      * 启动座舱直进直出建连流程
@@ -298,7 +306,7 @@ class BleStraightController(private val context: Context) {
     }
 
     /**
-     * 发送前进、后退或刹停物理控制指令
+     * 发送前进、后退或刹停物理控制指令 (严格按官方单字节封装)
      */
     fun control(action: BleStraightAction) {
         val currentSession = session ?: return
@@ -344,37 +352,105 @@ class BleStraightController(private val context: Context) {
         }
     }
 
-    private fun handleNotificationData(bytes: ByteArray) {
+    /**
+     * 基于官方 th1.d 的流式分片拼接重组器与状态解码
+     */
+    private fun handleNotificationData(chunk: ByteArray) {
         val currentSession = session ?: return
-        val update = BleStraightProtocol.decodeVehicleNotification(currentSession, bytes)
-        if (update != null) {
-            lastStateTimestamp = SystemClock.elapsedRealtime()
-            _vehicleState.value = update.state
-            when (update.state) {
-                BleStraightVehicleState.READY -> {
-                    _statusMessage.value = "车辆就绪，长按方向键即可挪车"
-                    _canMove.value = true
+        synchronized(this) {
+            rxBuffer += chunk
+
+            while (rxBuffer.size >= 2) {
+                // 1. 模式 A: 官方 0xAA 0xAC 封装帧 (th1.d 规范)
+                val headerIndex = (0 until rxBuffer.size - 1).firstOrNull {
+                    rxBuffer[it] == 0xAA.toByte() && rxBuffer[it + 1] == 0xAC.toByte()
                 }
-                BleStraightVehicleState.ACTIVATE -> {
-                    _statusMessage.value = "车辆直进直出激活中..."
-                    _canMove.value = false
+                if (headerIndex != null) {
+                    if (headerIndex > 0) {
+                        rxBuffer = rxBuffer.copyOfRange(headerIndex, rxBuffer.size)
+                    }
+                    if (rxBuffer.size < 9) {
+                        // 帧头已对齐，等待后续载荷到达
+                        break
+                    }
+                    var payloadLen = 0L
+                    for (i in 0 until 4) {
+                        payloadLen = payloadLen or ((rxBuffer[5 + i].toLong() and 0xFF) shl (i * 8))
+                    }
+                    val intLen = payloadLen.toInt()
+                    if (intLen <= 0 || intLen > 65536) {
+                        rxBuffer = rxBuffer.copyOfRange(2, rxBuffer.size)
+                        continue
+                    }
+                    val totalFrameLen = 11 + intLen
+                    if (rxBuffer.size < totalFrameLen) {
+                        // 后续分片未接收完整，继续等待
+                        break
+                    }
+
+                    val payloadBytes = rxBuffer.copyOfRange(9, 9 + intLen)
+                    rxBuffer = rxBuffer.copyOfRange(totalFrameLen, rxBuffer.size)
+
+                    val decryptedText = runCatching {
+                        val base64Str = String(payloadBytes, Charsets.US_ASCII).trim()
+                        val ciphertext = Base64.getDecoder().decode(base64Str)
+                        val plain = currentSession.crypt(ciphertext, Cipher.DECRYPT_MODE)
+                        String(plain, Charsets.UTF_8).trim()
+                    }.getOrNull()
+
+                    if (!decryptedText.isNullOrBlank()) {
+                        val update = BleStraightProtocol.parseVehicleState(decryptedText)
+                        if (update != null) {
+                            onVehicleStateUpdate(update)
+                        }
+                    }
+                    continue
                 }
-                BleStraightVehicleState.WAITING -> {
-                    _statusMessage.value = "车辆准备中，请稍候..."
-                    _canMove.value = false
+
+                // 2. 模式 B: 尝试自适应直接解析单片载荷 (如整片 Base64 或明文)
+                val singleUpdate = BleStraightProtocol.decodeVehicleNotification(currentSession, chunk)
+                if (singleUpdate != null) {
+                    rxBuffer = byteArrayOf()
+                    onVehicleStateUpdate(singleUpdate)
+                    break
                 }
-                BleStraightVehicleState.PAUSED -> {
-                    _statusMessage.value = "车辆已暂停 (原因码 ${update.reasonCode})，松手后重新按住"
-                    _canMove.value = false
+
+                // 缓冲区未包含有效帧头且无法解析，丢弃多余前缀字节
+                if (rxBuffer.size > 256) {
+                    rxBuffer = byteArrayOf()
                 }
-                BleStraightVehicleState.FAILED -> {
-                    _statusMessage.value = "直进直出操作失败 (错误码 ${update.reasonCode})"
-                    _canMove.value = false
-                }
-                BleStraightVehicleState.UNAVAILABLE -> {
-                    _statusMessage.value = "车辆暂不可用，请检查车门、P 挡和周围环境 (原因码 ${update.reasonCode})"
-                    _canMove.value = false
-                }
+                break
+            }
+        }
+    }
+
+    private fun onVehicleStateUpdate(update: BleStraightStateUpdate) {
+        lastStateTimestamp = SystemClock.elapsedRealtime()
+        _vehicleState.value = update.state
+        when (update.state) {
+            BleStraightVehicleState.READY -> {
+                _statusMessage.value = "座舱就绪，长按方向键即可挪车"
+                _canMove.value = true
+            }
+            BleStraightVehicleState.ACTIVATE -> {
+                _statusMessage.value = "车辆直进直出激活中..."
+                _canMove.value = false
+            }
+            BleStraightVehicleState.WAITING -> {
+                _statusMessage.value = "车辆准备中，请稍候..."
+                _canMove.value = false
+            }
+            BleStraightVehicleState.PAUSED -> {
+                _statusMessage.value = "车辆已暂停 (原因码 ${update.reasonCode})，松手后重新按住"
+                _canMove.value = false
+            }
+            BleStraightVehicleState.FAILED -> {
+                _statusMessage.value = "直进直出操作失败 (错误码 ${update.reasonCode})"
+                _canMove.value = false
+            }
+            BleStraightVehicleState.UNAVAILABLE -> {
+                _statusMessage.value = "车辆暂不可用，请检查车门、P 挡和周围环境 (原因码 ${update.reasonCode})"
+                _canMove.value = false
             }
         }
     }
@@ -422,6 +498,7 @@ class BleStraightController(private val context: Context) {
         gatt = null
         straightChar = null
         isWriting = false
+        rxBuffer = byteArrayOf()
         synchronized(txQueue) { txQueue.clear() }
     }
 }

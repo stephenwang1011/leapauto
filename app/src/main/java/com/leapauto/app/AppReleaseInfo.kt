@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 升级座舱蓝牙多维特征自适应匹配，支持 ServiceUUID、MD5(VIN) 与已绑定 MAC 瞬时捕获\n" +
-        "2. 强化车端 EEE2 接收通知解密解析器，全兼容 0xAA 0xAB/0xAA 0xAC 及纯载荷格式\n" +
-        "3. 直进直出扫描解除 128 位单一过滤限制，彻底消除部分机型蓝牙驱动丢包隐患"
+        "1. 完整接入基于官方 th1.d 规范的流式分片拼装重组器，彻底消除多分包解密丢包风险\n" +
+        "2. GATT 建立连接增加参数协商缓冲延时，彻底杜绝服务发现时报 133/129 状态错误\n" +
+        "3. 优化直进直出全链路时序调度，保障挪车响应度与车端状态实时同步"
 }
