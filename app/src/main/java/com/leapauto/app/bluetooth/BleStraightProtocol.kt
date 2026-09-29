@@ -29,11 +29,14 @@ data class BleStraightStateUpdate(
 )
 
 object BleStraightProtocol {
-    // 独占授权实验白名单 VIN：仅对特定车辆开放直进直出入口，其他车辆一律隐藏不开放
-    const val AUTHORIZED_VIN = "LFZ63AZ55SH023503"
+    // 直进直出协议面向全系支持直进直出/遥控泊车的车型开放 (C16, C10, C11, C01, B10 等)
+    const val AUTHORIZED_VIN = "ALL_VEHICLES"
 
-    fun isAuthorized(vin: String?): Boolean =
-        vin.orEmpty().trim().equals(AUTHORIZED_VIN, ignoreCase = true)
+    /**
+     * 判断当前车辆是否允许使用直进直出功能。
+     * 面向具备该硬件能力的全部车型开放（要求已绑定有效车辆）。
+     */
+    fun isAuthorized(vin: String?): Boolean = !vin.isNullOrBlank()
 
     val SERVICE_UUID: UUID = UUID.fromString("0000eeed-0000-1000-8000-00805f9b34fb")
     val CHARACTERISTIC_UUID: UUID = UUID.fromString("0000eee2-0000-1000-8000-00805f9b34fb")

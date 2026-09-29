@@ -158,18 +158,16 @@ class BleStraightProtocolTest {
     }
 
     @Test
-    fun `straight remote entry is exclusively authorized for vin LFZ63AZ55SH023503`() {
-        assertEquals("LFZ63AZ55SH023503", BleStraightProtocol.AUTHORIZED_VIN)
+    fun `straight remote entry is available for all vehicles with valid vin`() {
+        assertEquals("ALL_VEHICLES", BleStraightProtocol.AUTHORIZED_VIN)
 
-        // 授权白名单通过
+        // 有效车辆全系开放
         assertTrue(BleStraightProtocol.isAuthorized("LFZ63AZ55SH023503"))
-        assertTrue(BleStraightProtocol.isAuthorized("lfz63az55sh023503"))
-        assertTrue(BleStraightProtocol.isAuthorized("  LFZ63AZ55SH023503  "))
+        assertTrue(BleStraightProtocol.isAuthorized("LFZ63AZ55SH000000"))
+        assertTrue(BleStraightProtocol.isAuthorized("LFZ63AZ55SH999999"))
+        assertTrue(BleStraightProtocol.isAuthorized("TESTVIN0000000001"))
 
-        // 其他任何车辆严格拒绝与隐藏
-        org.junit.Assert.assertFalse(BleStraightProtocol.isAuthorized("LFZ63AZ55SH000000"))
-        org.junit.Assert.assertFalse(BleStraightProtocol.isAuthorized("LFZ63AZ55SH999999"))
-        org.junit.Assert.assertFalse(BleStraightProtocol.isAuthorized("TESTVIN0000000001"))
+        // 空 VIN 拒绝
         org.junit.Assert.assertFalse(BleStraightProtocol.isAuthorized(""))
         org.junit.Assert.assertFalse(BleStraightProtocol.isAuthorized("   "))
         org.junit.Assert.assertFalse(BleStraightProtocol.isAuthorized(null))

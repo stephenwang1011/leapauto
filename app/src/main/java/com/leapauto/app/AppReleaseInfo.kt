@@ -6,7 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 完整接入基于官方 th1.d 规范的流式分片拼装重组器，彻底消除多分包解密丢包风险\n" +
-        "2. GATT 建立连接增加参数协商缓冲延时，彻底杜绝服务发现时报 133/129 状态错误\n" +
-        "3. 优化直进直出全链路时序调度，保障挪车响应度与车端状态实时同步"
+        "1. 直进直出解除单一车架号限制，面向全系支持直进直出/遥控泊车车型开放\n" +
+        "2. 适配 C16、C10、C11、C01、B10 等全系座舱直进直出控制通道\n" +
+        "3. 严格遵循车端硬件能力隔离与安全状态机，非支持车型智能提示暂不可用"
 }
