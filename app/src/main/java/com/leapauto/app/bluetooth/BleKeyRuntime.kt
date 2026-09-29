@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.os.ParcelUuid
 import com.leapauto.app.Session
 import com.leapauto.app.SessionStore
 import kotlinx.coroutines.CoroutineScope
@@ -297,13 +298,21 @@ class BleKeyRuntime private constructor(context: Context) {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 if (targetDiscovered) return
                 val address = result.device.address
-                if (address.equals(bound.device.address, ignoreCase = true)) {
+                val uuids = result.scanRecord?.serviceUuids.orEmpty().map { it.uuid }
+                val isMatch = address.equals(bound.device.address, ignoreCase = true) ||
+                    (BleKeyProtocol.SERVICE_UUID in uuids)
+                if (isMatch) {
                     targetDiscovered = true
                     cancelProbe()
                     consecutiveMissCount = 0
                     val rssi = result.rssi
+                    val effectiveDevice = if (!address.equals(bound.device.address, ignoreCase = true)) {
+                        targetDevice.copy(address = address)
+                    } else {
+                        targetDevice
+                    }
                     controller.recordDiagnostic(BleDiagnosticEvent.PROBE_SUCCESS, extra = "发现车辆广播 (RSSI=$rssi dBm)，立即发起极速物理直连")
-                    connectDirect(targetDevice, certificate, bound.accountId, targetDesired, credentialScope, current)
+                    connectDirect(effectiveDevice, certificate, bound.accountId, targetDesired, credentialScope, current)
                 }
             }
             override fun onScanFailed(errorCode: Int) {
@@ -312,20 +321,33 @@ class BleKeyRuntime private constructor(context: Context) {
             }
         }
         probeCallback = callback
-        val filter = ScanFilter.Builder().setDeviceAddress(bound.device.address).build()
+        val filters = listOf(
+            ScanFilter.Builder().setDeviceAddress(bound.device.address).build(),
+            ScanFilter.Builder().setServiceUuid(ParcelUuid(BleKeyProtocol.SERVICE_UUID)).build()
+        )
         val settings = ScanSettings.Builder()
             .setScanMode(scanMode)
             .build()
         try {
-            scanner.startScan(listOf(filter), settings, callback)
+            scanner.startScan(filters, settings, callback)
             handler.postDelayed({
                 if (probeCallback === callback && !targetDiscovered) {
                     cancelProbe()
                     consecutiveMissCount++
-                    val extraDesc = "未检测到车辆广播 (远离车辆第${consecutiveMissCount}次) · 进入静默休眠"
+                    // 每连续多次探查未命中，在下次探查周期自动降级发起一次直接物理直连探测，打破 Android 系统底层扫描限制
+                    val shouldAttemptDirectFallback = consecutiveMissCount % 5 == 0
+                    val extraDesc = if (shouldAttemptDirectFallback) {
+                        "未检测到广播 (第${consecutiveMissCount}次) · 触发直接物理寻址自愈"
+                    } else {
+                        "未检测到车辆广播 (远离车辆第${consecutiveMissCount}次) · 进入静默休眠"
+                    }
                     controller.recordDiagnostic(BleDiagnosticEvent.PROBE_MISSED, extra = extraDesc)
                     controller.updateStateMessage("未在车辆附近（待命中）")
-                    scheduleProbeRetry()
+                    if (shouldAttemptDirectFallback) {
+                        connectDirect(targetDevice, certificate, bound.accountId, targetDesired, credentialScope, current)
+                    } else {
+                        scheduleProbeRetry()
+                    }
                 }
             }, probeDuration)
         } catch (_: Exception) {

@@ -6,8 +6,7 @@ object AppReleaseInfo {
 
     // Update this text together with apkVersionName before each delivery package.
     const val currentReleaseNotes =
-        "1. 直进直出快捷入口提升至首页核心首屏位置，确保全系车型秒级直达\n" +
-        "2. 彻底解除任何车型与 VIN 判定条件，直进直出入口 100% 永不隐藏\n" +
-        "3. 打开直进直出时若本地未就绪数字钥匙凭证，自动发起静默同步闭环\n" +
-        "4. 完善全链路状态流转与 Dead-man 刹停安全机制"
+        "1. 优化蓝牙钥匙后台探查机制，解除单一 MAC 过滤并支持 ServiceUUID 动态识别\n" +
+        "2. 增加探查未命中直接物理直连自愈兜底，彻底消灭“车旁无法检测到广播”问题\n" +
+        "3. 全系车型首页首屏直进直出极速直达，完善数字钥匙凭证缺位静默同步闭环"
 }
