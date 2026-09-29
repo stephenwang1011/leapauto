@@ -809,22 +809,7 @@ fun LeapAutoScreen(
                                 }
                             }
                         },
-                        actions = {
-                            if (selectedTab == MainNavigationTabs.ACCOUNT) {
-                                TextButton(
-                                    onClick = { showLogoutConfirmationDialog = true },
-                                    colors = ButtonDefaults.textButtonColors(
-                                        contentColor = MaterialTheme.colorScheme.error
-                                    )
-                                ) {
-                                    Text(
-                                        "登出",
-                                        fontWeight = FontWeight.Medium,
-                                        style = MaterialTheme.typography.titleSmall
-                                    )
-                                }
-                            }
-                        },
+                        actions = {},
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                     )
                 }
@@ -1007,7 +992,7 @@ fun LeapAutoScreen(
                                 onBluetoothKeyFeatureEnabledChange = onBluetoothKeyFeatureEnabledChange,
                                 onOpenBluetoothKey = onOpenBluetoothKey,
                                 onPowerTypeChange = onPowerTypeChange,
-                                onLogout = onLogout
+                                onLogout = { showLogoutConfirmationDialog = true }
                             )
                         }
                     }
@@ -1729,6 +1714,9 @@ private fun MyContent(
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        // ====== 1. 座驾与互联 ======
+        SettingsSectionTitle("座驾与互联")
+
         if (availableVehicles.size > 1) {
             Surface(
                 modifier = Modifier
@@ -1828,6 +1816,11 @@ private fun MyContent(
             }
         }
 
+        Spacer(Modifier.height(4.dp))
+
+        // ====== 2. 桌面与个性化 ======
+        SettingsSectionTitle("桌面与个性化")
+
         VehicleCustomImageCard(
             vehicleVin = vehicleVin,
             vehicleImageVersion = vehicleImageVersion,
@@ -1841,7 +1834,10 @@ private fun MyContent(
         )
         QuickSettingsTileCard()
 
-        SettingsSectionTitle("系统与更新")
+        Spacer(Modifier.height(4.dp))
+
+        // ====== 3. 系统与服务 ======
+        SettingsSectionTitle("系统与服务")
         val isSubAccount = availableVehicles.find { it.vin == vehicleVin }?.isSharedAccount == true
         VehicleOtaCard(
             state = vehicleOtaState,
@@ -1861,7 +1857,13 @@ private fun MyContent(
             onStartInAppUpdate = onStartInAppUpdate
         )
         AmapWebKeyConfigCard()
-        Spacer(Modifier.height(8.dp))
+
+        Spacer(Modifier.height(10.dp))
+
+        // ====== 4. 安全登出 ======
+        LogoutButtonCard(onClick = onLogout)
+
+        Spacer(Modifier.height(16.dp))
     }
 
     if (showVehicleSelectorInAccount && availableVehicles.size > 1) {
@@ -1871,6 +1873,42 @@ private fun MyContent(
             onSelectVehicle = onSwitchVehicle,
             onDismiss = { showVehicleSelectorInAccount = false }
         )
+    }
+}
+
+@Composable
+private fun LogoutButtonCard(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f)),
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 14.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_phosphor_trash),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "退出当前账号",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
     }
 }
 
