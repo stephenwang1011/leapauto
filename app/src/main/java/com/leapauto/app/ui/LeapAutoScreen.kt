@@ -5282,11 +5282,11 @@ private fun QuickVehicleActions(
             Cmd("lock", "上锁", R.drawable.ic_phosphor_lock),
             *windowGroup.toTypedArray(),
             Cmd("trunk", "开后备箱", R.drawable.ic_phosphor_trunk_open),
-            *straightRemoteCmd.toTypedArray(),
             *frunkCommands.toTypedArray(),
             *extraCommands.toTypedArray(),
             Cmd("sentry", "哨兵模式", R.drawable.ic_sentry),
-            Cmd("diagnostics", "诊断", R.drawable.ic_quick_diagnostics)
+            Cmd("diagnostics", "诊断", R.drawable.ic_quick_diagnostics),
+            *straightRemoteCmd.toTypedArray()
         )
     }
     var savedOrder by remember(vehicleVin, availableCommands) { mutableStateOf<List<String>?>(null) }
