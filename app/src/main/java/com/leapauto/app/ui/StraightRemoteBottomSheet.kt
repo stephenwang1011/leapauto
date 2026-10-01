@@ -9,8 +9,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -25,9 +27,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BottomSheetDefaults
@@ -43,6 +49,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.leapauto.app.bluetooth.BleStraightLogEntry
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -99,6 +111,8 @@ fun StraightRemoteBottomSheet(
     bluetoothPhase: BleConnectionPhase,
     statusText: String = "",
     vehicleState: BleStraightVehicleState = BleStraightVehicleState.WAITING,
+    logs: List<BleStraightLogEntry> = emptyList(),
+    onClearLogs: () -> Unit = {},
     onStartMoving: (BleStraightAction) -> Unit,
     onStopMoving: () -> Unit
 ) {
@@ -106,6 +120,7 @@ fun StraightRemoteBottomSheet(
     val haptic = LocalHapticFeedback.current
     var isMoving by remember { mutableStateOf(false) }
     var currentDirection by remember { mutableStateOf<BleStraightAction?>(null) }
+    var showDebugLogs by rememberSaveable { mutableStateOf(true) }
 
     // 通道就绪态一旦失效，立刻撤销本地"正在前进"显示，禁止 UI 伪造移动状态
     LaunchedEffect(straightCanMove) {
@@ -141,8 +156,8 @@ fun StraightRemoteBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // 1. 顶部标题栏与状态指示
@@ -189,23 +204,41 @@ fun StraightRemoteBottomSheet(
                     }
                 }
 
-                // 右侧关闭按钮
-                IconButton(
-                    onClick = {
-                        if (isMoving) {
-                            onStopMoving()
-                            isMoving = false
-                            currentDirection = null
-                        }
-                        onDismissRequest()
-                    }
+                // 右侧操作区：日志展开/收起按钮 + 关闭按钮
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_phosphor_x),
-                        contentDescription = "关闭",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    IconButton(
+                        onClick = { showDebugLogs = !showDebugLogs },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_phosphor_code),
+                            contentDescription = if (showDebugLogs) "收起日志" else "展开日志",
+                            tint = if (showDebugLogs) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            if (isMoving) {
+                                onStopMoving()
+                                isMoving = false
+                                currentDirection = null
+                            }
+                            onDismissRequest()
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_phosphor_x),
+                            contentDescription = "关闭",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
 
@@ -270,7 +303,19 @@ fun StraightRemoteBottomSheet(
                 }
             }
 
-            // 3. 安全说明底栏
+            // 3. 实时调试日志终端视窗 (默认自动展开，点击顶部按钮可收起)
+            AnimatedVisibility(
+                visible = showDebugLogs,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                StraightDebugLogConsole(
+                    logs = logs,
+                    onClearLogs = onClearLogs
+                )
+            }
+
+            // 4. 安全说明底栏
             Text(
                 text = "安全规范：请在可视距离内操作；手指松开按键或离开应用界面，车辆将立即自动刹停。",
                 style = MaterialTheme.typography.labelSmall,
@@ -594,6 +639,175 @@ private fun VehicleTopDownBlueprint(
                 } else textColor,
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
             )
+        }
+    }
+}
+
+/**
+ * 直进直出实时调试控制台组件：
+ * 1. 默认自动展开，一行一条紧凑等宽排版；
+ * 2. 实时自动滚动到底部；
+ * 3. 包含「复制日志」与「清除日志」按钮。
+ */
+@Composable
+private fun StraightDebugLogConsole(
+    logs: List<BleStraightLogEntry>,
+    onClearLogs: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val clipboardManager = LocalClipboardManager.current
+    val listState = rememberLazyListState()
+    var copyHint by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(copyHint) {
+        if (copyHint != null) {
+            kotlinx.coroutines.delay(2000L)
+            copyHint = null
+        }
+    }
+
+    // 新增日志实时毫秒级丝滑自动滚到底部
+    LaunchedEffect(logs.size) {
+        if (logs.isNotEmpty()) {
+            listState.animateScrollToItem(logs.size - 1)
+        }
+    }
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // 控制台顶部操作栏
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.statusGood)
+                    )
+                    Text(
+                        text = "座舱实时通讯日志 (${logs.size})",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (copyHint != null) {
+                        Text(
+                            text = copyHint.orEmpty(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.statusGood,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // 复制日志按钮
+                    OutlinedButton(
+                        onClick = {
+                            if (logs.isEmpty()) {
+                                copyHint = "暂无日志"
+                            } else {
+                                val fullText = logs.joinToString("\n") { "[${it.timestamp}] ${it.message}" }
+                                clipboardManager.setText(AnnotatedString(fullText))
+                                copyHint = "已复制"
+                            }
+                        },
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(26.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_phosphor_copy),
+                            contentDescription = "复制",
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("复制", fontSize = 11.sp)
+                    }
+
+                    // 清除日志按钮
+                    OutlinedButton(
+                        onClick = onClearLogs,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(26.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_phosphor_trash),
+                            contentDescription = "清除",
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("清除", fontSize = 11.sp)
+                    }
+                }
+            }
+
+            // 日志流列表 (紧凑等宽排版，单行溢出省略)
+            if (logs.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(80.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "等待座舱蓝牙握手连接...",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 100.dp, max = 150.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    items(logs) { entry ->
+                        Text(
+                            text = "[${entry.timestamp}] ${entry.message}",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp
+                            ),
+                            color = when {
+                                entry.isError -> MaterialTheme.colorScheme.error
+                                entry.isSuccess -> MaterialTheme.statusGood
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
         }
     }
 }

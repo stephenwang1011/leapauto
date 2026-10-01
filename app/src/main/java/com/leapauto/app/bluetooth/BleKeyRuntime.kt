@@ -83,6 +83,13 @@ class BleKeyRuntime private constructor(context: Context) {
         startStraightRemote()
     }
 
+    val straightLogs: kotlinx.coroutines.flow.StateFlow<List<BleStraightLogEntry>>
+        get() = straightController.logs
+
+    fun clearStraightLogs() {
+        straightController.clearLogs()
+    }
+
     fun attachSession(session: Session) {
         val account = session.oldAuth?.accountId.orEmpty()
         currentCarType = session.selectedCarType

@@ -408,6 +408,8 @@ fun LeapAutoScreen(
     straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
     straightStatusMessage: String = "",
     straightCanMove: Boolean = false,
+    straightLogs: List<com.leapauto.app.bluetooth.BleStraightLogEntry> = emptyList(),
+    onClearStraightLogs: () -> Unit = {},
     onFetchParkingPhoto: ((ChassisParkingPhoto?, Bitmap?) -> Unit) -> Unit = {}
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
@@ -909,6 +911,8 @@ fun LeapAutoScreen(
                         straightVehicleState = straightVehicleState,
                         straightStatusMessage = straightStatusMessage,
                         straightCanMove = straightCanMove,
+                        straightLogs = straightLogs,
+                        onClearStraightLogs = onClearStraightLogs,
                         bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled,
                         onOpenBluetoothKey = onOpenBluetoothKey
                     )
@@ -1369,6 +1373,8 @@ private fun HomeContent(
     straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
     straightStatusMessage: String = "",
     straightCanMove: Boolean = false,
+    straightLogs: List<com.leapauto.app.bluetooth.BleStraightLogEntry> = emptyList(),
+    onClearStraightLogs: () -> Unit = {},
     bluetoothKeyFeatureEnabled: Boolean = false,
     onOpenBluetoothKey: (() -> Unit)? = null
 ) {
@@ -1459,6 +1465,8 @@ private fun HomeContent(
                         straightVehicleState = straightVehicleState,
                         straightStatusMessage = straightStatusMessage,
                         straightCanMove = straightCanMove,
+                        straightLogs = straightLogs,
+                        onClearStraightLogs = onClearStraightLogs,
                         bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled,
                         onOpenBluetoothKey = onOpenBluetoothKey
                     )
@@ -3472,6 +3480,8 @@ fun VehicleHero(
     straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
     straightStatusMessage: String = "",
     straightCanMove: Boolean = false,
+    straightLogs: List<com.leapauto.app.bluetooth.BleStraightLogEntry> = emptyList(),
+    onClearStraightLogs: () -> Unit = {},
     bluetoothKeyFeatureEnabled: Boolean = false,
     onOpenBluetoothKey: (() -> Unit)? = null
 ) {
@@ -4314,6 +4324,8 @@ fun VehicleHero(
                     straightVehicleState = straightVehicleState,
                     straightStatusMessage = straightStatusMessage,
                     straightCanMove = straightCanMove,
+                    straightLogs = straightLogs,
+                    onClearStraightLogs = onClearStraightLogs,
                     bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled
                 )
             }
@@ -5326,6 +5338,8 @@ private fun QuickVehicleActions(
     straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
     straightStatusMessage: String = "",
     straightCanMove: Boolean = false,
+    straightLogs: List<com.leapauto.app.bluetooth.BleStraightLogEntry> = emptyList(),
+    onClearStraightLogs: () -> Unit = {},
     bluetoothKeyFeatureEnabled: Boolean = false
 ) {
     val context = LocalContext.current
@@ -5928,6 +5942,8 @@ private fun QuickVehicleActions(
             bluetoothPhase = bluetoothState.phase,
             statusText = straightStatusMessage,
             vehicleState = straightVehicleState,
+            logs = straightLogs,
+            onClearLogs = onClearStraightLogs,
             onStartMoving = { action ->
                 onStraightMove(action)
             },

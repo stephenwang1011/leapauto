@@ -21,10 +21,24 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.security.MessageDigest
+import java.text.SimpleDateFormat
 import java.util.ArrayDeque
 import java.util.Base64
+import java.util.Date
+import java.util.Locale
 import javax.crypto.Cipher
+
+/**
+ * 直进直出调试日志条目
+ */
+data class BleStraightLogEntry(
+    val timestamp: String,
+    val message: String,
+    val isError: Boolean = false,
+    val isSuccess: Boolean = false
+)
 
 /**
  * 零跑官方座舱级直进直出 BLE 控制器 (完全对齐官方源码 xp.java / a91.java / th1.java 架构)：
@@ -43,6 +57,7 @@ class BleStraightController(private val context: Context) {
         private const val WRITE_RETRY_DELAY_MS = 50L
         private const val CHUNK_PACING_MS = 20L // 官方 xp.java:241 无应答写入的自驱动推进节流步进
         private const val MAX_PENDING_CHUNKS = 64
+        private const val MAX_LOG_ENTRIES = 120
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -60,10 +75,34 @@ class BleStraightController(private val context: Context) {
     private val _canMove = MutableStateFlow(false)
     val canMove: StateFlow<Boolean> = _canMove.asStateFlow()
 
+    private val _logs = MutableStateFlow<List<BleStraightLogEntry>>(emptyList())
+    val logs: StateFlow<List<BleStraightLogEntry>> = _logs.asStateFlow()
+
+    private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
+
+    fun log(msg: String, isError: Boolean = false, isSuccess: Boolean = false) {
+        val entry = BleStraightLogEntry(
+            timestamp = timeFormat.format(Date()),
+            message = msg,
+            isError = isError,
+            isSuccess = isSuccess
+        )
+        _logs.update { list ->
+            val updated = list + entry
+            if (updated.size > MAX_LOG_ENTRIES) updated.takeLast(MAX_LOG_ENTRIES) else updated
+        }
+    }
+
+    fun clearLogs() {
+        _logs.value = emptyList()
+    }
+
     private var isWriting = false
     private val txQueue = ArrayDeque<ByteArray>()
     private var isConnectingOrActive = false
     private var lastStateTimestamp = 0L
+    private var totalAuthChunks = 0
+    private var sentAuthChunks = 0
 
     // 官方 th1.d 分片流拼装缓冲区
     private var rxBuffer = byteArrayOf()
@@ -79,6 +118,7 @@ class BleStraightController(private val context: Context) {
             val vin = currentCertificate?.vin.orEmpty()
             if (isMatchingDevice(result, vin, preferredDeviceAddress)) {
                 Log.i(TAG, "发现并成功匹配座舱直进直出设备: ${device.name ?: "未知"}, ${device.address}, RSSI: ${result.rssi}")
+                log("匹配到座舱设备: ${device.name ?: "未知"} (${device.address}) [RSSI: ${result.rssi}dBm]", isSuccess = true)
                 stopScan()
                 connectDevice(device)
             }
@@ -88,6 +128,7 @@ class BleStraightController(private val context: Context) {
             Log.e(TAG, "座舱扫描失败: errorCode=$errorCode")
             _statusMessage.value = "座舱蓝牙扫描失败 (错误码 $errorCode)"
             _vehicleState.value = BleStraightVehicleState.FAILED
+            log("扫描启动失败 (错误码 $errorCode)", isError = true)
         }
     }
 
@@ -138,6 +179,7 @@ class BleStraightController(private val context: Context) {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothGatt.STATE_CONNECTED) {
                 Log.i(TAG, "已连上座舱蓝牙设备，延迟100ms等待协商参数后发现服务...")
+                log("GATT 连接成功，延迟 100ms 发现服务", isSuccess = true)
                 _statusMessage.value = "已连接座舱设备，正在初始化通道..."
                 handler.postDelayed({
                     if (this@BleStraightController.gatt === gatt) {
@@ -146,6 +188,7 @@ class BleStraightController(private val context: Context) {
                 }, 100L)
             } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
                 Log.w(TAG, "座舱蓝牙连接断开: status=$status")
+                log("座舱连接断开 (status=$status)", isError = true)
                 _statusMessage.value = "座舱蓝牙连接已断开"
                 _canMove.value = false
                 _vehicleState.value = BleStraightVehicleState.WAITING
@@ -156,6 +199,7 @@ class BleStraightController(private val context: Context) {
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 _statusMessage.value = "座舱服务发现失败"
+                log("服务发现失败 (status=$status)", isError = true)
                 return
             }
             val service = gatt.getService(BleStraightProtocol.SERVICE_UUID)
@@ -164,6 +208,7 @@ class BleStraightController(private val context: Context) {
 
             if (characteristic == null || descriptor == null) {
                 Log.e(TAG, "未找到直进直出专属服务 EEED / EEE2")
+                log("未找到 EEED/EEE2 特征值，请确认车辆已上电就绪", isError = true)
                 _statusMessage.value = "车辆未提供直进直出服务，请确认车辆已上电"
                 _vehicleState.value = BleStraightVehicleState.UNAVAILABLE
                 return
@@ -171,6 +216,7 @@ class BleStraightController(private val context: Context) {
 
             straightChar = characteristic
             Log.i(TAG, "成功获取直进直出专属特征值 EEE2，正在开启通知...")
+            log("获取专属特征值 EEE2 成功，正在配置通知(CCCD)...")
             gatt.setCharacteristicNotification(characteristic, true)
             descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
             if (Build.VERSION.SDK_INT >= 33) {
@@ -184,8 +230,11 @@ class BleStraightController(private val context: Context) {
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS && descriptor.uuid == BleStraightProtocol.CCCD_UUID) {
                 Log.i(TAG, "直进直出通知已开启，正在发送座舱认证帧...")
+                log("CCCD 订阅通知成功，开始组装下发座舱认证帧", isSuccess = true)
                 _statusMessage.value = "正在进行座舱认证..."
                 sendAuthentication()
+            } else if (status != BluetoothGatt.GATT_SUCCESS) {
+                log("CCCD 描述符写入失败 (status=$status)", isError = true)
             }
         }
 
@@ -214,9 +263,11 @@ class BleStraightController(private val context: Context) {
      */
     fun markNotReady(reason: String) {
         handler.removeCallbacks(retryWriteRunnable)
+        handler.removeCallbacks(autoDriveNextChunkRunnable)
         _canMove.value = false
         _vehicleState.value = BleStraightVehicleState.WAITING
         _statusMessage.value = reason
+        log("未就绪: $reason", isError = true)
     }
 
     /**
@@ -240,27 +291,32 @@ class BleStraightController(private val context: Context) {
         if (adapter == null || !adapter.isEnabled) {
             _statusMessage.value = "请打开手机蓝牙"
             _vehicleState.value = BleStraightVehicleState.FAILED
+            log("启动失败: 手机蓝牙未开启", isError = true)
             return
         }
 
         // 派生直进直出会话密钥
         try {
             session = BleKeyProtocol.createSession(certificate, certificate.vin)
+            log("会话密钥派生成功 (SessionId: 0x${"%08X".format(session?.sessionId ?: 0)})", isSuccess = true)
         } catch (e: Exception) {
             Log.e(TAG, "直进直出会话密钥派生失败", e)
             _statusMessage.value = "座舱认证材料派生失败"
             _vehicleState.value = BleStraightVehicleState.FAILED
+            log("密钥派生异常: ${e.message}", isError = true)
             return
         }
 
         scanner = adapter.bluetoothLeScanner
         if (scanner == null) {
             _statusMessage.value = "蓝牙扫描器不可用"
+            log("蓝牙扫描器不可用", isError = true)
             return
         }
 
         _statusMessage.value = "正在搜索车辆座舱直进直出广播..."
         _vehicleState.value = BleStraightVehicleState.WAITING
+        log("启动座舱广播扫描 [过滤: EEED / VIN特征]")
 
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -274,11 +330,13 @@ class BleStraightController(private val context: Context) {
                     stopScan()
                     _statusMessage.value = "搜索座舱超时，请确认车辆已进入直进直出就绪状态"
                     _vehicleState.value = BleStraightVehicleState.FAILED
+                    log("搜索座舱超时 (35s)，请确认已点击激活并挂P挡", isError = true)
                 }
             }, CONNECT_TIMEOUT_MS)
         } catch (e: Exception) {
             Log.e(TAG, "启动扫描异常", e)
             _statusMessage.value = "扫描失败，请检查蓝牙与定位权限"
+            log("启动扫描异常: ${e.message}", isError = true)
         }
     }
 
@@ -291,6 +349,7 @@ class BleStraightController(private val context: Context) {
 
     private fun connectDevice(device: BluetoothDevice) {
         _statusMessage.value = "正在连接座舱设备 (${device.name ?: device.address})..."
+        log("发起 GATT 连接 -> ${device.address}")
         gatt = if (Build.VERSION.SDK_INT >= 23) {
             device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
         } else {
@@ -309,6 +368,9 @@ class BleStraightController(private val context: Context) {
                 deviceId = currentDeviceId
             )
             val chunks = BleStraightProtocol.chunkFrame(authFrame, BleStraightProtocol.CHUNK_SIZE)
+            totalAuthChunks = chunks.size
+            sentAuthChunks = 0
+            log("组装认证帧成功: ${authFrame.size}B，切分为 $totalAuthChunks 个分片")
             synchronized(txQueue) {
                 txQueue.clear()
                 chunks.forEach(txQueue::addLast)
@@ -317,6 +379,7 @@ class BleStraightController(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "构造座舱认证帧异常", e)
             _statusMessage.value = "座舱认证异常: ${e.message}"
+            log("构造认证帧异常: ${e.message}", isError = true)
         }
     }
 
@@ -332,6 +395,7 @@ class BleStraightController(private val context: Context) {
             _canMove.value = false
             if (action != BleStraightAction.STOP) {
                 _statusMessage.value = "座舱通道未就绪，请等待连接完成后再按住方向键"
+                log("控制被拒绝: 通道未就绪 (cmd=${action.label})", isError = true)
                 Log.w(
                     TAG,
                     "control($action) 被拒绝: session=${currentSession != null}, " +
@@ -341,6 +405,7 @@ class BleStraightController(private val context: Context) {
             return
         }
 
+        log("下发指令: ${action.label} (code=${action.code})")
         val frame = BleStraightProtocol.buildControlFrame(currentSession, action)
         val chunks = BleStraightProtocol.chunkFrame(frame, BleStraightProtocol.CHUNK_SIZE)
 
@@ -372,6 +437,7 @@ class BleStraightController(private val context: Context) {
             }
             isWriting = true
             val chunk = txQueue.removeFirst()
+            sentAuthChunks++
             // 严格对齐官方 xp.java:241 规范：使用 WRITE_TYPE_NO_RESPONSE (无应答写入)
             val type = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             val accepted = if (Build.VERSION.SDK_INT >= 33) {
@@ -384,6 +450,14 @@ class BleStraightController(private val context: Context) {
                 client.writeCharacteristic(target)
             }
             if (accepted) {
+                if (totalAuthChunks > 0 && sentAuthChunks <= totalAuthChunks) {
+                    log("发送分片 $sentAuthChunks/$totalAuthChunks (${chunk.size}B)")
+                    if (sentAuthChunks == totalAuthChunks) {
+                        log("认证帧全部 $totalAuthChunks 个分片下发完毕，等待车端状态通知...", isSuccess = true)
+                        totalAuthChunks = 0
+                        sentAuthChunks = 0
+                    }
+                }
                 // 部分安卓机型在 NO_RESPONSE 下不派发 onCharacteristicWrite 回调，
                 // 挂载 20ms 自驱动节流推进，确保认证帧与控制帧所有分片顺畅灌入车端
                 handler.removeCallbacks(autoDriveNextChunkRunnable)
@@ -393,7 +467,9 @@ class BleStraightController(private val context: Context) {
             // 写入被 GATT 拒绝 (常见于刚建连时的 BUSY)：不得丢帧，回退队首并延迟重试，
             // 否则首帧丢失且队列停摆，表现为"长按方向键车不动"。
             if (txQueue.size < MAX_PENDING_CHUNKS) txQueue.addFirst(chunk)
+            sentAuthChunks = maxOf(0, sentAuthChunks - 1)
             isWriting = false
+            log("GATT 写入被拒，50ms 后重试", isError = true)
             handler.postDelayed(retryWriteRunnable, WRITE_RETRY_DELAY_MS)
         }
     }
@@ -424,6 +500,7 @@ class BleStraightController(private val context: Context) {
         val currentSession = session ?: return
         synchronized(this) {
             rxBuffer += chunk
+            log("收到车端数据: ${chunk.size}B [0x${chunk.take(minOf(chunk.size, 4)).joinToString("") { "%02X".format(it) }}]")
 
             while (rxBuffer.size >= 2) {
                 // 1. 模式 A: 官方 0xAA 0xAC 封装帧 (th1.d 规范)
@@ -464,6 +541,7 @@ class BleStraightController(private val context: Context) {
                     }.getOrNull()
 
                     if (!decryptedText.isNullOrBlank()) {
+                        log("解密车端报文: \"$decryptedText\"", isSuccess = true)
                         val update = BleStraightProtocol.parseVehicleState(decryptedText)
                         if (update != null) {
                             onVehicleStateUpdate(update)
@@ -476,6 +554,7 @@ class BleStraightController(private val context: Context) {
                 val singleUpdate = BleStraightProtocol.decodeVehicleNotification(currentSession, chunk)
                 if (singleUpdate != null) {
                     rxBuffer = byteArrayOf()
+                    log("自适应匹配车端通知: ${singleUpdate.state}", isSuccess = true)
                     onVehicleStateUpdate(singleUpdate)
                     break
                 }

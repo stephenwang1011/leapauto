@@ -271,6 +271,7 @@ class MainActivity : ComponentActivity() {
     private var straightVehicleState by mutableStateOf(com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING)
     private var straightStatusMessage by mutableStateOf("未连接")
     private var straightCanMove by mutableStateOf(false)
+    private var straightLogs by mutableStateOf<List<com.leapauto.app.bluetooth.BleStraightLogEntry>>(emptyList())
     private var bluetoothSessionIdentity: BleSessionIdentity? = null
     private var bluetoothControlConfirmation by mutableStateOf<BleControlConfirmation?>(null)
     private var bluetoothPinRequestPending = false
@@ -352,6 +353,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch { bluetoothRuntime.straightController.vehicleState.collect { straightVehicleState = it } }
         lifecycleScope.launch { bluetoothRuntime.straightController.statusMessage.collect { straightStatusMessage = it } }
         lifecycleScope.launch { bluetoothRuntime.straightController.canMove.collect { straightCanMove = it } }
+        lifecycleScope.launch { bluetoothRuntime.straightController.logs.collect { straightLogs = it } }
         hvacCapability = session.hvacCapability
         availableVehicles = sessionStore.loadVehicles()
         val defaultPower = VehiclePowerTypeResolver.fromCarType(session.selectedCarType)
@@ -514,6 +516,8 @@ class MainActivity : ComponentActivity() {
                     straightVehicleState = straightVehicleState,
                     straightStatusMessage = straightStatusMessage,
                     straightCanMove = straightCanMove,
+                    straightLogs = straightLogs,
+                    onClearStraightLogs = { bluetoothRuntime.clearStraightLogs() },
                     onFridgeControl = ::handleFridgeControl,
                     onApplyClimateSettings = ::applyClimateSettings,
                     onDismissControlFeedback = { controlFeedback = null },

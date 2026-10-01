@@ -128,4 +128,17 @@ class BleStraightControllerTest {
             assertEquals(BleStraightVehicleState.READY, update!!.state)
         }
     }
+
+    @Test
+    fun `log entries preserve timestamp and error severity`() {
+        val entry = BleStraightLogEntry(
+            timestamp = "16:20:00.123",
+            message = "测试日志",
+            isError = true,
+            isSuccess = false
+        )
+        assertEquals("16:20:00.123", entry.timestamp)
+        assertEquals("测试日志", entry.message)
+        assertTrue(entry.isError)
+    }
 }
