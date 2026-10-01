@@ -41,6 +41,7 @@ class BleStraightController(private val context: Context) {
         private const val TAG = "BleStraightController"
         private const val CONNECT_TIMEOUT_MS = 35_000L
         private const val WRITE_RETRY_DELAY_MS = 50L
+        private const val CHUNK_PACING_MS = 20L // 官方 xp.java:241 无应答写入的自驱动推进节流步进
         private const val MAX_PENDING_CHUNKS = 64
     }
 
@@ -189,6 +190,7 @@ class BleStraightController(private val context: Context) {
         }
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+            handler.removeCallbacks(autoDriveNextChunkRunnable)
             synchronized(txQueue) {
                 isWriting = false
                 writeNextChunk()
@@ -370,7 +372,8 @@ class BleStraightController(private val context: Context) {
             }
             isWriting = true
             val chunk = txQueue.removeFirst()
-            val type = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            // 严格对齐官方 xp.java:241 规范：使用 WRITE_TYPE_NO_RESPONSE (无应答写入)
+            val type = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             val accepted = if (Build.VERSION.SDK_INT >= 33) {
                 client.writeCharacteristic(target, chunk, type) == BluetoothStatusCodes.SUCCESS
             } else {
@@ -380,7 +383,13 @@ class BleStraightController(private val context: Context) {
                 @Suppress("DEPRECATION")
                 client.writeCharacteristic(target)
             }
-            if (accepted) return
+            if (accepted) {
+                // 部分安卓机型在 NO_RESPONSE 下不派发 onCharacteristicWrite 回调，
+                // 挂载 20ms 自驱动节流推进，确保认证帧与控制帧所有分片顺畅灌入车端
+                handler.removeCallbacks(autoDriveNextChunkRunnable)
+                handler.postDelayed(autoDriveNextChunkRunnable, CHUNK_PACING_MS)
+                return
+            }
             // 写入被 GATT 拒绝 (常见于刚建连时的 BUSY)：不得丢帧，回退队首并延迟重试，
             // 否则首帧丢失且队列停摆，表现为"长按方向键车不动"。
             if (txQueue.size < MAX_PENDING_CHUNKS) txQueue.addFirst(chunk)
@@ -393,6 +402,17 @@ class BleStraightController(private val context: Context) {
         synchronized(txQueue) {
             if (gatt != null && straightChar != null && txQueue.isNotEmpty() && !isWriting) {
                 writeNextChunk()
+            }
+        }
+    }
+
+    private val autoDriveNextChunkRunnable = Runnable {
+        synchronized(txQueue) {
+            if (gatt != null && straightChar != null && txQueue.isNotEmpty()) {
+                isWriting = false
+                writeNextChunk()
+            } else if (txQueue.isEmpty()) {
+                isWriting = false
             }
         }
     }
@@ -536,6 +556,7 @@ class BleStraightController(private val context: Context) {
 
     private fun cleanupGatt() {
         handler.removeCallbacks(retryWriteRunnable)
+        handler.removeCallbacks(autoDriveNextChunkRunnable)
         try {
             gatt?.disconnect()
             gatt?.close()

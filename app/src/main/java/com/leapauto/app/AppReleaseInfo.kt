@@ -5,5 +5,5 @@ object AppReleaseInfo {
         get() = BuildConfig.VERSION_NAME
 
     // Update this text together with apkVersionName before each delivery package.
-    const val currentReleaseNotes = "1. 修复直进直出显示就绪但长按方向键车辆无动作的问题"
+    const val currentReleaseNotes = "1. 对齐官方无应答写入规范，修复直进直出卡在正在进行座舱认证的问题"
 }
