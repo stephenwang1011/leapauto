@@ -55,7 +55,7 @@ class BleStraightController(private val context: Context) {
         private const val TAG = "BleStraightController"
         private const val CONNECT_TIMEOUT_MS = 35_000L
         private const val WRITE_RETRY_DELAY_MS = 50L
-        private const val CHUNK_PACING_MS = 20L // 官方 xp.java:241 无应答写入的自驱动推进节流步进
+        private const val CHUNK_PACING_MS = 25L // 车端 MCU 物理节流安全间隔 (25ms)，杜绝 10ms 轰发 15 包导致 RX 缓冲区溢出
         private const val MAX_PENDING_CHUNKS = 64
         private const val MAX_LOG_ENTRIES = 120
     }
@@ -240,10 +240,9 @@ class BleStraightController(private val context: Context) {
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
             handler.removeCallbacks(autoDriveNextChunkRunnable)
-            synchronized(txQueue) {
-                isWriting = false
-                writeNextChunk()
-            }
+            // 物理节流保护：即使系统协议栈 0ms 瞬间连续派发写入成功回调，
+            // 也必须通过定时器保持 25ms 物理间隔，严禁 10ms 连续轰发 15 包导致车端 MCU 接收溢出丢包！
+            handler.postDelayed(autoDriveNextChunkRunnable, CHUNK_PACING_MS)
         }
 
         @Deprecated("Deprecated in Java")
