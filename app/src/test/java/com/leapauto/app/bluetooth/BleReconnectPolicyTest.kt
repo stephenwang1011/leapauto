@@ -1,6 +1,8 @@
 package com.leapauto.app.bluetooth
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BleReconnectPolicyTest {
@@ -34,5 +36,21 @@ class BleReconnectPolicyTest {
         // 确认远离车身 (>5 次)：12 秒均衡休眠省电且保证走到车旁秒连
         assertEquals(12_000L, BleReconnectPolicy.probeDelayMillis(foreground = false, inCarMediaActive = false, consecutiveMissCount = 6))
         assertEquals(12_000L, BleReconnectPolicy.probeDelayMillis(foreground = false, inCarMediaActive = false, consecutiveMissCount = 100))
+    }
+
+    @Test
+    fun `direct fallback is prohibited in foreground and only enabled periodically in background`() {
+        // 前台打开应用时：永远禁止发起直接物理连接，彻底杜绝 15 秒卡死盲区
+        assertFalse(BleReconnectPolicy.shouldAttemptDirectFallback(foreground = true, consecutiveMissCount = 0))
+        assertFalse(BleReconnectPolicy.shouldAttemptDirectFallback(foreground = true, consecutiveMissCount = 5))
+        assertFalse(BleReconnectPolicy.shouldAttemptDirectFallback(foreground = true, consecutiveMissCount = 10))
+        assertFalse(BleReconnectPolicy.shouldAttemptDirectFallback(foreground = true, consecutiveMissCount = 15))
+
+        // 后台静默运行且每 5 次未命中时：允许自愈直连
+        assertFalse(BleReconnectPolicy.shouldAttemptDirectFallback(foreground = false, consecutiveMissCount = 0))
+        assertFalse(BleReconnectPolicy.shouldAttemptDirectFallback(foreground = false, consecutiveMissCount = 4))
+        assertTrue(BleReconnectPolicy.shouldAttemptDirectFallback(foreground = false, consecutiveMissCount = 5))
+        assertFalse(BleReconnectPolicy.shouldAttemptDirectFallback(foreground = false, consecutiveMissCount = 6))
+        assertTrue(BleReconnectPolicy.shouldAttemptDirectFallback(foreground = false, consecutiveMissCount = 10))
     }
 }

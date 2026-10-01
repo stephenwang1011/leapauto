@@ -5,5 +5,5 @@ object AppReleaseInfo {
         get() = BuildConfig.VERSION_NAME
 
     // Update this text together with apkVersionName before each delivery package.
-    const val currentReleaseNotes = "1. 优化直进直出日志工具栏，复制与清除改用纯图标与悬浮气泡提示"
+    const val currentReleaseNotes = "1. 优化前台蓝牙探查机制，彻底消除走近车旁的15秒连接超时等待盲区"
 }

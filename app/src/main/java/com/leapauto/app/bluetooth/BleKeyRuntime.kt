@@ -348,15 +348,16 @@ class BleKeyRuntime private constructor(context: Context) {
                 if (probeCallback === callback && !targetDiscovered) {
                     cancelProbe()
                     consecutiveMissCount++
-                    // 每连续多次探查未命中，在下次探查周期自动降级发起一次直接物理直连探测，打破 Android 系统底层扫描限制
-                    val shouldAttemptDirectFallback = consecutiveMissCount % 5 == 0
+                    val shouldAttemptDirectFallback = BleReconnectPolicy.shouldAttemptDirectFallback(foreground, consecutiveMissCount)
                     val extraDesc = if (shouldAttemptDirectFallback) {
-                        "未检测到广播 (第${consecutiveMissCount}次) · 触发直接物理寻址自愈"
+                        "未检测到广播 (第${consecutiveMissCount}次) · 触发后台直接物理寻址自愈"
+                    } else if (foreground) {
+                        "远离车辆 (第${consecutiveMissCount}次) · 前台极速探查待命中"
                     } else {
-                        "未检测到车辆广播 (远离车辆第${consecutiveMissCount}次) · 进入静默休眠"
+                        "未检测到车辆广播 (远离车辆第${consecutiveMissCount}次) · 后台静默待命"
                     }
                     controller.recordDiagnostic(BleDiagnosticEvent.PROBE_MISSED, extra = extraDesc)
-                    controller.updateStateMessage("未在车辆附近（待命中）")
+                    controller.updateStateMessage(if (foreground) "未在车辆附近 (前台待命中)" else "未在车辆附近 (后台待命中)")
                     if (shouldAttemptDirectFallback) {
                         connectDirect(targetDevice, certificate, bound.accountId, targetDesired, credentialScope, current)
                     } else {
@@ -366,7 +367,11 @@ class BleKeyRuntime private constructor(context: Context) {
             }, probeDuration)
         } catch (_: Exception) {
             cancelProbe()
-            connectDirect(targetDevice, certificate, bound.accountId, targetDesired, credentialScope, current)
+            if (!foreground) {
+                connectDirect(targetDevice, certificate, bound.accountId, targetDesired, credentialScope, current)
+            } else {
+                scheduleProbeRetry()
+            }
         }
     }
 
@@ -556,4 +561,12 @@ object BleReconnectPolicy {
         consecutiveMissCount in 3..5 -> 8_000L
         else -> 12_000L
     }
+
+    /**
+     * 是否降级发起直接物理寻址 (connectGatt) 自愈。
+     * 核心规则：仅在后台(!foreground)且每 5 次未命中时触发，用于打破系统后台扫描休眠；
+     * 前台(foreground)严格禁止盲目直连，彻底消除 15 秒连接超时等待盲区，保持纯广播高频秒连。
+     */
+    fun shouldAttemptDirectFallback(foreground: Boolean, consecutiveMissCount: Int): Boolean =
+        !foreground && consecutiveMissCount > 0 && consecutiveMissCount % 5 == 0
 }
