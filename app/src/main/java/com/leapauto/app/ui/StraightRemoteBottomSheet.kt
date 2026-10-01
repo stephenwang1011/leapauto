@@ -48,7 +48,11 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -649,6 +653,7 @@ private fun VehicleTopDownBlueprint(
  * 2. 实时自动滚动到底部；
  * 3. 包含「复制日志」与「清除日志」按钮。
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StraightDebugLogConsole(
     logs: List<BleStraightLogEntry>,
@@ -721,44 +726,50 @@ private fun StraightDebugLogConsole(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // 复制日志按钮
-                    OutlinedButton(
-                        onClick = {
-                            if (logs.isEmpty()) {
-                                copyHint = "暂无日志"
-                            } else {
-                                val fullText = logs.joinToString("\n") { "[${it.timestamp}] ${it.message}" }
-                                clipboardManager.setText(AnnotatedString(fullText))
-                                copyHint = "已复制"
-                            }
-                        },
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        modifier = Modifier.height(26.dp),
-                        shape = RoundedCornerShape(8.dp)
+                    // 复制日志按钮 (纯图标 + 气泡提示)
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = { PlainTooltip { Text("复制日志") } },
+                        state = rememberTooltipState()
                     ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_phosphor_copy),
-                            contentDescription = "复制",
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text("复制", fontSize = 11.sp)
+                        IconButton(
+                            onClick = {
+                                if (logs.isEmpty()) {
+                                    copyHint = "暂无日志"
+                                } else {
+                                    val fullText = logs.joinToString("\n") { "[${it.timestamp}] ${it.message}" }
+                                    clipboardManager.setText(AnnotatedString(fullText))
+                                    copyHint = "已复制"
+                                }
+                            },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_phosphor_copy),
+                                contentDescription = "复制日志",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     }
 
-                    // 清除日志按钮
-                    OutlinedButton(
-                        onClick = onClearLogs,
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        modifier = Modifier.height(26.dp),
-                        shape = RoundedCornerShape(8.dp)
+                    // 清除日志按钮 (纯图标 + 气泡提示)
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = { PlainTooltip { Text("清除日志") } },
+                        state = rememberTooltipState()
                     ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_phosphor_trash),
-                            contentDescription = "清除",
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text("清除", fontSize = 11.sp)
+                        IconButton(
+                            onClick = onClearLogs,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_phosphor_trash),
+                                contentDescription = "清除日志",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     }
                 }
             }

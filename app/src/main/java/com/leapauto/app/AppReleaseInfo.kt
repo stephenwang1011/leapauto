@@ -5,5 +5,5 @@ object AppReleaseInfo {
         get() = BuildConfig.VERSION_NAME
 
     // Update this text together with apkVersionName before each delivery package.
-    const val currentReleaseNotes = "1. 直进直出面板实装座舱实时通讯日志控制台，支持自动滚动、一键复制与清除"
+    const val currentReleaseNotes = "1. 优化直进直出日志工具栏，复制与清除改用纯图标与悬浮气泡提示"
 }
