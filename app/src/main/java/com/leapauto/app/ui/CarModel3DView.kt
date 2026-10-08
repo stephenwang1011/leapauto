@@ -431,8 +431,8 @@ internal class CarModelWebView(
         obj.put("chargeState", status?.chargeState ?: 0)
         obj.put("1149", status?.chargeState ?: 0)
 
-        // 1. 充电状态与流光 (1=充电中, 2=充电完成/连接中, 或枪已连接)
-        val isCharging = status?.chargeState == 1 || status?.chargeState == 2 || status?.chargeGunConnected == true
+        // 1. 充电状态与流光 (仅在真正充电中时触发 3D 充电桩与流光动画；插枪但未充电不触发)
+        val isCharging = CarModel3DStateHelper.isChargingAnimationActive(status)
         obj.put("isCharging", isCharging)
 
         // 2. 车窗除雾水汽消融 (前挡除霜开启)
@@ -538,7 +538,17 @@ internal class CarModelWebView(
                     }
 
                     // 原生实例方法直调保证：直接作用于当前活动车模节点，不受模块变量隔离影响
-                    if (typeof c.handleTrunk === 'function') c.handleTrunk(trunkOpen, imm);
+                    if (typeof c.handleTrunk === 'function') {
+                        c.handleTrunk(trunkOpen, imm);
+                        if (!trunkOpen && c.trunkNode) {
+                            setTimeout(function() {
+                                if (!trunkOpen && c.trunkNode) {
+                                    c.trunkNode.rotation.z = 0;
+                                    c.__TrunkState__ = 0;
+                                }
+                            }, 600);
+                        }
+                    }
                     if (typeof c.handleLFDoor === 'function') c.handleLFDoor(doorFlOpen, imm);
                     if (typeof c.handleRFDoor === 'function') c.handleRFDoor(doorFrOpen, imm);
                     if (typeof c.handleLRDoor === 'function') c.handleLRDoor(doorRlOpen, imm);
@@ -989,5 +999,21 @@ object CarModel3DStateHelper {
         } else {
             isDrivingGear || isDriving == true || speedValue > 0f
         }
+    }
+
+    /**
+     * 判断 3D 车模是否激活充电动画与流光特效。
+     *
+     * 仅在车辆真正处于“充电中”(chargeState == 1) 时返回 true。
+     * 若仅插入充电枪 (chargeGunConnected == true)，但处于未启动充电 (chargeState == 0)、
+     * 预约充电等待 (chargeState == 4)、充电完成 (chargeState == 2) 或故障/暂停时，
+     * 均返回 false，避免误触发充电桩与能量流光动效。
+     */
+    fun isChargingAnimationActive(status: VehicleStatus?): Boolean {
+        return isChargingAnimationActive(status?.chargeState)
+    }
+
+    fun isChargingAnimationActive(chargeState: Int?): Boolean {
+        return chargeState == 1
     }
 }

@@ -185,6 +185,15 @@ class BlePassiveConfigurationTest {
         }
     }
 
+    @Test
+    fun defaultForModelEnablesButtonForSupportedVehicles() {
+        assertTrue(BlePassiveConfiguration.defaultForModel("C16").buttonEnabled)
+        assertTrue(BlePassiveConfiguration.defaultForModel("C10").buttonEnabled)
+        assertTrue(BlePassiveConfiguration.defaultForModel("C11", protocolMinor = 9).buttonEnabled)
+        assertTrue(BlePassiveConfiguration.defaultForModel("C11", protocolMinor = null).buttonEnabled)
+        assertFalse(BlePassiveConfiguration.defaultForModel("T03", protocolMinor = 8).buttonEnabled)
+    }
+
     private fun configuration(mask: Int): BlePassiveConfiguration = BlePassiveConfiguration(
         enabled = mask and 1 != 0, autoUnlock = mask and 2 != 0,
         autoLock = mask and 4 != 0, buttonEnabled = mask and 8 != 0

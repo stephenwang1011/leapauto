@@ -407,11 +407,6 @@ object ControlFeedbackFormatter {
             key == "sentryOn" -> "开启哨兵模式中..."
             key == "sentryOff" -> "关闭哨兵模式中..."
             key == "sentry" || key == "哨兵模式" -> "切换哨兵模式中..."
-            key == "straightForward" -> "正在向前挪车..."
-            key == "straightBackward" -> "正在向后倒车..."
-            key == "straightStop" -> "正在刹停车辆..."
-            key == "straightActivate" -> "正在激活直进直出..."
-            key == "straightDeactivate" -> "正在退出直进直出..."
             key == "batteryPreheat" || key == "电池预热" -> "开启电池预热中..."
             key == "horn" || key == "鸣笛" || key == "鸣笛寻车" -> "鸣笛寻车中..."
             key == "fridgeOn" || key == "开启冰箱" -> {
@@ -479,11 +474,6 @@ object ControlFeedbackFormatter {
             key.startsWith("fotaInstall") -> "整车升级指令已发送"
             key.startsWith("fotaSchedule") -> "定时升级已预约成功"
             key == "sentry" || key == "哨兵模式" -> "哨兵模式设置成功"
-            key == "straightForward" -> "直进挪车中"
-            key == "straightBackward" -> "倒车挪车中"
-            key == "straightStop" -> "车辆已刹停"
-            key == "straightActivate" -> "直进直出已激活"
-            key == "straightDeactivate" -> "直进直出已退出"
             key == "batteryPreheat" || key == "电池预热" -> "电池预热已开启"
             key == "horn" || key == "鸣笛" || key == "鸣笛寻车" -> "鸣笛寻车已完成"
             key == "fridgeOn" || key == "开启冰箱" -> {
@@ -953,11 +943,6 @@ object Commands {
         "deodorize" -> ControlCommand("170", QUICK_DEODORIZE_STATE, "快速除味")
         "sentryOn" -> ControlCommand("400", """{"operation":"on"}""", "开启哨兵模式")
         "sentryOff" -> ControlCommand("400", """{"operation":"off"}""", "关闭哨兵模式")
-        "straightForward" -> ControlCommand("150", """{"value":"forward"}""", "直进挪车")
-        "straightBackward" -> ControlCommand("150", """{"value":"backward"}""", "倒车挪车")
-        "straightStop" -> ControlCommand("150", """{"value":"stop"}""", "停止挪车")
-        "straightActivate" -> ControlCommand("410", """{"on3":"on"}""", "激活直进直出")
-        "straightDeactivate" -> ControlCommand("410", """{"on3":"off"}""", "退出直进直出")
         "startCharging" -> ControlCommand("193", """{"value":"start"}""", "开始充电")
         "stopCharging" -> ControlCommand("193", """{"value":"stop"}""", "停止充电")
         "unlockCharger" -> ControlCommand("192", """{"operation":"unlock"}""", "解锁充电枪")
@@ -1347,6 +1332,7 @@ object SensitiveControlPolicy {
 object QuickCommandOrderPolicy {
     private const val SUNSHADE_GROUP_ID = "sunshadeGroup"
     private val legacySunshadeIds = setOf("sunshadeOpen", "sunshadeClose")
+    private val retiredCommandIds = setOf("straightRemote")
 
     /** Keeps the first legacy sunshade position while replacing two actions with one grouped entry. */
     fun migrateSunshadeGroup(saved: List<String>?): List<String>? {
@@ -1355,6 +1341,7 @@ object QuickCommandOrderPolicy {
         return buildList {
             saved.forEach { id ->
                 when {
+                    id in retiredCommandIds -> Unit
                     id in legacySunshadeIds && !groupAdded -> {
                         add(SUNSHADE_GROUP_ID)
                         groupAdded = true
@@ -1410,6 +1397,25 @@ object QuickCommandExecutionPolicy {
             "fridge" -> activeCmd.startsWith("fridge")
             else -> activeCmd == commandName
         }
+    }
+}
+
+data class SunshadeMenuItem(
+    val command: String,
+    val label: String,
+    val iconRes: Int
+)
+
+object SunshadeMenuPolicy {
+    val items = listOf(
+        SunshadeMenuItem("sunshadeOpen", "打开遮阳帘", R.drawable.ic_sunshade_open),
+        SunshadeMenuItem("sunshadeClose", "关闭遮阳帘", R.drawable.ic_sunshade_close)
+    )
+
+    fun iconForCommand(command: String): Int = when (command) {
+        "sunshadeOpen" -> R.drawable.ic_sunshade_open
+        "sunshadeClose" -> R.drawable.ic_sunshade_close
+        else -> R.drawable.ic_phosphor_sun
     }
 }
 
@@ -1595,4 +1601,33 @@ sealed interface VehicleOtaState {
     data class Success(val info: VehicleOtaInfo) : VehicleOtaState
     data class Error(val message: String) : VehicleOtaState
 }
+
+/** 零跑车辆云端预约充电计划配置模型 (对应 commonConfig 的 config.3) */
+data class VehicleChargePlan(
+    val isEnable: Boolean,
+    val beginTime: String?,
+    val endTime: String?,
+    val cycles: String?,
+    val circulation: Int,
+    val recharge: Boolean,
+    val percent: Int?
+) {
+    companion object {
+        fun fromConfig(config: JSONObject?): VehicleChargePlan? {
+            val plan = config?.optJSONObject("3") ?: return null
+            val isEnable = plan.optInt("isEnable", -1)
+            if (isEnable == -1 && !plan.has("beginTime") && !plan.has("percent")) return null
+            return VehicleChargePlan(
+                isEnable = isEnable == 1,
+                beginTime = plan.optString("beginTime").takeIf { it.isNotBlank() },
+                endTime = plan.optString("endTime").takeIf { it.isNotBlank() },
+                cycles = plan.optString("cycles").takeIf { it.isNotBlank() },
+                circulation = plan.optInt("circulation", 1),
+                recharge = plan.optInt("recharge", 0) == 1,
+                percent = plan.optInt("percent", 100).takeIf { it in 50..100 }
+            )
+        }
+    }
+}
+
 

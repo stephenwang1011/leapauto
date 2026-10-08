@@ -615,10 +615,11 @@ class LeapmotorApi internal constructor(
                 } else {
                     SessionStore.VehiclePowerType.PURE_ELECTRIC
                 }
-                val nickname = it.optString("nickName")
-                    .ifEmpty { it.optString("nickname") }
-                    .ifEmpty { it.optString("vehicleName") }
+                val nickname = it.optString("vehicleName")
                     .ifEmpty { it.optString("carName") }
+                    .ifEmpty { it.optString("licensePlate") }
+                    .ifEmpty { it.optString("nickName") }
+                    .ifEmpty { it.optString("nickname") }
                 val year = it.optString("year")
                     .ifEmpty { it.optJSONObject("modelParam")?.optString("year").orEmpty() }
                     .ifEmpty { it.optString("modelYear") }
@@ -1385,6 +1386,33 @@ class LeapmotorApi internal constructor(
         } catch (_: IllegalArgumentException) {
             throw ApiException("车辆蓝牙配置响应无效", stage = BLUETOOTH_METADATA_STAGE)
         }
+    }
+
+    /**
+     * 查询车辆通用配置表 (GET /carownerservice/v3/api/vehicleinfo/commonConfig)
+     * 返回云端保存的 config (包含 3: 充电计划 ChargePlan, 4: 蓝牙钥匙硬件参数等)。
+     */
+    fun getVehicleCommonConfig(): JSONObject? {
+        if (session.selectedVin.isBlank() || session.deviceId.isBlank()) return null
+        return try {
+            val scope = prepareBluetoothCloudRequest(BLUETOOTH_METADATA_STAGE, needsOldToken = false, refreshSession = {
+                refreshBluetoothCloudTokens(needsOldToken = false)
+            })
+            val response = bluetoothCloudResponse(buildBluetoothVehicleMetadataRequest(), BLUETOOTH_METADATA_STAGE, scope, ::executeBluetoothCloudRequest)
+            BleCloudApiModels.requireSuccess(response)
+            val data = response.optJSONObject("data") ?: return null
+            data.optJSONObject("config")
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 获取车辆云端充电计划 (从 commonConfig 的 config.3 解析)。
+     */
+    fun getVehicleChargePlan(): VehicleChargePlan? {
+        val config = getVehicleCommonConfig() ?: return null
+        return VehicleChargePlan.fromConfig(config)
     }
 
     /** Cloud acceptance does not mean the vehicle has applied these preferences. */

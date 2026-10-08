@@ -48,46 +48,11 @@ class BleKeyRuntime private constructor(context: Context) {
     private var blockedGeneration: Long? = null
     private var inCarMediaActive = false
 
-    val straightController = BleStraightController(appContext)
-
     fun setInCarMediaActive(active: Boolean) {
         inCarMediaActive = active
         if (active && connectionValue.value.phase == BleConnectionPhase.IDLE) {
             controller.updateStateMessage("人在车内 · 车载蓝牙静默待命中")
         }
-    }
-
-    fun startStraightRemote(certificate: BleKeyCertificate? = null) {
-        val currentIdentity = identity ?: run {
-            straightController.markNotReady("账号身份未就绪，无法启动直进直出")
-            return
-        }
-        val cert = certificate ?: sessions.loadBluetoothKeyCertificate(currentIdentity.accountId, currentIdentity.vin)
-            ?: run {
-                straightController.markNotReady("直进直出证书缺失，请先同步数字钥匙")
-                return
-            }
-        val boundAddr = managedKey.value?.device?.address
-        straightController.start(cert, currentIdentity.accountId, currentIdentity.deviceId, preferredAddress = boundAddr)
-    }
-
-    fun stopStraightRemote() {
-        straightController.stop()
-    }
-
-    fun straightControl(action: BleStraightAction) {
-        straightController.control(action)
-    }
-
-    fun refreshStraightServices() {
-        startStraightRemote()
-    }
-
-    val straightLogs: kotlinx.coroutines.flow.StateFlow<List<BleStraightLogEntry>>
-        get() = straightController.logs
-
-    fun clearStraightLogs() {
-        straightController.clearLogs()
     }
 
     fun attachSession(session: Session) {
@@ -268,6 +233,7 @@ class BleKeyRuntime private constructor(context: Context) {
         } else {
             bound.device.copy(protocolMinorSource = BleProtocolMinorSource.SAVED)
         }
+        val supportsButton = (targetDevice.protocolMinor ?: 0) >= 9 || isLeap3
         val targetDesired = if (isLeap3) {
             val calib = if (bound.desired.calibration == BleCalibration.DEFAULT || bound.desired.calibration.distanceCalibration == 56) {
                 BleCalibration.C16_DEFAULT
@@ -275,6 +241,8 @@ class BleKeyRuntime private constructor(context: Context) {
                 bound.desired.calibration
             }
             bound.desired.copy(calibration = calib, buttonEnabled = true)
+        } else if (supportsButton && !bound.desired.buttonEnabled) {
+            bound.desired.copy(buttonEnabled = true)
         } else {
             bound.desired
         }
@@ -424,13 +392,13 @@ class BleKeyRuntime private constructor(context: Context) {
         if (!validSession() || certificate.vin != current.vin) return
         val existing = keyValue.value
         val fingerprint = BleKeyProtocol.certificateFingerprint(certificate)
-        val isLeap3 = currentCarType.orEmpty().uppercase().let { it.contains("C16") || it.contains("C10") } ||
+        val supportsButton = currentCarType.orEmpty().uppercase().let { it.contains("C16") || it.contains("C10") } ||
             (device.protocolMinor ?: 0) >= 9
         val initialConfig = BlePassiveConfiguration(
             enabled = true,
             autoUnlock = false,
             autoLock = false,
-            buttonEnabled = isLeap3,
+            buttonEnabled = supportsButton,
             calibration = profiles.load(current).effectiveCalibration(currentCarType)
         )
         val bound = when {

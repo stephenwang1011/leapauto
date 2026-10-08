@@ -524,8 +524,9 @@
 | `fotaDownload` | `390` | `{"taskId":"{taskId}"}` | 触发车机开始下载新版固件包 | 4位操作密码 |
 | `fotaInstall` | `391` | `{"taskId":"{taskId}"}` | 触发车机就地刷写安装固件 | 4位操作密码 |
 | `fotaSchedule` | `392` | `{"taskId":"{taskId}","scheduleTime":"2026-09-24 03:00:00"}` | 预约车机在凌晨静默升级 | 4位操作密码 |
-| `straightActivate` | `410` | `{"on3":"on"}` | 激活直进直出模式（BCM ON3 唤醒就绪并释放手刹） | 4位操作密码 |
-| `straightDeactivate` | `410` | `{"on3":"off"}` | 退出直进直出模式 | 4位操作密码 |
+
+> 直进直出生产功能已从 App 移除。历史抓包中的 `cmdid=410` 与 EEED/EEE2
+> 研究资料仅用于协议分析，不属于当前支持的命令或用户功能。
 
 ---
 

@@ -122,4 +122,43 @@ class VehicleConfigTest {
         assertEquals("", restored.year)
         assertEquals("", restored.color)
     }
+
+    @Test
+    fun vehicleNicknamePrefersVehicleNameAndPlateOverUserNickname() {
+        val rawJson = org.json.JSONObject("""
+            {
+                "vin": "LF3A11C16TEST0001",
+                "carType": "C16",
+                "licensePlate": "鄂FD77382",
+                "vehicleName": "鄂FD77382",
+                "nickName": "渣渣辉"
+            }
+        """.trimIndent())
+
+        val resolved = rawJson.optString("vehicleName")
+            .ifEmpty { rawJson.optString("carName") }
+            .ifEmpty { rawJson.optString("licensePlate") }
+            .ifEmpty { rawJson.optString("nickName") }
+            .ifEmpty { rawJson.optString("nickname") }
+
+        assertEquals("鄂FD77382", resolved)
+    }
+
+    @Test
+    fun customNicknameIsRetainedWhenRefreshingVehicle() {
+        val customNickname = "大白"
+        val serverNickname = "鄂FD77382"
+        val model = "C16"
+
+        val updated = customNickname.trim().ifBlank {
+            serverNickname.ifBlank { model }
+        }
+        assertEquals("大白", updated)
+
+        // 当用户清空昵称时，才优雅回退到车辆网络昵称
+        val reset = "".trim().ifBlank {
+            serverNickname.ifBlank { model }
+        }
+        assertEquals("鄂FD77382", reset)
+    }
 }

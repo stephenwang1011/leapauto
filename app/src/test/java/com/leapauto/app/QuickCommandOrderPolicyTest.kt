@@ -89,26 +89,12 @@ class QuickCommandOrderPolicyTest {
     }
 
     @Test
-    fun straightRemoteIsOmittedWhenBluetoothKeyDisabledAndRestoredWhenEnabled() {
-        // 用户此前在自定义排序中保存了 straightRemote
-        val savedOrderWithStraight = listOf("unlock", "lock", "straightRemote", "trunk")
-
-        // 当蓝牙钥匙开关关闭时，可用指令池中排除 straightRemote
-        val availableWhenDisabled = listOf("unlock", "lock", "trunk", "sentry")
-        val resolvedDisabled = QuickCommandOrderPolicy.resolve(
-            saved = savedOrderWithStraight,
-            available = availableWhenDisabled
+    fun retiredStraightRemoteIsRemovedFromSavedOrder() {
+        assertEquals(
+            listOf("unlock", "lock", "trunk"),
+            QuickCommandOrderPolicy.migrateSunshadeGroup(
+                listOf("unlock", "straightRemote", "lock", "trunk")
+            )
         )
-        assertFalse("Disabled bluetooth key must omit straightRemote", resolvedDisabled.contains("straightRemote"))
-        assertEquals(listOf("unlock", "lock", "trunk", "sentry"), resolvedDisabled)
-
-        // 当蓝牙钥匙开关开启时，可用指令池中包含 straightRemote
-        val availableWhenEnabled = listOf("unlock", "lock", "trunk", "sentry", "straightRemote")
-        val resolvedEnabled = QuickCommandOrderPolicy.resolve(
-            saved = savedOrderWithStraight,
-            available = availableWhenEnabled
-        )
-        assertTrue("Enabled bluetooth key must retain straightRemote in saved position", resolvedEnabled.contains("straightRemote"))
-        assertEquals(listOf("unlock", "lock", "straightRemote", "trunk", "sentry"), resolvedEnabled)
     }
 }

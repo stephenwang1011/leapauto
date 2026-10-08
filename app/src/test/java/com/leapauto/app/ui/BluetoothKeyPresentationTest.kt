@@ -12,6 +12,33 @@ class BluetoothKeyPresentationTest {
     private val target = "00:11:22:33:AA:BB"
 
     @Test
+    fun setupChecklistHidesOnlyWhenEveryRequiredStepIsComplete() {
+        assertTrue(BluetoothKeyPresentation.setupComplete(true, true, true))
+        assertFalse(BluetoothKeyPresentation.setupComplete(false, true, true))
+        assertFalse(BluetoothKeyPresentation.setupComplete(true, false, true))
+        assertFalse(BluetoothKeyPresentation.setupComplete(true, true, false))
+    }
+
+    @Test
+    fun certificateAlertShowsOnlyWhenCertificateNotReadyOrLoading() {
+        // 凭证已就绪且未在加载中 -> 保持静默不打扰，完全隐藏
+        assertFalse(BluetoothKeyPresentation.shouldShowCertificateAlert(certificateReady = true, certificateLoading = false))
+
+        // 凭证未就绪 -> 提醒用户同步
+        assertTrue(BluetoothKeyPresentation.shouldShowCertificateAlert(certificateReady = false, certificateLoading = false))
+
+        // 正在同步凭证中 -> 展示同步进度状态
+        assertTrue(BluetoothKeyPresentation.shouldShowCertificateAlert(certificateReady = true, certificateLoading = true))
+        assertTrue(BluetoothKeyPresentation.shouldShowCertificateAlert(certificateReady = false, certificateLoading = true))
+    }
+
+    @Test
+    fun bluetoothFeatureToggleInterceptsEnableWithWarning() {
+        assertTrue(BluetoothKeyPresentation.shouldShowWarningOnToggle(true))
+        assertFalse(BluetoothKeyPresentation.shouldShowWarningOnToggle(false))
+    }
+
+    @Test
     fun matchingTargetIsPrioritizedWithoutFilteringUnknownCandidates() {
         val strongest = device("00:11:22:33:AA:CC", -35)
         val match = device(target, -90)
@@ -61,6 +88,14 @@ class BluetoothKeyPresentationTest {
             }
         }
         assertTrue(BluetoothKeyPresentation.canRetryCloud(BleCloudSyncState(configuration = BleCloudSaveStatus.FAILED)))
+    }
+
+    @Test
+    fun maskBluetoothAddressHidesOUIAndHandlesInvalidFormat() {
+        assertEquals("**:**:**:33:AA:BB", BluetoothKeyPresentation.maskBluetoothAddress(target))
+        assertEquals("**:**:**:EA:EA:0D", BluetoothKeyPresentation.maskBluetoothAddress("11:22:33:EA:EA:0D"))
+        assertEquals("已连接设备", BluetoothKeyPresentation.maskBluetoothAddress("not-an-address"))
+        assertEquals("已连接设备", BluetoothKeyPresentation.maskBluetoothAddress(""))
     }
 
     private fun device(address: String, rssi: Int) = BleNearbyDevice(address, "synthetic", rssi, 8)

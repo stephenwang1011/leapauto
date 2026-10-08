@@ -339,11 +339,7 @@ class SessionStore(context: Context) {
         val storedYear = appPrefs.getString(prefix + "model_year", "")?.trim().orEmpty()
         val selectedYear = storedYear.ifBlank { defaultYear.trim() }
         val storedNickname = appPrefs.getString(prefix + "nickname", "")?.trim().orEmpty()
-        val selectedNickname = if (storedNickname.isBlank() || storedNickname.equals(selectedModel, ignoreCase = true) || storedNickname.equals(defaultModel, ignoreCase = true)) {
-            defaultNickname.trim().ifBlank { storedNickname }
-        } else {
-            storedNickname
-        }
+        val selectedNickname = storedNickname.ifBlank { defaultNickname.trim() }
         return VehicleConfig(
             modelYear = selectedYear,
             powerType = type,

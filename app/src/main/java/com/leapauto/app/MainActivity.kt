@@ -38,6 +38,7 @@ import com.leapauto.app.bluetooth.BleConnectionPhase
 import com.leapauto.app.bluetooth.BleConnectionState
 import com.leapauto.app.bluetooth.BleControlConfirmation
 import com.leapauto.app.bluetooth.BleDiagnosticEvent
+import com.leapauto.app.bluetooth.BleVehicleMetadata
 import com.leapauto.app.bluetooth.BleDiagnostics
 import com.leapauto.app.bluetooth.BleKeyCertificate
 import com.leapauto.app.bluetooth.BleLockAction
@@ -199,7 +200,9 @@ class MainActivity : ComponentActivity() {
     @Volatile private var climateStatusRevision = 0L
     @Volatile private var climateOptimisticGuard: ClimateOptimisticGuard? = null
     @Volatile private var optimisticWindowPercent: Int? = null
+    @Volatile private var lastWindowActionEpochMs = 0L
     @Volatile private var optimisticTrunkState: TrunkState? = null
+    @Volatile private var lastTrunkActionEpochMs = 0L
     @Volatile private var optimisticDriverSeatHeating: Int? = null
     @Volatile private var optimisticDriverSeatVentilation: Int? = null
     @Volatile private var optimisticPassengerSeatHeating: Int? = null
@@ -245,7 +248,6 @@ class MainActivity : ComponentActivity() {
     private var scheduledPreheatDays by mutableStateOf("1,1,1,1,1,1,1")
     private var signalMapDebugState by mutableStateOf<VehicleSignalMapDebugState>(VehicleSignalMapDebugState.Idle)
     private var versionUpdateState by mutableStateOf<VersionUpdateState>(VersionUpdateState.Idle)
-    private var vehicleOtaState by mutableStateOf<VehicleOtaState>(VehicleOtaState.Idle)
     private var handledUpdateVersion by mutableStateOf<String?>(null)
     private var downloadUpdateProgress by mutableStateOf<Int?>(null)
     private var showAuthorSupportDialog by mutableStateOf(false)
@@ -267,11 +269,6 @@ class MainActivity : ComponentActivity() {
     private var bluetoothPermissionsGranted by mutableStateOf(false)
     private var bluetoothKeyFeatureEnabled by mutableStateOf(false)
     private var bluetoothState by mutableStateOf(BleConnectionState())
-    private var straightRemoteActive by mutableStateOf(false)
-    private var straightVehicleState by mutableStateOf(com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING)
-    private var straightStatusMessage by mutableStateOf("未连接")
-    private var straightCanMove by mutableStateOf(false)
-    private var straightLogs by mutableStateOf<List<com.leapauto.app.bluetooth.BleStraightLogEntry>>(emptyList())
     private var bluetoothSessionIdentity: BleSessionIdentity? = null
     private var bluetoothControlConfirmation by mutableStateOf<BleControlConfirmation?>(null)
     private var bluetoothPinRequestPending = false
@@ -350,10 +347,6 @@ class MainActivity : ComponentActivity() {
         }
         lifecycleScope.launch { bluetoothRuntime.managedKey.collect { bluetoothManagedKey = it } }
         lifecycleScope.launch { bluetoothRuntime.backgroundRunning.collect { bluetoothBackgroundRunning = it } }
-        lifecycleScope.launch { bluetoothRuntime.straightController.vehicleState.collect { straightVehicleState = it } }
-        lifecycleScope.launch { bluetoothRuntime.straightController.statusMessage.collect { straightStatusMessage = it } }
-        lifecycleScope.launch { bluetoothRuntime.straightController.canMove.collect { straightCanMove = it } }
-        lifecycleScope.launch { bluetoothRuntime.straightController.logs.collect { straightLogs = it } }
         hvacCapability = session.hvacCapability
         availableVehicles = sessionStore.loadVehicles()
         val defaultPower = VehiclePowerTypeResolver.fromCarType(session.selectedCarType)
@@ -437,6 +430,7 @@ class MainActivity : ComponentActivity() {
                     scheduledPreheatDays = scheduledPreheatDays,
                     onApplyChargingSettings = ::applyHealthyAndScheduledCharging,
                     onApplyScheduledPreheat = ::applyScheduledBatteryPreheat,
+                    onRefreshChargingSettings = { syncChargePlanFromServer(force = true) },
                     onFetchParkingPhoto = ::fetchParkingPhoto,
                     networkDebugEnabled = networkDebugEnabled,
                     vehicleImageVersion = vehicleImageVersion,
@@ -445,11 +439,6 @@ class MainActivity : ComponentActivity() {
                     currentVersion = AppReleaseInfo.currentVersion,
                     currentReleaseNotes = AppReleaseInfo.currentReleaseNotes,
                     versionUpdateState = versionUpdateState,
-                    vehicleOtaState = vehicleOtaState,
-                    onCheckVehicleOta = { checkForVehicleOta(force = true) },
-                    onDownloadVehicleOta = ::downloadVehicleOta,
-                    onInstallVehicleOta = ::installVehicleOta,
-                    onScheduleVehicleOta = ::scheduleVehicleOta,
                     handledUpdateVersion = handledUpdateVersion,
                     showAuthorSupportDialog = showAuthorSupportDialog,
                     showSessionExpiredDialog = showSessionExpiredDialog,
@@ -495,29 +484,6 @@ class MainActivity : ComponentActivity() {
                     onAutoRefreshActiveChange = ::setAutoRefreshActive,
                     onLogout = ::logout,
                     onControl = { control(it) },
-                    onStraightMove = { bluetoothRuntime.straightControl(it) },
-                    onStraightRemoteActiveChange = { active ->
-                        straightRemoteActive = active
-                        updateAutoRefreshLoop()
-                        if (active) {
-                            val accountId = session.oldAuth?.accountId.orEmpty()
-                            val vin = session.selectedVin
-                            val cert = bluetoothCertificate ?: sessionStore.loadBluetoothKeyCertificate(accountId, vin)
-                            if (cert != null) {
-                                bluetoothCertificate = cert
-                                bluetoothRuntime.startStraightRemote(cert)
-                            } else {
-                                syncBluetoothCertificate(silent = true)
-                            }
-                        } else {
-                            bluetoothRuntime.stopStraightRemote()
-                        }
-                    },
-                    straightVehicleState = straightVehicleState,
-                    straightStatusMessage = straightStatusMessage,
-                    straightCanMove = straightCanMove,
-                    straightLogs = straightLogs,
-                    onClearStraightLogs = { bluetoothRuntime.clearStraightLogs() },
                     onFridgeControl = ::handleFridgeControl,
                     onApplyClimateSettings = ::applyClimateSettings,
                     onDismissControlFeedback = { controlFeedback = null },
@@ -564,7 +530,8 @@ class MainActivity : ComponentActivity() {
                             bluetoothManagedKey?.applied?.calibration == bluetoothCloudState.profile.effectiveCalibration,
                         calibrationPending = bluetoothManagedKey?.pending == true &&
                             bluetoothManagedKey?.desired?.calibration == bluetoothCloudState.profile.effectiveCalibration,
-                        onSaveCalibration = ::requestBluetoothCalibration
+                        onSaveCalibration = ::requestBluetoothCalibration,
+                        carType = session.selectedCarType
                     )
                 }
                 bluetoothControlConfirmation?.takeIf { showBluetoothKey && !pinSetupInProgress }?.let { confirmation ->
@@ -662,17 +629,10 @@ class MainActivity : ComponentActivity() {
     private fun syncBluetoothCertificate(silent: Boolean = false) {
         if (bluetoothBackgroundRunning) {
             if (!silent) toast("请先关闭后台钥匙并等待车辆确认")
-            if (silent && straightRemoteActive) {
-                straightStatusMessage = "直进直出证书未同步：请先关闭后台钥匙后重试"
-            }
             return
         }
         if (!isBluetoothForegroundContext(requireManagement = !silent) ||
             !BleAccessPolicy.canSyncCertificate(bluetoothState.phase, bluetoothCertificateLoading)) {
-            // 直进直出抽屉依赖该证书建连，静默失败会让用户面对"长按无反应"，必须给出可见原因
-            if (silent && straightRemoteActive) {
-                straightStatusMessage = "直进直出证书未就绪，无法建立座舱连接，请稍后重试"
-            }
             return
         }
         bluetoothPermissionGeneration = null
@@ -713,9 +673,6 @@ class MainActivity : ComponentActivity() {
                     if (it != identity) bluetoothCloud.refreshMetadata()
                 }
                 bluetoothCertificate = certificate
-                if (straightRemoteActive) {
-                    bluetoothRuntime.startStraightRemote(certificate)
-                }
                 bluetoothKeyController.recordDiagnostic(BleDiagnosticEvent.CERTIFICATE_SYNCED, code = certificate.keyType)
                 updateBluetoothCertificateMessage()
                 if (silent) {
@@ -743,6 +700,67 @@ class MainActivity : ComponentActivity() {
         val existing = sessionStore.loadBluetoothKeyCertificate(accountId, targetVin)
         if (!BleAccessPolicy.isCertificateReady(existing, targetVin) && !bluetoothCertificateLoading) {
             syncBluetoothCertificate(silent = true)
+        }
+    }
+
+    private var lastChargePlanFetchEpochMs = 0L
+    private var lastChargePlanFetchVin = ""
+
+    private fun syncChargePlanFromServer(vin: String? = null, force: Boolean = false) {
+        val targetVin = vin ?: session.selectedVin
+        if (targetVin.isBlank() || !loggedIn) return
+        val now = System.currentTimeMillis()
+        if (!force && targetVin == lastChargePlanFetchVin && now - lastChargePlanFetchEpochMs < 30_000L) {
+            return
+        }
+        asyncWorker.execute {
+            runCatching {
+                val api = LeapmotorApi(session)
+                val config = api.getVehicleCommonConfig()
+                val plan = VehicleChargePlan.fromConfig(config)
+                if (plan != null) {
+                    lastChargePlanFetchEpochMs = System.currentTimeMillis()
+                    lastChargePlanFetchVin = targetVin
+                    val vehicleMask = plan.cycles?.let { ChargePlanCyclesHelper.toVehicleMask(it) } ?: "1,1,1,1,1,1,1"
+                    sessionStore.saveScheduledChargeEnabled(targetVin, plan.isEnable)
+                    plan.beginTime?.let { sessionStore.saveScheduledChargeStartTime(targetVin, it) }
+                    plan.endTime?.let { sessionStore.saveScheduledChargeEndTime(targetVin, it) }
+                    sessionStore.saveScheduledChargeCycles(targetVin, vehicleMask)
+                    sessionStore.saveScheduledChargeCirculation(targetVin, plan.circulation)
+                    sessionStore.saveScheduledChargeContinueUntilLimit(targetVin, plan.recharge)
+                    plan.percent?.let { sessionStore.saveHealthyChargeLimit(targetVin, it) }
+
+                    mainHandler.post {
+                        if (session.selectedVin == targetVin) {
+                            scheduledChargeEnabled = plan.isEnable
+                            plan.beginTime?.let { scheduledChargeStartTime = it }
+                            plan.endTime?.let { scheduledChargeEndTime = it }
+                            scheduledChargeCycles = vehicleMask
+                            scheduledChargeCirculation = plan.circulation
+                            scheduledChargeContinueUntilLimit = plan.recharge
+                            plan.percent?.let { healthyChargeLimitSoc = it }
+
+                            // 同步驱动首页充电小胶囊与车况模型实时更新
+                            status = status?.copy(
+                                chargeScheduleEnabled = plan.isEnable,
+                                chargeScheduleStart = plan.beginTime,
+                                chargeScheduleEnd = plan.endTime,
+                                chargeScheduleCycles = plan.cycles,
+                                chargeScheduleCirculation = plan.circulation,
+                                chargeScheduleRecharge = plan.recharge,
+                                chargeScheduleSocLimit = plan.percent
+                            )
+                        }
+                    }
+                }
+
+                // 顺便若蓝牙 MAC 尚未缓存，同步缓存
+                val bluetooth = config?.optJSONObject("4")
+                val mac = (bluetooth?.opt("mac") as? String)?.let { BleVehicleMetadata.normalizeAddress(it) }
+                if (!mac.isNullOrBlank() && sessionStore.loadVehicleBluetoothMac(targetVin) == null) {
+                    sessionStore.saveVehicleBluetoothMac(targetVin, mac)
+                }
+            }
         }
     }
 
@@ -804,7 +822,11 @@ class MainActivity : ComponentActivity() {
             return
         }
         val performSave = {
-            val desired = configuration.copy(calibration = bluetoothCloudState.profile.effectiveCalibration)
+            val desired = configuration
+            val calibrationChanged = configuration.calibration != bluetoothCloudState.profile.calibration
+            if (calibrationChanged) {
+                bluetoothCloud.saveCalibration(configuration.calibration) {}
+            }
             val success = bluetoothCloud.saveConfiguration(desired) {
                 bluetoothRuntime.applyConfiguration(desired)
             }
@@ -1105,7 +1127,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun updateAutoRefreshLoop() {
-        val shouldRun = activityResumed && carScreenVisible && loggedIn && (status?.isDriving == true || straightRemoteActive) && !activityDestroyed
+        val shouldRun = activityResumed && carScreenVisible && loggedIn && status?.isDriving == true && !activityDestroyed
         if (!shouldRun) {
             autoRefreshScheduled = false
             mainHandler.removeCallbacks(autoRefreshRunnable)
@@ -1121,7 +1143,7 @@ class MainActivity : ComponentActivity() {
                 autoRefreshScheduled = false
                 return
             }
-            if (status?.isDriving != true && !straightRemoteActive) {
+            if (status?.isDriving != true) {
                 autoRefreshScheduled = false
                 return
             }
@@ -1317,7 +1339,6 @@ class MainActivity : ComponentActivity() {
         signalMapDebugState = VehicleSignalMapDebugState.Idle
         loggedIn = false
         versionUpdateState = VersionUpdateState.Idle
-        vehicleOtaState = VehicleOtaState.Idle
         busy = false
         toast("已登出")
     }
@@ -1844,6 +1865,9 @@ class MainActivity : ComponentActivity() {
         sessionStore.saveVehicleConfig(session.selectedVin, vehicleConfig)
         session.selectedNickname = trimmed
         sessionStore.save(session)
+        availableVehicles = availableVehicles.map { v ->
+            if (v.vin == session.selectedVin) v.copy(nickname = trimmed) else v
+        }
         ControlWidget.refreshData(this)
         toast(if (trimmed.isEmpty()) "车辆昵称已重置" else "车辆昵称已更新为：$trimmed")
     }
@@ -1926,74 +1950,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkForVehicleOta(force: Boolean = false) {
-        val vin = session.selectedVin
-        if (vin.isBlank() || !loggedIn) return
-        val currentVehicle = availableVehicles.firstOrNull { it.vin == vin }
-        if (currentVehicle?.isSharedAccount == true) {
-            vehicleOtaState = VehicleOtaState.Error(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
-            return
-        }
-        if (!force && vehicleOtaState is VehicleOtaState.Checking) return
-        vehicleOtaState = VehicleOtaState.Checking
-        val generation = operationGeneration
-        worker.execute {
-            try {
-                val api = LeapmotorApi(session)
-                val info = api.getVehicleOtaInfo(vin)
-                runOnMain(generation) {
-                    vehicleOtaState = if (info != null) {
-                        VehicleOtaState.Success(info)
-                    } else {
-                        VehicleOtaState.Success(VehicleOtaInfo(currentVersion = "最新系统", hasNewVersion = false, status = OtaStatus.UP_TO_DATE))
-                    }
-                }
-            } catch (e: Exception) {
-                runOnMain(generation) {
-                    vehicleOtaState = VehicleOtaState.Error(e.message ?: "检查车机更新失败")
-                }
-            }
-        }
-    }
-
-    private fun downloadVehicleOta(taskId: String) {
-        if (taskId.isBlank()) return
-        val currentVehicle = availableVehicles.firstOrNull { it.vin == session.selectedVin }
-        if (currentVehicle?.isSharedAccount == true) {
-            toast(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
-            return
-        }
-        control("fotaDownload:$taskId")
-    }
-
-    private fun installVehicleOta(taskId: String, pin: String) {
-        if (taskId.isBlank()) return
-        val currentVehicle = availableVehicles.firstOrNull { it.vin == session.selectedVin }
-        if (currentVehicle?.isSharedAccount == true) {
-            toast(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
-            return
-        }
-        if (pin.length == 4) {
-            sessionStore.saveOpPassword(pin)
-            pinSaved = true
-        }
-        control("fotaInstall:$taskId")
-    }
-
-    private fun scheduleVehicleOta(taskId: String, scheduleTime: String, pin: String) {
-        if (taskId.isBlank() || scheduleTime.isBlank()) return
-        val currentVehicle = availableVehicles.firstOrNull { it.vin == session.selectedVin }
-        if (currentVehicle?.isSharedAccount == true) {
-            toast(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
-            return
-        }
-        if (pin.length == 4) {
-            sessionStore.saveOpPassword(pin)
-            pinSaved = true
-        }
-        control("fotaSchedule:$taskId:$scheduleTime")
-    }
-
     private fun openUpdatePage() {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PgyerUpdateChecker.DOWNLOAD_URL)))
@@ -2048,6 +2004,12 @@ class MainActivity : ComponentActivity() {
     // ------------------------------------------------------------- 状态查询
 
     private fun refreshStatus(silent: Boolean = false, completion: ((Boolean) -> Unit)? = null) {
+        if (!silent) {
+            optimisticTrunkState = null
+            lastTrunkActionEpochMs = 0L
+            optimisticWindowPercent = null
+            lastWindowActionEpochMs = 0L
+        }
         if (!statusRefreshInFlight.compareAndSet(false, true)) {
             statusRefreshRequested.set(true)
             if (!silent) statusRefreshRequestedVerbose.set(true)
@@ -2195,10 +2157,15 @@ class MainActivity : ComponentActivity() {
                         ClimateTelemetryMergeDecision.PRESERVE_CLIMATE ->
                             preserveOptimisticClimate(parsed, guard?.update)
                     }
-                    val winPercent = optimisticWindowPercent
-                    val trunk = optimisticTrunkState
-                    val comfortProtected = System.currentTimeMillis() - lastComfortActionEpochMs < 15_000L
-                    val fridgeProtected = System.currentTimeMillis() - lastFridgeActionEpochMs < 15_000L
+                    val nowMs = System.currentTimeMillis()
+                    val trunkProtected = nowMs - lastTrunkActionEpochMs < 15_000L
+                    val winProtected = nowMs - lastWindowActionEpochMs < 15_000L
+                    if (!trunkProtected) optimisticTrunkState = null
+                    if (!winProtected) optimisticWindowPercent = null
+                    val winPercent = if (winProtected) optimisticWindowPercent else null
+                    val trunk = if (trunkProtected) optimisticTrunkState else null
+                    val comfortProtected = nowMs - lastComfortActionEpochMs < 15_000L
+                    val fridgeProtected = nowMs - lastFridgeActionEpochMs < 15_000L
                     status = baseRefreshed.copy(
                         leftFrontWindowPercent = winPercent ?: baseRefreshed.leftFrontWindowPercent,
                         rightFrontWindowPercent = winPercent ?: baseRefreshed.rightFrontWindowPercent,
@@ -2241,6 +2208,9 @@ class MainActivity : ComponentActivity() {
 
                         // 异步静默预同步蓝牙数字钥匙凭证，保障开门控车零手动等待
                         checkAndAutoSyncBluetoothCertificate(currentVin)
+
+                        // 异步从云端同步最新预约充电计划 (commonConfig 的 config.3)
+                        syncChargePlanFromServer(currentVin)
                     }
 
                     // 车端若返回了真实充电计划 (config.3)，同步反显更新
@@ -2329,7 +2299,10 @@ class MainActivity : ComponentActivity() {
                 if (vehicles.isNotEmpty()) {
                     sessionStore.saveVehicles(vehicles)
                     runOnMain {
-                        availableVehicles = vehicles
+                        availableVehicles = vehicles.map { v ->
+                            val localNick = sessionStore.loadVehicleConfig(v.vin).nickname.trim()
+                            if (localNick.isNotBlank()) v.copy(nickname = localNick) else v
+                        }
                     }
                 }
                 val selected = vehicles.firstOrNull { it.vin == session.selectedVin } ?: vehicles.firstOrNull()
@@ -2337,10 +2310,8 @@ class MainActivity : ComponentActivity() {
                     sessionStore.save(session)
                     runOnMain {
                         val current = vehicleConfig
-                        val updatedNickname = if (current.nickname.isBlank() || current.nickname.equals(current.model, ignoreCase = true)) {
-                            selected.nickname.ifBlank { current.nickname }
-                        } else {
-                            current.nickname
+                        val updatedNickname = current.nickname.trim().ifBlank {
+                            selected.nickname.ifBlank { current.model }
                         }
                         val updatedYear = selected.year.ifBlank { current.modelYear }
                         val updatedPower = current.powerType ?: selected.powerType
@@ -2533,6 +2504,7 @@ class MainActivity : ComponentActivity() {
         refreshEnergy(force = true)
         syncVehicleImage(target.vin)
         checkAndAutoSyncBluetoothCertificate(target.vin)
+        syncChargePlanFromServer(target.vin, force = true)
         toast("已切换至 ${target.nickname.ifBlank { target.carType }}")
     }
 
@@ -3231,13 +3203,20 @@ class MainActivity : ComponentActivity() {
                 ?: m.opt("rightMirrorHeating")?.let { it.toString() != "0" }
                 ?: m.opt("rearviewMirrorHeating")?.let { it.toString() != "0" }
                 ?: m.optBool("rearWindowHeating"),
-            chargeScheduleEnabled = m.opt("chargeScheduleEnabled")?.let { it.toString() == "1" },
-            chargeScheduleStart = m.optString("chargeScheduleStart").takeIf { it.isNotBlank() },
-            chargeScheduleEnd = m.optString("chargeScheduleEnd").takeIf { it.isNotBlank() },
-            chargeScheduleCycles = m.optString("chargeScheduleCycles").takeIf { it.isNotBlank() },
-            chargeScheduleCirculation = m.opt("chargeScheduleCirculation")?.toString()?.toIntOrNull(),
-            chargeScheduleRecharge = m.opt("chargeScheduleRecharge")?.let { it.toString() == "1" },
-            chargeScheduleSocLimit = m.opt("chargesocSetting")?.toString()?.toIntOrNull(),
+            chargeScheduleEnabled = m.opt("chargeScheduleEnabled")?.let { it.toString() == "1" }
+                ?: scheduledChargeEnabled,
+            chargeScheduleStart = m.optString("chargeScheduleStart").takeIf { it.isNotBlank() }
+                ?: scheduledChargeStartTime.takeIf { it.isNotBlank() },
+            chargeScheduleEnd = m.optString("chargeScheduleEnd").takeIf { it.isNotBlank() }
+                ?: scheduledChargeEndTime.takeIf { it.isNotBlank() },
+            chargeScheduleCycles = m.optString("chargeScheduleCycles").takeIf { it.isNotBlank() }
+                ?: scheduledChargeCycles.takeIf { it.isNotBlank() },
+            chargeScheduleCirculation = m.opt("chargeScheduleCirculation")?.toString()?.toIntOrNull()
+                ?: scheduledChargeCirculation,
+            chargeScheduleRecharge = m.opt("chargeScheduleRecharge")?.let { it.toString() == "1" }
+                ?: scheduledChargeContinueUntilLimit,
+            chargeScheduleSocLimit = m.opt("chargesocSetting")?.toString()?.toIntOrNull()
+                ?: healthyChargeLimitSoc,
             chargeGunConnected = ChargeStatus.isGunConnected(m),
             roofOpeningPercent = m.opt("roofOpening")?.toString()?.toIntOrNull(),
             fridgeStatus = parseFridgeStatus(m),
@@ -3531,14 +3510,17 @@ class MainActivity : ComponentActivity() {
                 com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this)
             }
             "trunkOpen" -> {
+                lastTrunkActionEpochMs = System.currentTimeMillis()
                 optimisticTrunkState = TrunkState.OPEN
                 status = status?.copy(trunkState = TrunkState.OPEN)
             }
             "trunkClose" -> {
+                lastTrunkActionEpochMs = System.currentTimeMillis()
                 optimisticTrunkState = TrunkState.CLOSED
                 status = status?.copy(trunkState = TrunkState.CLOSED)
             }
             "windowVent" -> {
+                lastWindowActionEpochMs = System.currentTimeMillis()
                 optimisticWindowPercent = 15
                 if (session.selectedVin.isNotBlank()) sessionStore.saveLastTargetWindowPercent(session.selectedVin, 15)
                 status = status?.copy(
@@ -3550,6 +3532,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
             "windowOpen" -> {
+                lastWindowActionEpochMs = System.currentTimeMillis()
                 optimisticWindowPercent = 50
                 if (session.selectedVin.isNotBlank()) sessionStore.saveLastTargetWindowPercent(session.selectedVin, 50)
                 status = status?.copy(
@@ -3561,6 +3544,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
             "windowClose" -> {
+                lastWindowActionEpochMs = System.currentTimeMillis()
                 optimisticWindowPercent = 0
                 if (session.selectedVin.isNotBlank()) sessionStore.saveLastTargetWindowPercent(session.selectedVin, 0)
                 status = status?.copy(
@@ -3659,8 +3643,7 @@ class MainActivity : ComponentActivity() {
                 }
                 val result = api.sendControl(command, savedPin)
                 sessionStore.save(session)
-                val isInstantStraightCmd = commandName in setOf("straightForward", "straightBackward", "straightStop")
-                val shouldQueryControlResult = !isInstantStraightCmd && result.hasPollingId()
+                val shouldQueryControlResult = result.hasPollingId()
                 if (!shouldQueryControlResult) {
                     runOnMain(generation) {
                         controlFeedback = ControlFeedback(
@@ -3668,9 +3651,7 @@ class MainActivity : ComponentActivity() {
                             ControlFeedbackKind.SUCCESS
                         )
                     }
-                    if (!isInstantStraightCmd) {
-                        refreshStatusAfterControl(generation)
-                    }
+                    refreshStatusAfterControl(generation)
                     if (commandName != null && ParkingAnomalyPolicy.shouldCheck(commandName, commandAccepted = true)) {
                         scheduleParkingAnomalyCheck(generation)
                     }

@@ -228,6 +228,7 @@ import com.leapauto.app.RearSeatComfortPolicy
 import com.leapauto.app.VehicleDrivingSafetyPolicy
 import com.leapauto.app.QuickCommandExecutionPolicy
 import com.leapauto.app.QuickCommandOrderPolicy
+import com.leapauto.app.SunshadeMenuPolicy
 import com.leapauto.app.R
 import com.leapauto.app.SUPPORTED_VEHICLE_MODELS
 import com.leapauto.app.SentryModeControlPolicy
@@ -346,16 +347,12 @@ fun LeapAutoScreen(
     scheduledPreheatDays: String = "1,1,1,1,1,1,1",
     onApplyChargingSettings: (Boolean, Int, Boolean, String, String, Boolean, Int, String) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onApplyScheduledPreheat: (Boolean, String, String) -> Unit = { _, _, _ -> },
+    onRefreshChargingSettings: () -> Unit = {},
     networkDebugEnabled: Boolean = false,
     vehicleImageVersion: Int = 0,
     currentVersion: String,
     currentReleaseNotes: String,
     versionUpdateState: VersionUpdateState,
-    vehicleOtaState: com.leapauto.app.VehicleOtaState = com.leapauto.app.VehicleOtaState.Idle,
-    onCheckVehicleOta: () -> Unit = {},
-    onDownloadVehicleOta: (String) -> Unit = {},
-    onInstallVehicleOta: (String, String) -> Unit = { _, _ -> },
-    onScheduleVehicleOta: (String, String, String) -> Unit = { _, _, _ -> },
     handledUpdateVersion: String? = null,
     showAuthorSupportDialog: Boolean = false,
     showSessionExpiredDialog: Boolean = false,
@@ -403,13 +400,6 @@ fun LeapAutoScreen(
     onPowerTypeChange: (SessionStore.VehiclePowerType) -> Unit = {},
     onOpenBluetoothKey: () -> Unit = {},
     onRetryDownload3D: () -> Unit = {},
-    onStraightMove: (com.leapauto.app.bluetooth.BleStraightAction) -> Unit = {},
-    onStraightRemoteActiveChange: (Boolean) -> Unit = {},
-    straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
-    straightStatusMessage: String = "",
-    straightCanMove: Boolean = false,
-    straightLogs: List<com.leapauto.app.bluetooth.BleStraightLogEntry> = emptyList(),
-    onClearStraightLogs: () -> Unit = {},
     onFetchParkingPhoto: ((ChassisParkingPhoto?, Bitmap?) -> Unit) -> Unit = {}
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
@@ -649,7 +639,10 @@ fun LeapAutoScreen(
                 onApplyScheduledPreheat(preheatEnabled, startTime, days)
             },
             onControl = onControl,
-            onRefreshStatus = onRefresh
+            onRefreshStatus = {
+                onRefresh()
+                onRefreshChargingSettings()
+            }
         )
     }
 
@@ -885,6 +878,7 @@ fun LeapAutoScreen(
                             showClimateControl = true
                         },
                         onOpenHealthyCharging = {
+                            onRefreshChargingSettings()
                             showHealthyChargingSheet = true
                         },
                         onOpenAccount = {
@@ -906,13 +900,6 @@ fun LeapAutoScreen(
                         onApplyClimateSettings = onApplyClimateSettings,
                         onRetryDownload3D = onRetryDownload3D,
                         bluetoothState = bluetoothState,
-                        onStraightMove = onStraightMove,
-                        onStraightRemoteActiveChange = onStraightRemoteActiveChange,
-                        straightVehicleState = straightVehicleState,
-                        straightStatusMessage = straightStatusMessage,
-                        straightCanMove = straightCanMove,
-                        straightLogs = straightLogs,
-                        onClearStraightLogs = onClearStraightLogs,
                         bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled,
                         onOpenBluetoothKey = onOpenBluetoothKey
                     )
@@ -977,11 +964,6 @@ fun LeapAutoScreen(
                                 currentVersion = currentVersion,
                                 currentReleaseNotes = currentReleaseNotes,
                                 versionUpdateState = versionUpdateState,
-                                vehicleOtaState = vehicleOtaState,
-                                onCheckVehicleOta = onCheckVehicleOta,
-                                onDownloadVehicleOta = onDownloadVehicleOta,
-                                onInstallVehicleOta = onInstallVehicleOta,
-                                onScheduleVehicleOta = onScheduleVehicleOta,
                                 onCheckForUpdate = onCheckForUpdate,
                                 onOpenUpdate = onOpenUpdate,
                                 downloadUpdateProgress = downloadUpdateProgress,
@@ -1368,13 +1350,6 @@ private fun HomeContent(
     onApplyClimateSettings: (AirConditioningCommand) -> Unit = {},
     onRetryDownload3D: () -> Unit = {},
     bluetoothState: BleConnectionState = BleConnectionState(),
-    onStraightMove: (com.leapauto.app.bluetooth.BleStraightAction) -> Unit = {},
-    onStraightRemoteActiveChange: (Boolean) -> Unit = {},
-    straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
-    straightStatusMessage: String = "",
-    straightCanMove: Boolean = false,
-    straightLogs: List<com.leapauto.app.bluetooth.BleStraightLogEntry> = emptyList(),
-    onClearStraightLogs: () -> Unit = {},
     bluetoothKeyFeatureEnabled: Boolean = false,
     onOpenBluetoothKey: (() -> Unit)? = null
 ) {
@@ -1460,13 +1435,6 @@ private fun HomeContent(
                         controlFeedback = controlFeedback,
                         onDismissControlFeedback = onDismissControlFeedback,
                         bluetoothState = bluetoothState,
-                        onStraightMove = onStraightMove,
-                        onStraightRemoteActiveChange = onStraightRemoteActiveChange,
-                        straightVehicleState = straightVehicleState,
-                        straightStatusMessage = straightStatusMessage,
-                        straightCanMove = straightCanMove,
-                        straightLogs = straightLogs,
-                        onClearStraightLogs = onClearStraightLogs,
                         bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled,
                         onOpenBluetoothKey = onOpenBluetoothKey
                     )
@@ -1663,17 +1631,6 @@ private fun ControlFeedbackBanner(feedback: ControlFeedback, onDismiss: () -> Un
 }
 
 @Composable
-private fun SettingsSectionTitle(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp)
-    )
-}
-
-@Composable
 private fun MyContent(
     phone: String = "",
     pinSaved: Boolean,
@@ -1692,11 +1649,6 @@ private fun MyContent(
     currentVersion: String,
     currentReleaseNotes: String,
     versionUpdateState: VersionUpdateState,
-    vehicleOtaState: com.leapauto.app.VehicleOtaState = com.leapauto.app.VehicleOtaState.Idle,
-    onCheckVehicleOta: () -> Unit = {},
-    onDownloadVehicleOta: (String) -> Unit = {},
-    onInstallVehicleOta: (String, String) -> Unit = { _, _ -> },
-    onScheduleVehicleOta: (String, String, String) -> Unit = { _, _, _ -> },
     onCheckForUpdate: () -> Unit,
     onOpenUpdate: () -> Unit,
     downloadUpdateProgress: Int? = null,
@@ -1714,6 +1666,7 @@ private fun MyContent(
     onLogout: () -> Unit = {}
 ) {
     var showVehicleSelectorInAccount by remember { mutableStateOf(false) }
+    var showBluetoothEnableWarningDialog by remember { mutableStateOf(false) }
 
     Column(
         Modifier
@@ -1722,9 +1675,6 @@ private fun MyContent(
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // ====== 1. 座驾与互联 ======
-        SettingsSectionTitle("座驾与互联")
-
         if (availableVehicles.size > 1) {
             Surface(
                 modifier = Modifier
@@ -1777,6 +1727,27 @@ private fun MyContent(
             }
         }
 
+        // 1. 爱车主图定制
+        VehicleCustomImageCard(
+            vehicleVin = vehicleVin,
+            vehicleImageVersion = vehicleImageVersion,
+            onSelectImageUri = onSelectCustomVehicleImage,
+            onResetToDefault = onResetCustomVehicleImage
+        )
+
+        // 2. 4X2桌面小组件
+        Widget4x2ActionsCard(
+            actions = widget4x2Actions,
+            onActionsChange = onWidget4x2ActionsChange
+        )
+
+        // 3. 下拉控制中心快捷磁贴
+        QuickSettingsTileCard()
+
+        // 4. 高德地图 Web Key 配置
+        AmapWebKeyConfigCard()
+
+        // 5. 蓝牙数字钥匙
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1811,50 +1782,28 @@ private fun MyContent(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        "开启后可在主页查看蓝牙状态，并支持近场直连控锁与无感解闭锁",
+                        "近场直连控锁与智能无感钥匙",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Spacer(Modifier.width(8.dp))
-                Switch(
+                ClimateToggle(
                     checked = bluetoothKeyFeatureEnabled,
-                    onCheckedChange = onBluetoothKeyFeatureEnabledChange
+                    onCheckedChange = { target ->
+                        if (BluetoothKeyPresentation.shouldShowWarningOnToggle(target)) {
+                            showBluetoothEnableWarningDialog = true
+                        } else {
+                            onBluetoothKeyFeatureEnabledChange(false)
+                        }
+                    },
+                    contentDescription = "蓝牙数字钥匙",
+                    stateDescription = if (bluetoothKeyFeatureEnabled) "已开启" else "已关闭"
                 )
             }
         }
 
-        Spacer(Modifier.height(4.dp))
-
-        // ====== 2. 桌面与个性化 ======
-        SettingsSectionTitle("桌面与个性化")
-
-        VehicleCustomImageCard(
-            vehicleVin = vehicleVin,
-            vehicleImageVersion = vehicleImageVersion,
-            onSelectImageUri = onSelectCustomVehicleImage,
-            onResetToDefault = onResetCustomVehicleImage
-        )
-
-        Widget4x2ActionsCard(
-            actions = widget4x2Actions,
-            onActionsChange = onWidget4x2ActionsChange
-        )
-        QuickSettingsTileCard()
-
-        Spacer(Modifier.height(4.dp))
-
-        // ====== 3. 系统与服务 ======
-        SettingsSectionTitle("系统与服务")
-        val isSubAccount = availableVehicles.find { it.vin == vehicleVin }?.isSharedAccount == true
-        VehicleOtaCard(
-            state = vehicleOtaState,
-            isSubAccount = isSubAccount,
-            onCheck = onCheckVehicleOta,
-            onDownload = onDownloadVehicleOta,
-            onInstall = onInstallVehicleOta,
-            onSchedule = onScheduleVehicleOta
-        )
+        // 6. 当前版本信息与检查更新
         VersionUpdateCard(
             currentVersion = currentVersion,
             currentReleaseNotes = currentReleaseNotes,
@@ -1864,11 +1813,7 @@ private fun MyContent(
             onOpenUpdate = onOpenUpdate,
             onStartInAppUpdate = onStartInAppUpdate
         )
-        AmapWebKeyConfigCard()
 
-        Spacer(Modifier.height(10.dp))
-
-        // ====== 4. 安全登出 ======
         LogoutButtonCard(onClick = onLogout)
 
         Spacer(Modifier.height(16.dp))
@@ -1882,6 +1827,75 @@ private fun MyContent(
             onDismiss = { showVehicleSelectorInAccount = false }
         )
     }
+
+    if (showBluetoothEnableWarningDialog) {
+        BluetoothEnableWarningDialog(
+            onDismiss = { showBluetoothEnableWarningDialog = false },
+            onConfirmEnable = {
+                onBluetoothKeyFeatureEnabledChange(true)
+            }
+        )
+    }
+}
+
+@Composable
+private fun BluetoothEnableWarningDialog(
+    onDismiss: () -> Unit,
+    onConfirmEnable: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = solidDialogModifier(shape = RoundedCornerShape(24.dp)),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Text(
+                text = "蓝牙钥匙开启提示",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "若本机同时运行官方零跑 App，两端后台会争抢蓝牙信道，易导致频繁断连或感应迟钝。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 20.sp
+                )
+                Text(
+                    text = "为获得最稳定的日常体验，建议优先使用官方 App 蓝牙与手机 NFC 钥匙。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 20.sp
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text("保持关闭 (推荐)", fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = {
+                    onConfirmEnable()
+                    onDismiss()
+                }
+            ) {
+                Text("仍要开启", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    )
 }
 
 @Composable
@@ -3475,13 +3489,6 @@ fun VehicleHero(
     controlFeedback: ControlFeedback? = null,
     onDismissControlFeedback: () -> Unit = {},
     bluetoothState: BleConnectionState? = null,
-    onStraightMove: (com.leapauto.app.bluetooth.BleStraightAction) -> Unit = {},
-    onStraightRemoteActiveChange: (Boolean) -> Unit = {},
-    straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
-    straightStatusMessage: String = "",
-    straightCanMove: Boolean = false,
-    straightLogs: List<com.leapauto.app.bluetooth.BleStraightLogEntry> = emptyList(),
-    onClearStraightLogs: () -> Unit = {},
     bluetoothKeyFeatureEnabled: Boolean = false,
     onOpenBluetoothKey: (() -> Unit)? = null
 ) {
@@ -4015,8 +4022,7 @@ fun VehicleHero(
                                 }
 
                                 ChargingCenterPill(
-                                    isCharging = status?.chargeState == 1,
-                                    chargeRemainTime = status?.chargeRemainTime,
+                                    status = status,
                                     onClick = onOpenHealthyCharging
                                 )
                             }
@@ -4033,8 +4039,7 @@ fun VehicleHero(
                                     modifier = Modifier.width(110.dp).height(4.5.dp)
                                 )
                                 ChargingCenterPill(
-                                    isCharging = status?.chargeState == 1,
-                                    chargeRemainTime = status?.chargeRemainTime,
+                                    status = status,
                                     onClick = onOpenHealthyCharging
                                 )
                             }
@@ -4317,16 +4322,7 @@ fun VehicleHero(
                     onControl = onControl,
                     activeControlCommand = activeControlCommand,
                     embedded = true,
-                    onOpenHealthCheck = onOpenHealthCheck,
-                    bluetoothState = bluetoothState ?: BleConnectionState(),
-                    onStraightMove = onStraightMove,
-                    onStraightRemoteActiveChange = onStraightRemoteActiveChange,
-                    straightVehicleState = straightVehicleState,
-                    straightStatusMessage = straightStatusMessage,
-                    straightCanMove = straightCanMove,
-                    straightLogs = straightLogs,
-                    onClearStraightLogs = onClearStraightLogs,
-                    bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled
+                    onOpenHealthCheck = onOpenHealthCheck
                 )
             }
             Spacer(Modifier.height(8.dp))
@@ -4719,33 +4715,110 @@ private fun HybridRangeBreakdown(
     }
 }
 
+internal enum class ChargingPillType {
+    CHARGING,
+    CHARGED,
+    SCHEDULED_WAITING,
+    GUN_CONNECTED,
+    DEFAULT
+}
+
+internal data class ChargingPillModel(
+    val type: ChargingPillType,
+    val labelText: String,
+    val hasBoltIcon: Boolean = false
+)
+
+internal object ChargingCenterPillPresentation {
+    fun resolve(
+        chargeState: Int?,
+        chargeGunConnected: Boolean,
+        chargeRemainTime: String?,
+        chargeScheduleEnabled: Boolean?,
+        chargeScheduleStart: String?
+    ): ChargingPillModel {
+        val isGunConnected = chargeGunConnected || chargeState == 1 || chargeState == 2
+        val isCharging = chargeState == 1
+        val formattedTime = chargeRemainTime?.trim()?.takeIf { it.isNotBlank() && it != "--" }?.let { raw ->
+            raw.removePrefix("约").removeSuffix("钟")
+        }
+
+        return when {
+            // 1. 正在充电中
+            isCharging -> {
+                val label = if (formattedTime != null) "剩$formattedTime" else "充电中"
+                ChargingPillModel(ChargingPillType.CHARGING, label, hasBoltIcon = true)
+            }
+            // 2. 插枪且已充满
+            isGunConnected && (chargeState == 2 || formattedTime == "已充满") -> {
+                ChargingPillModel(ChargingPillType.CHARGED, "已充满", hasBoltIcon = false)
+            }
+            // 3. 插枪且有预约任务（开启预约且有开始时间，或车端报告预约等待）
+            isGunConnected && (chargeScheduleEnabled == true || chargeState == 4) && !chargeScheduleStart.isNullOrBlank() -> {
+                val startTime = chargeScheduleStart.trim()
+                ChargingPillModel(ChargingPillType.SCHEDULED_WAITING, "${startTime}开始充电", hasBoltIcon = false)
+            }
+            // 4. 插枪且处于预约等待（但未取到具体开始时间）
+            isGunConnected && chargeState == 4 -> {
+                ChargingPillModel(ChargingPillType.SCHEDULED_WAITING, "预约等待中", hasBoltIcon = false)
+            }
+            // 5. 仅插枪未充未预约
+            isGunConnected -> {
+                ChargingPillModel(ChargingPillType.GUN_CONNECTED, "充电枪已插", hasBoltIcon = false)
+            }
+            // 6. 未插枪默认状态
+            else -> {
+                ChargingPillModel(ChargingPillType.DEFAULT, "充电中心", hasBoltIcon = false)
+            }
+        }
+    }
+}
+
 @Composable
 private fun ChargingCenterPill(
-    isCharging: Boolean = false,
-    chargeRemainTime: String? = null,
+    status: VehicleStatus?,
     onClick: () -> Unit
 ) {
+    val pillModel = remember(
+        status?.chargeState,
+        status?.chargeGunConnected,
+        status?.chargeRemainTime,
+        status?.chargeScheduleEnabled,
+        status?.chargeScheduleStart
+    ) {
+        ChargingCenterPillPresentation.resolve(
+            chargeState = status?.chargeState,
+            chargeGunConnected = status?.chargeGunConnected == true,
+            chargeRemainTime = status?.chargeRemainTime,
+            chargeScheduleEnabled = status?.chargeScheduleEnabled,
+            chargeScheduleStart = status?.chargeScheduleStart
+        )
+    }
+
     val isDark = LocalAppDarkTheme.current
-    val borderColor = if (isCharging) {
-        MaterialTheme.statusGood.copy(alpha = 0.50f)
-    } else {
-        Color.White.copy(alpha = if (isDark) 0.20f else 0.28f)
+    val borderColor = when (pillModel.type) {
+        ChargingPillType.CHARGING -> MaterialTheme.statusGood.copy(alpha = if (isDark) 0.60f else 0.70f)
+        ChargingPillType.CHARGED -> MaterialTheme.statusGood.copy(alpha = if (isDark) 0.55f else 0.65f)
+        ChargingPillType.GUN_CONNECTED -> MaterialTheme.statusGood.copy(alpha = if (isDark) 0.45f else 0.55f)
+        ChargingPillType.SCHEDULED_WAITING,
+        ChargingPillType.DEFAULT -> if (isDark) {
+            Color.White.copy(alpha = 0.22f)
+        } else {
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
+        }
     }
-    val backgroundColor = if (isCharging) {
-        MaterialTheme.statusGood.copy(alpha = 0.12f)
-    } else {
-        Color.White.copy(alpha = if (isDark) 0.08f else 0.12f)
+    val backgroundColor = when (pillModel.type) {
+        ChargingPillType.CHARGING -> MaterialTheme.statusGood.copy(alpha = if (isDark) 0.22f else 0.16f)
+        ChargingPillType.CHARGED -> MaterialTheme.statusGood.copy(alpha = if (isDark) 0.18f else 0.14f)
+        ChargingPillType.GUN_CONNECTED -> MaterialTheme.statusGood.copy(alpha = if (isDark) 0.16f else 0.12f)
+        ChargingPillType.SCHEDULED_WAITING,
+        ChargingPillType.DEFAULT -> if (isDark) {
+            Color.White.copy(alpha = 0.10f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.60f)
+        }
     }
-
-    val formattedTime = chargeRemainTime?.trim()?.takeIf { it.isNotBlank() && it != "--" }?.let { raw ->
-        raw.removePrefix("约").removeSuffix("钟")
-    }
-
-    val labelText = when {
-        isCharging && formattedTime != null -> "剩$formattedTime"
-        isCharging -> "充电中"
-        else -> "充电中心"
-    }
+    val textColor = MaterialTheme.colorScheme.onSurface
 
     Surface(
         shape = RoundedCornerShape(percent = 50),
@@ -4759,22 +4832,32 @@ private fun ChargingCenterPill(
         Row(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 0.5.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.5.dp)
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            if (isCharging) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_widget_charging_bolt),
-                    contentDescription = "充电中",
-                    modifier = Modifier.size(10.dp),
-                    tint = MaterialTheme.statusGood
-                )
+            when {
+                pillModel.hasBoltIcon -> {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_widget_charging_bolt),
+                        contentDescription = "充电中",
+                        modifier = Modifier.size(10.dp),
+                        tint = MaterialTheme.statusGood
+                    )
+                }
+                pillModel.type == ChargingPillType.GUN_CONNECTED || pillModel.type == ChargingPillType.CHARGED -> {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.statusGood)
+                    )
+                }
             }
             Text(
-                text = labelText,
+                text = pillModel.labelText,
                 fontSize = 10.sp,
                 lineHeight = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (isCharging) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                fontWeight = FontWeight.SemiBold,
+                color = textColor
             )
         }
     }
@@ -5331,27 +5414,13 @@ private fun QuickVehicleActions(
     activeControlCommand: String? = null,
     seamless: Boolean = false,
     embedded: Boolean = false,
-    onOpenHealthCheck: () -> Unit = {},
-    bluetoothState: BleConnectionState = BleConnectionState(),
-    onStraightMove: (com.leapauto.app.bluetooth.BleStraightAction) -> Unit = {},
-    onStraightRemoteActiveChange: (Boolean) -> Unit = {},
-    straightVehicleState: com.leapauto.app.bluetooth.BleStraightVehicleState = com.leapauto.app.bluetooth.BleStraightVehicleState.WAITING,
-    straightStatusMessage: String = "",
-    straightCanMove: Boolean = false,
-    straightLogs: List<com.leapauto.app.bluetooth.BleStraightLogEntry> = emptyList(),
-    onClearStraightLogs: () -> Unit = {},
-    bluetoothKeyFeatureEnabled: Boolean = false
+    onOpenHealthCheck: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val sessionStore = remember(context) { SessionStore(context) }
     var editing by rememberSaveable { mutableStateOf(false) }
     var windowMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var sunshadeMenuExpanded by rememberSaveable { mutableStateOf(false) }
-    var showStraightRemoteSheet by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(showStraightRemoteSheet) {
-        onStraightRemoteActiveChange(showStraightRemoteSheet)
-    }
     var windowButtonTopLeft by remember { mutableStateOf(Offset.Zero) }
     var windowButtonWidth by remember { mutableStateOf(0f) }
     var windowButtonHeight by remember { mutableStateOf(0f) }
@@ -5361,7 +5430,7 @@ private fun QuickVehicleActions(
     val trunkState = status?.trunkState ?: TrunkState.UNKNOWN
     val isDrivingGear = VehicleDrivingSafetyPolicy.isDrivingGear(status?.gearStatus)
     val commandsPerPage = 5
-    val availableCommands = remember(vehicleVin, vehicleModel, status?.sentryMode, bluetoothKeyFeatureEnabled) {
+    val availableCommands = remember(vehicleVin, vehicleModel, status?.sentryMode) {
         val supportsWindowGroup = !vehicleModel.contains("T03", ignoreCase = true)
         val supportsFrunk = VehicleQuickControlCapabilities.supportsFrunk(vehicleModel)
         val windowGroup = if (supportsWindowGroup) {
@@ -5378,11 +5447,6 @@ private fun QuickVehicleActions(
             emptyList()
         }
         val extraCommands = allCommands.filterNot { it.name == "windowOpen" || it.name == "windowClose" }
-        val straightRemoteCmd = if (bluetoothKeyFeatureEnabled && com.leapauto.app.bluetooth.BleStraightProtocol.isAuthorized(vehicleVin)) {
-            listOf(Cmd("straightRemote", "直进直出", R.drawable.ic_straight_remote))
-        } else {
-            emptyList()
-        }
         listOf(
             Cmd("unlock", "解锁", R.drawable.ic_phosphor_lock_open),
             Cmd("lock", "上锁", R.drawable.ic_phosphor_lock),
@@ -5391,8 +5455,7 @@ private fun QuickVehicleActions(
             *frunkCommands.toTypedArray(),
             *extraCommands.toTypedArray(),
             Cmd("sentry", "哨兵模式", R.drawable.ic_sentry),
-            Cmd("diagnostics", "诊断", R.drawable.ic_quick_diagnostics),
-            *straightRemoteCmd.toTypedArray()
+            Cmd("diagnostics", "诊断", R.drawable.ic_quick_diagnostics)
         )
     }
     var savedOrder by remember(vehicleVin, availableCommands) { mutableStateOf<List<String>?>(null) }
@@ -5649,10 +5712,6 @@ private fun QuickVehicleActions(
                                                 when (command.name) {
                                                     "diagnostics" -> onOpenHealthCheck()
                                                     "sentry" -> onControl(SentryModeControlPolicy.commandName(status?.sentryMode))
-                                                    "straightRemote" -> {
-                                                        showStraightRemoteSheet = true
-                                                        onControl("straightActivate")
-                                                    }
                                                     else -> onControl(command.name)
                                                 }
                                             }
@@ -5851,33 +5910,27 @@ private fun QuickVehicleActions(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f))
                 ) {
                     Column {
-                        QuickMenuAction(
-                            label = "打开遮阳帘",
-                            iconRes = R.drawable.ic_phosphor_sun,
-                            onClick = {
-                                handleQuickActionClick {
-                                    sunshadeMenuExpanded = false
-                                    onControl("sunshadeOpen")
-                                }
+                        for ((index, item) in SunshadeMenuPolicy.items.withIndex()) {
+                            if (index > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .padding(horizontal = 14.dp)
+                                        .fillMaxWidth()
+                                        .height(1.dp)
+                                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                                )
                             }
-                        )
-                        Box(
-                            modifier = Modifier
-                                .padding(horizontal = 14.dp)
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
-                        )
-                        QuickMenuAction(
-                            label = "关闭遮阳帘",
-                            iconRes = R.drawable.ic_phosphor_sun,
-                            onClick = {
-                                handleQuickActionClick {
-                                    sunshadeMenuExpanded = false
-                                    onControl("sunshadeClose")
+                            QuickMenuAction(
+                                label = item.label,
+                                iconRes = item.iconRes,
+                                onClick = {
+                                    handleQuickActionClick {
+                                        sunshadeMenuExpanded = false
+                                        onControl(item.command)
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -5931,27 +5984,6 @@ private fun QuickVehicleActions(
         )
     }
 
-    if (showStraightRemoteSheet && com.leapauto.app.bluetooth.BleStraightProtocol.isAuthorized(vehicleVin)) {
-        StraightRemoteBottomSheet(
-            onDismissRequest = {
-                onStraightMove(com.leapauto.app.bluetooth.BleStraightAction.STOP)
-                onControl("straightDeactivate")
-                showStraightRemoteSheet = false
-            },
-            straightCanMove = straightCanMove,
-            bluetoothPhase = bluetoothState.phase,
-            statusText = straightStatusMessage,
-            vehicleState = straightVehicleState,
-            logs = straightLogs,
-            onClearLogs = onClearStraightLogs,
-            onStartMoving = { action ->
-                onStraightMove(action)
-            },
-            onStopMoving = {
-                onStraightMove(com.leapauto.app.bluetooth.BleStraightAction.STOP)
-            }
-        )
-    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -10340,9 +10372,11 @@ fun PowerPagerAutoPlayCard(enabled: Boolean, onEnabledChange: (Boolean) -> Unit)
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Switch(
+            ClimateToggle(
                 checked = enabled,
-                onCheckedChange = onEnabledChange
+                onCheckedChange = onEnabledChange,
+                contentDescription = "轮播卡片自动播放",
+                stateDescription = if (enabled) "已开启" else "已关闭"
             )
         }
     }

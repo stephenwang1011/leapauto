@@ -1,5 +1,6 @@
 package com.leapauto.app
 
+import com.leapauto.app.ui.CarModel3DStateHelper
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -266,6 +267,20 @@ class CarModel3DManagerTest {
     }
 
     @Test
+    fun `main activity contains optimistic trunk and window timeout guard and refresh clear`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val mainSource = File(projectDir, "app/src/main/java/com/leapauto/app/MainActivity.kt").readText()
+
+        assertTrue(mainSource.contains("lastTrunkActionEpochMs"))
+        assertTrue(mainSource.contains("lastWindowActionEpochMs"))
+        assertTrue(mainSource.contains("nowMs - lastTrunkActionEpochMs < 15_000L"))
+        assertTrue(mainSource.contains("if (!trunkProtected) optimisticTrunkState = null"))
+        assertTrue(mainSource.contains("if (!silent) {"))
+    }
+
+    @Test
     fun `car model web view script contains driving motion and lane line handling`() {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
@@ -508,5 +523,30 @@ class CarModel3DManagerTest {
         assertTrue(screenSource.contains("effectiveHomeTopPadding"))
         assertTrue(screenSource.contains("translationX = if (destination == ScreenDestination.HOME || homeAlpha > 0.05f)"))
         assertTrue(screenSource.contains("label = \"subpage-navigation\""))
+    }
+
+    @Test
+    fun `3d car model charging animation triggers only when actively charging and ignores gun connected alone`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val viewSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/CarModel3DView.kt").readText()
+
+        // 源码防回归校验：严禁使用 chargeGunConnected 直接驱动 3D 充电流光
+        assertFalse(viewSource.contains("status?.chargeGunConnected == true\n        obj.put(\"isCharging\""))
+        assertFalse(viewSource.contains("status?.chargeGunConnected == true || status?.chargeState == 1"))
+        assertTrue(viewSource.contains("CarModel3DStateHelper.isChargingAnimationActive(status)"))
+
+        // 逻辑校验：仅在 chargeState == 1 (充电中) 时播放 3D 动画
+        assertTrue(CarModel3DStateHelper.isChargingAnimationActive(1))
+
+        // 仅插枪未充电、预约充电等待、充满、故障或无状态时不播放动画
+        assertFalse(CarModel3DStateHelper.isChargingAnimationActive(0)) // 未插枪/未充电
+        assertFalse(CarModel3DStateHelper.isChargingAnimationActive(2)) // 充电完成
+        assertFalse(CarModel3DStateHelper.isChargingAnimationActive(3)) // 充电故障
+        assertFalse(CarModel3DStateHelper.isChargingAnimationActive(4)) // 预约充电等待
+        assertFalse(CarModel3DStateHelper.isChargingAnimationActive(6)) // 充电暂停
+        assertFalse(CarModel3DStateHelper.isChargingAnimationActive(null as Int?))
+        assertFalse(CarModel3DStateHelper.isChargingAnimationActive(null as VehicleStatus?))
     }
 }

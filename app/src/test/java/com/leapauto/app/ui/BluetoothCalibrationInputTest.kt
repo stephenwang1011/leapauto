@@ -1,6 +1,7 @@
 package com.leapauto.app.ui
 
 import com.leapauto.app.bluetooth.BleCalibration
+import com.leapauto.app.bluetooth.BlePassiveConfiguration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -40,5 +41,39 @@ class BluetoothCalibrationInputTest {
         assertEquals("等待车辆应用", bluetoothCalibrationVehicleStatus(applied = false, pending = true))
         assertEquals("车辆已应用", bluetoothCalibrationVehicleStatus(applied = true, pending = false))
         assertEquals("车辆尚未确认", bluetoothCalibrationVehicleStatus(applied = false, pending = false))
+    }
+
+    @Test
+    fun calibrationPresetsMapCorrectlyForStandardAndC16Vehicles() {
+        assertEquals(BleCalibration(56, 200, 4, 16), getPresetCalibration(CalibrationPreset.CLOSE, isC16 = false))
+        assertEquals(BleCalibration.DEFAULT, getPresetCalibration(CalibrationPreset.STANDARD, isC16 = false))
+        assertEquals(BleCalibration(56, 200, 11, 16), getPresetCalibration(CalibrationPreset.FAR, isC16 = false))
+
+        assertEquals(BleCalibration(69, 100, 2, 21), getPresetCalibration(CalibrationPreset.CLOSE, isC16 = true))
+        assertEquals(BleCalibration.C16_DEFAULT, getPresetCalibration(CalibrationPreset.STANDARD, isC16 = true))
+        assertEquals(BleCalibration(69, 100, 7, 21), getPresetCalibration(CalibrationPreset.FAR, isC16 = true))
+
+        assertEquals("极近感应 · 适合车门旁防误开", CalibrationPreset.CLOSE.desc)
+        assertEquals("平衡感应 · 官方平衡推荐", CalibrationPreset.STANDARD.desc)
+        assertEquals("远距感应 · 靠近提前迎宾", CalibrationPreset.FAR.desc)
+    }
+
+    @Test
+    fun configurationPreservesCalibrationWhenModelIsC16() {
+        val c16Close = getPresetCalibration(CalibrationPreset.CLOSE, isC16 = true)
+        val config = BlePassiveConfiguration(
+            enabled = true,
+            autoUnlock = true,
+            autoLock = true,
+            calibration = c16Close
+        )
+        assertEquals(69, config.calibration.distanceCalibration)
+        assertEquals(2, config.calibration.unlockCalibration)
+        val encoded = config.reconnectFields(supportsButton = true)
+        assertEquals(69.toByte(), encoded[0])
+        assertEquals(100.toByte(), encoded[1])
+        assertEquals(0.toByte(), encoded[2])
+        assertEquals(2.toByte(), encoded[3])
+        assertEquals(21.toByte(), encoded[4])
     }
 }

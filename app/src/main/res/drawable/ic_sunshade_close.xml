@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <!-- 关闭遮阳帘：月亮图标 -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M216.73,158.62a8,8,0,0,0,-8.72,-1.25A88,88,0,0,1,98.63,48a8,8,0,0,0,-9.97,-9.97A104,104,0,1,0,218,168.59A8,8,0,0,0,216.73,158.62ZM112,216a88,88,0,0,1,-80,-124.62A87.94,87.94,0,0,0,167.38,184,87.35,87.35,0,0,1,112,216Z" />
+</vector>

@@ -37,7 +37,6 @@ class BluetoothKeyController(
     private var generation = 0L
     private var gatt: BluetoothGatt? = null
     private var characteristic: BluetoothGattCharacteristic? = null
-    private var straightCharacteristic: BluetoothGattCharacteristic? = null
     private var scanCallback: ScanCallback? = null
     private val scanDevices = BleScanDeviceCache()
     private var protocolSession: BleKeySession? = null
@@ -52,8 +51,6 @@ class BluetoothKeyController(
     private val decoder = BleFrameDecoder()
     private val diagnostics = BleDiagnostics()
     private val chunks = ArrayDeque<ByteArray>()
-    private val straightChunks = ArrayDeque<ByteArray>()
-    private var straightWriteInProgress = false
     private var command = BleCommandTracker()
     private var mtu = 23
     private var writesComplete = false
@@ -230,66 +227,6 @@ class BluetoothKeyController(
         }
     }
 
-    fun straightControl(action: BleStraightAction) {
-        val session = protocolSession ?: return
-        if (state.phase != BleConnectionPhase.READY && state.phase != BleConnectionPhase.SENDING) return
-        val client = gatt ?: return
-        val target = straightCharacteristic ?: characteristic ?: return
-        val frame = BleStraightProtocol.buildControlFrame(session, action, System.currentTimeMillis() / 1_000L)
-        val chunks = BleKeyProtocol.chunks(frame, mtu, compatibilityProfile.chunkProfile)
-        recordDiagnostic(BleDiagnosticEvent.COMMAND_STARTED, action.code, extra = "直进直出物理指令: ${action.label}")
-
-        if (action == BleStraightAction.STOP) {
-            // STOP 刹停具有最高抢占优先级，立刻清空此前可能积压的前进/后退报文
-            straightChunks.clear()
-        }
-        chunks.forEach(straightChunks::addLast)
-        if (!straightWriteInProgress) {
-            writeNextStraightChunk(client, target)
-        }
-    }
-
-    fun refreshStraightServices() {
-        val client = gatt ?: return
-        if (straightCharacteristic == null) {
-            val straightService = client.getService(BleStraightProtocol.SERVICE_UUID)
-            val char = straightService?.getCharacteristic(BleStraightProtocol.CHARACTERISTIC_UUID)
-            if (char != null) {
-                straightCharacteristic = char
-                recordDiagnostic(BleDiagnosticEvent.SERVICES_DISCOVERED, extra = "已捕获并挂载直进直出专属通道")
-            } else {
-                client.discoverServices()
-            }
-        }
-    }
-
-    private fun writeNextStraightChunk(client: BluetoothGatt, target: BluetoothGattCharacteristic) {
-        if (straightChunks.isEmpty()) {
-            straightWriteInProgress = false
-            return
-        }
-        straightWriteInProgress = true
-        val chunk = straightChunks.removeFirst()
-        val type = if (target.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0)
-            BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE else BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        val accepted = if (Build.VERSION.SDK_INT >= 33) {
-            client.writeCharacteristic(target, chunk, type) == BluetoothStatusCodes.SUCCESS
-        } else {
-            @Suppress("DEPRECATION")
-            target.value = chunk
-            target.writeType = type
-            @Suppress("DEPRECATION")
-            client.writeCharacteristic(target)
-        }
-        if (!accepted || type == BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) {
-            if (accepted && straightChunks.isNotEmpty()) {
-                writeNextStraightChunk(client, target)
-            } else {
-                straightWriteInProgress = false
-            }
-        }
-    }
-
     internal fun configure(configuration: BlePassiveConfiguration, protocolMinor: Int, onConfirmed: () -> Unit) {
         check(canConfigure)
         if (!ensureCurrentSession()) return
@@ -438,15 +375,11 @@ class BluetoothKeyController(
 
         override fun onCharacteristicWrite(client: BluetoothGatt, target: BluetoothGattCharacteristic, status: Int) {
             dispatch(current, client) {
-                if (target.uuid != BleKeyProtocol.CHARACTERISTIC_UUID && target.uuid != BleStraightProtocol.CHARACTERISTIC_UUID) return@dispatch
+                if (target.uuid != BleKeyProtocol.CHARACTERISTIC_UUID) return@dispatch
                 val statusText = gattStatusLabel(status)
                 recordDiagnostic(BleDiagnosticEvent.TX_ACK, status, extra = statusText)
                 check(status == BluetoothGatt.GATT_SUCCESS)
-                if (straightWriteInProgress) {
-                    writeNextStraightChunk(client, target)
-                } else {
-                    writeNext()
-                }
+                writeNext()
             }
         }
 
@@ -454,12 +387,12 @@ class BluetoothKeyController(
         @Suppress("DEPRECATION")
         override fun onCharacteristicChanged(client: BluetoothGatt, target: BluetoothGattCharacteristic) {
             val value = target.value?.copyOf() ?: return
-            if (target.uuid == BleKeyProtocol.CHARACTERISTIC_UUID || target.uuid == BleStraightProtocol.CHARACTERISTIC_UUID) dispatch(current, client) { receive(value) }
+            if (target.uuid == BleKeyProtocol.CHARACTERISTIC_UUID) dispatch(current, client) { receive(value) }
         }
 
         override fun onCharacteristicChanged(client: BluetoothGatt, target: BluetoothGattCharacteristic, value: ByteArray) {
             val snapshot = value.copyOf()
-            if (target.uuid == BleKeyProtocol.CHARACTERISTIC_UUID || target.uuid == BleStraightProtocol.CHARACTERISTIC_UUID) dispatch(current, client) { receive(snapshot) }
+            if (target.uuid == BleKeyProtocol.CHARACTERISTIC_UUID) dispatch(current, client) { receive(snapshot) }
         }
     }
 
@@ -475,8 +408,6 @@ class BluetoothKeyController(
         check(notify || properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0)
         val descriptor = target.getDescriptor(BleKeyProtocol.CCCD_UUID) ?: return fail("设备缺少蓝牙通知通道")
         characteristic = target
-        val straightService = client.getService(BleStraightProtocol.SERVICE_UUID)
-        straightCharacteristic = straightService?.getCharacteristic(BleStraightProtocol.CHARACTERISTIC_UUID)
         check(client.setCharacteristicNotification(target, true))
         diagnostics.record(BleDiagnosticEvent.NOTIFICATIONS_REQUESTED, properties)
         update(state.copy(phase = BleConnectionPhase.SUBSCRIBING, message = "正在初始化蓝牙数据通道"))
@@ -792,7 +723,6 @@ class BluetoothKeyController(
         runCatching { client?.disconnect() }
         runCatching { client?.close() }
         characteristic = null
-        straightCharacteristic = null
         authenticationFrame = null
         fullAuthenticationFrame = null
         onReconnectCredential = {}
@@ -805,9 +735,6 @@ class BluetoothKeyController(
         protocolSession = null
         chunks.forEach { it.fill(0) }
         chunks.clear()
-        straightChunks.forEach { it.fill(0) }
-        straightChunks.clear()
-        straightWriteInProgress = false
         decoder.clear()
         authenticatedReceived = false
         configurationTracker.end()
