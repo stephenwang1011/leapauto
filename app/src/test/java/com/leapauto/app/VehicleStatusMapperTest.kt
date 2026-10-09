@@ -204,6 +204,16 @@ class VehicleStatusMapperTest {
     }
 
     @Test
+    fun pureElectricVehicleWithZeroFuelSocDoesNotDeriveFuelRange() {
+        val values = org.json.JSONObject(
+            """{"rangeMode":1,"3260":512,"3261":1920,"fuelSoc":0}"""
+        )
+
+        assertNull(VehicleStatusMapper.fuelRange(values))
+        assertEquals("512", VehicleStatusMapper.electricRange(values))
+    }
+
+    @Test
     fun remainingRangeDoesNotCrossGroupsForMissingOrUnknownMode() {
         val values = mapOf(
             "maxRange" to "630km",

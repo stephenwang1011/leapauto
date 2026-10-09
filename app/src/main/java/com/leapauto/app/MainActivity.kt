@@ -3068,16 +3068,30 @@ class MainActivity : ComponentActivity() {
             tireList.add(TireStatus(label, pressure, temperature, m.optBool(stateKey) == true))
         }
         val charge = m.opt("chargeState")
-        val resolvedPowerType = VehiclePowerTypeResolver.fromStatus(
-            m, vehicleConfig.powerType, session.selectedCarType
-        )
-        val fuelMileage = VehicleStatusMapper.fuelRange(m)?.let { "$it km" }
+        val currentVehicle = availableVehicles.firstOrNull { it.vin == session.selectedVin }
+        val currentVehiclePower = currentVehicle?.powerType
+        val carTypePower = VehiclePowerTypeResolver.fromCarType(session.selectedCarType)
+        val isExplicitPureElectric = currentVehiclePower == SessionStore.VehiclePowerType.PURE_ELECTRIC ||
+            carTypePower == SessionStore.VehiclePowerType.PURE_ELECTRIC
+
+        val resolvedPowerType = if (isExplicitPureElectric) {
+            SessionStore.VehiclePowerType.PURE_ELECTRIC
+        } else {
+            VehiclePowerTypeResolver.fromStatus(
+                m, vehicleConfig.powerType, session.selectedCarType
+            )
+        }
+        val fuelMileage = if (isExplicitPureElectric) null else VehicleStatusMapper.fuelRange(m)?.let { "$it km" }
         val electricMileage = VehicleStatusMapper.electricRange(m)?.let { "$it km" }
-        val combinedMileage = VehicleStatusMapper.combinedRange(m)?.let { "$it km" }
-        val hasFuelData = fuelMileage != null || (VehicleStatusMapper.fuelSocPercent(m) ?: 0) > 0
-        val rangeExtender = resolvedPowerType == SessionStore.VehiclePowerType.RANGE_EXTENDER || hasFuelData
-        val effectivePowerType = if (rangeExtender) SessionStore.VehiclePowerType.RANGE_EXTENDER else resolvedPowerType
-        if (rangeExtender && vehicleConfig.powerType != SessionStore.VehiclePowerType.RANGE_EXTENDER) {
+        val combinedMileage = if (isExplicitPureElectric) null else VehicleStatusMapper.combinedRange(m)?.let { "$it km" }
+        val fuelSocValue = VehicleStatusMapper.fuelSocPercent(m) ?: 0
+        val hasFuelData = !isExplicitPureElectric && (fuelMileage != null || fuelSocValue > 0)
+        val rangeExtender = !isExplicitPureElectric && (resolvedPowerType == SessionStore.VehiclePowerType.RANGE_EXTENDER || hasFuelData)
+        val effectivePowerType = if (rangeExtender) SessionStore.VehiclePowerType.RANGE_EXTENDER else SessionStore.VehiclePowerType.PURE_ELECTRIC
+        if (isExplicitPureElectric && vehicleConfig.powerType != SessionStore.VehiclePowerType.PURE_ELECTRIC) {
+            sessionStore.saveVehiclePowerType(session.selectedVin, SessionStore.VehiclePowerType.PURE_ELECTRIC)
+            vehicleConfig = vehicleConfig.copy(powerType = SessionStore.VehiclePowerType.PURE_ELECTRIC)
+        } else if (rangeExtender && vehicleConfig.powerType != SessionStore.VehiclePowerType.RANGE_EXTENDER) {
             sessionStore.saveVehiclePowerType(session.selectedVin, SessionStore.VehiclePowerType.RANGE_EXTENDER)
             vehicleConfig = vehicleConfig.copy(powerType = SessionStore.VehiclePowerType.RANGE_EXTENDER)
         }

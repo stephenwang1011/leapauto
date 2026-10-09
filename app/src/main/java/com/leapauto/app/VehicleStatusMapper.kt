@@ -96,6 +96,8 @@ object VehicleStatusMapper {
         // component; never extrapolate when the values are invalid.
         val combined = combinedRange(status)?.toBigDecimalOrNull()
         val electric = electricRange(status)?.toBigDecimalOrNull()
+        val fuelSoc = fuelSocPercent(status)
+        if (fuelSoc != null && fuelSoc <= 0) return null
         return if (combined != null && electric != null && combined >= electric) {
             combined.subtract(electric).stripTrailingZeros().toPlainString()
         } else {
