@@ -387,7 +387,14 @@ class SessionStore(context: Context) {
         val prefix = VehicleConfigStorageKeys.prefix(vin) ?: return
         appPrefs.edit()
             .putString(prefix + "power_type", if (powerType == VehiclePowerType.PURE_ELECTRIC) "pure_electric" else "range_extender")
+            .putBoolean(prefix + "power_type_confirmed", true)
             .apply()
+    }
+
+    fun isVehiclePowerTypeConfirmed(vin: String): Boolean {
+        if (vin.isBlank()) return false
+        val prefix = VehicleConfigStorageKeys.prefix(vin) ?: return false
+        return appPrefs.getBoolean(prefix + "power_type_confirmed", false)
     }
 
     fun isVehicleConfigConfirmed(vin: String): Boolean {

@@ -348,6 +348,9 @@ fun LeapAutoScreen(
     onApplyChargingSettings: (Boolean, Int, Boolean, String, String, Boolean, Int, String) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onApplyScheduledPreheat: (Boolean, String, String) -> Unit = { _, _, _ -> },
     onRefreshChargingSettings: () -> Unit = {},
+    showPowerTypeDialog: Boolean = false,
+    onConfirmPowerType: (SessionStore.VehiclePowerType) -> Unit = {},
+    onDismissPowerTypeDialog: () -> Unit = {},
     networkDebugEnabled: Boolean = false,
     vehicleImageVersion: Int = 0,
     currentVersion: String,
@@ -604,6 +607,18 @@ fun LeapAutoScreen(
                 }
             },
             onUpdate = { onStartInAppUpdate(release) }
+        )
+    }
+
+    if (showPowerTypeDialog) {
+        val detectedPowerType = vehicleConfig.powerType
+            ?: if (status?.rangeExtender == true) SessionStore.VehiclePowerType.RANGE_EXTENDER
+               else SessionStore.VehiclePowerType.PURE_ELECTRIC
+        PowerTypeConfirmationDialog(
+            vehicleName = vehicleConfig.nickname.ifBlank { vehicleDisplayModel },
+            initialPowerType = detectedPowerType,
+            onConfirm = onConfirmPowerType,
+            onDismiss = onDismissPowerTypeDialog
         )
     }
 
@@ -1744,10 +1759,16 @@ private fun MyContent(
         // 3. 下拉控制中心快捷磁贴
         QuickSettingsTileCard()
 
-        // 4. 高德地图 Web Key 配置
+        // 4. 动力模式设置卡片 (纯电 / 增程，置于高德服务上方)
+        PowerTypeConfigCard(
+            currentPowerType = vehicleConfig.powerType ?: SessionStore.VehiclePowerType.PURE_ELECTRIC,
+            onPowerTypeChange = onPowerTypeChange
+        )
+
+        // 5. 高德地图 Web Key 配置
         AmapWebKeyConfigCard()
 
-        // 5. 蓝牙数字钥匙
+        // 6. 蓝牙数字钥匙
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1896,6 +1917,157 @@ private fun BluetoothEnableWarningDialog(
             }
         }
     )
+}
+
+@Composable
+private fun PowerTypeConfirmationDialog(
+    vehicleName: String,
+    initialPowerType: SessionStore.VehiclePowerType,
+    onConfirm: (SessionStore.VehiclePowerType) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedType by remember(initialPowerType) { mutableStateOf(initialPowerType) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = solidDialogModifier(shape = RoundedCornerShape(24.dp)),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Text(
+                text = "请确认车辆动力类型",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "系统根据车况信号已自动预选，请确认您的「${vehicleName}」动力类型：",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    val isEv = selectedType == SessionStore.VehiclePowerType.PURE_ELECTRIC
+                    val isReev = selectedType == SessionStore.VehiclePowerType.RANGE_EXTENDER
+
+                    FilterChip(
+                        selected = isEv,
+                        onClick = { selectedType = SessionStore.VehiclePowerType.PURE_ELECTRIC },
+                        label = {
+                            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Text("纯电", fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+                            }
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            selectedLabelColor = MaterialTheme.colorScheme.primary
+                        ),
+                        modifier = Modifier.weight(1f).height(44.dp)
+                    )
+
+                    FilterChip(
+                        selected = isReev,
+                        onClick = { selectedType = SessionStore.VehiclePowerType.RANGE_EXTENDER },
+                        label = {
+                            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Text("增程", fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+                            }
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            selectedLabelColor = MaterialTheme.colorScheme.primary
+                        ),
+                        modifier = Modifier.weight(1f).height(44.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(selectedType) },
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text("确认并保存", fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("稍后确认", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    )
+}
+
+@Composable
+private fun PowerTypeConfigCard(
+    currentPowerType: SessionStore.VehiclePowerType,
+    onPowerTypeChange: (SessionStore.VehiclePowerType) -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = glassCardBorder(),
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "动力模式",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = if (currentPowerType == SessionStore.VehiclePowerType.RANGE_EXTENDER) "当前为：增程模式" else "当前为：纯电模式",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val isEv = currentPowerType == SessionStore.VehiclePowerType.PURE_ELECTRIC
+                val isReev = currentPowerType == SessionStore.VehiclePowerType.RANGE_EXTENDER
+
+                FilterChip(
+                    selected = isEv,
+                    onClick = { onPowerTypeChange(SessionStore.VehiclePowerType.PURE_ELECTRIC) },
+                    label = { Text("纯电", fontWeight = FontWeight.SemiBold) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        selectedLabelColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+
+                FilterChip(
+                    selected = isReev,
+                    onClick = { onPowerTypeChange(SessionStore.VehiclePowerType.RANGE_EXTENDER) },
+                    label = { Text("增程", fontWeight = FontWeight.SemiBold) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        selectedLabelColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+            }
+        }
+    }
 }
 
 @Composable

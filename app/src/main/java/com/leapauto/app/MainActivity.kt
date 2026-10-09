@@ -248,6 +248,7 @@ class MainActivity : ComponentActivity() {
     private var scheduledPreheatDays by mutableStateOf("1,1,1,1,1,1,1")
     private var signalMapDebugState by mutableStateOf<VehicleSignalMapDebugState>(VehicleSignalMapDebugState.Idle)
     private var versionUpdateState by mutableStateOf<VersionUpdateState>(VersionUpdateState.Idle)
+    private var showPowerTypeDialog by mutableStateOf(false)
     private var handledUpdateVersion by mutableStateOf<String?>(null)
     private var downloadUpdateProgress by mutableStateOf<Int?>(null)
     private var showAuthorSupportDialog by mutableStateOf(false)
@@ -377,6 +378,7 @@ class MainActivity : ComponentActivity() {
         scheduledPreheatDays = sessionStore.loadScheduledPreheatDays(session.selectedVin)
         ChargeNotificationManager.ensureChannel(this)
         ParkingAnomalyNotificationManager.ensureChannel(this)
+        checkAndPromptPowerType(session.selectedVin)
 
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
@@ -413,6 +415,12 @@ class MainActivity : ComponentActivity() {
                     showVehicleConfigConfirmationPrompt = showVehicleConfigConfirmationPrompt,
                     availableVehicles = availableVehicles,
                     onSwitchVehicle = ::switchVehicle,
+                    showPowerTypeDialog = showPowerTypeDialog,
+                    onConfirmPowerType = { powerType ->
+                        savePowerType(powerType)
+                        showPowerTypeDialog = false
+                    },
+                    onDismissPowerTypeDialog = { showPowerTypeDialog = false },
                     bluetoothState = bluetoothState,
                     bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled,
                     onBluetoothKeyFeatureEnabledChange = ::updateBluetoothKeyFeatureEnabled,
@@ -1853,10 +1861,19 @@ class MainActivity : ComponentActivity() {
     private fun savePowerType(powerType: SessionStore.VehiclePowerType) {
         sessionStore.saveVehiclePowerType(session.selectedVin, powerType)
         vehicleConfig = vehicleConfig.copy(powerType = powerType)
+        availableVehicles = availableVehicles.map { v ->
+            if (v.vin == session.selectedVin) v.copy(powerType = powerType) else v
+        }
         refreshStatus()
         ControlWidget.refreshData(this)
         CompactControlWidget.refreshData(this)
-        toast("已切换为${if (powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER) "增程" else "纯电"}动力模式")
+        toast("已切换为${if (powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER) "增程" else "纯电"}模式")
+    }
+
+    private fun checkAndPromptPowerType(vin: String) {
+        if (vin.isNotBlank() && loggedIn && !sessionStore.isVehiclePowerTypeConfirmed(vin)) {
+            showPowerTypeDialog = true
+        }
     }
 
     private fun updateVehicleNickname(newNickname: String) {
@@ -1905,6 +1922,7 @@ class MainActivity : ComponentActivity() {
         mainHandler.removeCallbacks(authorSupportPromptRunnable)
         showAuthorSupportDialog = false
         showVehicleConfigConfirmationPrompt = false
+        checkAndPromptPowerType(session.selectedVin)
         if (PostLoginPinSetupPolicy.shouldPromptPinSetup(isNewLogin = isNewLogin, pinSaved = pinSaved)) {
             pin = ""
             pinSetupErrorMessage = ""
@@ -2505,6 +2523,7 @@ class MainActivity : ComponentActivity() {
         syncVehicleImage(target.vin)
         checkAndAutoSyncBluetoothCertificate(target.vin)
         syncChargePlanFromServer(target.vin, force = true)
+        checkAndPromptPowerType(target.vin)
         toast("已切换至 ${target.nickname.ifBlank { target.carType }}")
     }
 
@@ -3068,31 +3087,31 @@ class MainActivity : ComponentActivity() {
             tireList.add(TireStatus(label, pressure, temperature, m.optBool(stateKey) == true))
         }
         val charge = m.opt("chargeState")
-        val currentVehicle = availableVehicles.firstOrNull { it.vin == session.selectedVin }
-        val currentVehiclePower = currentVehicle?.powerType
-        val carTypePower = VehiclePowerTypeResolver.fromCarType(session.selectedCarType)
-        val isExplicitPureElectric = currentVehiclePower == SessionStore.VehiclePowerType.PURE_ELECTRIC ||
-            carTypePower == SessionStore.VehiclePowerType.PURE_ELECTRIC
+        val isConfirmed = sessionStore.isVehiclePowerTypeConfirmed(session.selectedVin)
+        val configuredPower = vehicleConfig.powerType
 
-        val resolvedPowerType = if (isExplicitPureElectric) {
-            SessionStore.VehiclePowerType.PURE_ELECTRIC
-        } else {
-            VehiclePowerTypeResolver.fromStatus(
-                m, vehicleConfig.powerType, session.selectedCarType
-            )
-        }
-        val fuelMileage = if (isExplicitPureElectric) null else VehicleStatusMapper.fuelRange(m)?.let { "$it km" }
-        val electricMileage = VehicleStatusMapper.electricRange(m)?.let { "$it km" }
-        val combinedMileage = if (isExplicitPureElectric) null else VehicleStatusMapper.combinedRange(m)?.let { "$it km" }
+        // 硬件与传感器特征探测
+        val hasDirectFuelSignal = m.has("3256") || m.has("fuelRangeStandard") || m.has("3259") || m.has("fuelRangeDynamic")
         val fuelSocValue = VehicleStatusMapper.fuelSocPercent(m) ?: 0
-        val hasFuelData = !isExplicitPureElectric && (fuelMileage != null || fuelSocValue > 0)
-        val rangeExtender = !isExplicitPureElectric && (resolvedPowerType == SessionStore.VehiclePowerType.RANGE_EXTENDER || hasFuelData)
-        val effectivePowerType = if (rangeExtender) SessionStore.VehiclePowerType.RANGE_EXTENDER else SessionStore.VehiclePowerType.PURE_ELECTRIC
-        if (isExplicitPureElectric && vehicleConfig.powerType != SessionStore.VehiclePowerType.PURE_ELECTRIC) {
-            sessionStore.saveVehiclePowerType(session.selectedVin, SessionStore.VehiclePowerType.PURE_ELECTRIC)
-            vehicleConfig = vehicleConfig.copy(powerType = SessionStore.VehiclePowerType.PURE_ELECTRIC)
-        } else if (rangeExtender && vehicleConfig.powerType != SessionStore.VehiclePowerType.RANGE_EXTENDER) {
-            sessionStore.saveVehiclePowerType(session.selectedVin, SessionStore.VehiclePowerType.RANGE_EXTENDER)
+        val isCarTypeReev = session.selectedCarType.contains("增程") || session.selectedCarType.contains("REEV", ignoreCase = true)
+        val isCarTypeEv = session.selectedCarType.contains("纯电") || session.selectedCarType.contains("EV", ignoreCase = true)
+        val detectedReev = hasDirectFuelSignal || fuelSocValue > 0 || isCarTypeReev
+
+        val effectivePowerType = when {
+            configuredPower != null -> configuredPower
+            isConfirmed -> SessionStore.VehiclePowerType.PURE_ELECTRIC
+            detectedReev -> SessionStore.VehiclePowerType.RANGE_EXTENDER
+            isCarTypeEv -> SessionStore.VehiclePowerType.PURE_ELECTRIC
+            else -> SessionStore.VehiclePowerType.PURE_ELECTRIC
+        }
+
+        val rangeExtender = effectivePowerType == SessionStore.VehiclePowerType.RANGE_EXTENDER
+        val fuelMileage = if (rangeExtender) VehicleStatusMapper.fuelRange(m)?.let { "$it km" } else null
+        val electricMileage = VehicleStatusMapper.electricRange(m)?.let { "$it km" }
+        val combinedMileage = if (rangeExtender) VehicleStatusMapper.combinedRange(m)?.let { "$it km" } else null
+
+        // 尚未确认且配置为空时，根据检测结果预设配置
+        if (!isConfirmed && configuredPower == null && detectedReev) {
             vehicleConfig = vehicleConfig.copy(powerType = SessionStore.VehiclePowerType.RANGE_EXTENDER)
         }
         val displayMileage = VehicleStatusMapper.remainingRange(

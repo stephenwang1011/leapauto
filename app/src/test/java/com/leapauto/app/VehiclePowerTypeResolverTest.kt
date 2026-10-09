@@ -186,4 +186,18 @@ class VehiclePowerTypeResolverTest {
         assertEquals("-- km", CompactWidgetRangePresentationMapper.fromValues(range, null, powerType).rangeLabel)
         assertNull(null.toStatusPowerType())
     }
+
+    @Test
+    fun `configured power type strictly overrides detection for both pure electric and range extender`() {
+        val pureConfig = PURE_ELECTRIC
+        val reevConfig = RANGE_EXTENDER
+
+        // 纯电配置下绝不作为增程车处理
+        assertEquals(PURE_ELECTRIC, VehiclePowerTypeResolver.resolve(pureConfig, "C10", null, true))
+        assertEquals(PURE_ELECTRIC, VehiclePowerTypeResolver.resolve(pureConfig, "C11 REEV", null, true))
+
+        // 增程配置下绝不作为纯电处理
+        assertEquals(RANGE_EXTENDER, VehiclePowerTypeResolver.resolve(reevConfig, "C10", null, false))
+        assertEquals(RANGE_EXTENDER, VehiclePowerTypeResolver.resolve(reevConfig, "C16 EV", null, false))
+    }
 }

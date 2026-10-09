@@ -5,5 +5,5 @@ object AppReleaseInfo {
         get() = BuildConfig.VERSION_NAME
 
     // Update this text together with apkVersionName before each delivery package.
-    const val currentReleaseNotes = "1. 修复部分老款纯电车型误判为增程及虚假燃油里程问题"
+    const val currentReleaseNotes = "1. 新增首次未确认动力模式弹窗，基于硬件信号智能预选\n2. 设置页新增动力模式（纯电/增程）常驻切换卡片\n3. 彻底兼顾纯电车型单电量条与增程车型油电双续航展示"
 }
