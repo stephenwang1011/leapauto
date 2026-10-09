@@ -878,13 +878,37 @@ class ControlWidget : AppWidgetProvider() {
         internal fun resolveWidgetActionBackground(context: Context, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int =
             widgetActionBackgroundResource(darkTheme)
 
-        // 默认底层写死：智能座舱·官方山河背景风格 (SessionStore.WIDGET_BG_STYLE_LANDSCAPE，深色/浅色自适应)
-        internal fun resolveWidgetCardBackground(context: Context, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int =
-            if (darkTheme) R.drawable.widget_card_background_landscape_dark
-            else R.drawable.widget_card_background_landscape_light
+        internal fun widgetBackgroundResource(opacity: Int, darkTheme: Boolean): Int = when {
+            darkTheme && opacity == 75 -> R.drawable.widget_card_background_75_dark
+            darkTheme && opacity == 50 -> R.drawable.widget_card_background_50_dark
+            darkTheme && opacity == 25 -> R.drawable.widget_card_background_25_dark
+            darkTheme -> R.drawable.widget_card_background_dark
+            opacity == 75 -> R.drawable.widget_card_background_75_light
+            opacity == 50 -> R.drawable.widget_card_background_50_light
+            opacity == 25 -> R.drawable.widget_card_background_25_light
+            else -> R.drawable.widget_card_background_light
+        }
 
-        internal fun resolveWidgetCardBackground(context: Context, opacity: Int, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int =
-            resolveWidgetCardBackground(context, darkTheme)
+        internal fun resolveWidgetCardBackground(context: Context, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int {
+            val store = SessionStore(context)
+            val bgStyle = store.loadWidgetBackgroundStyle()
+            if (bgStyle == SessionStore.WIDGET_BG_STYLE_LANDSCAPE) {
+                return if (darkTheme) R.drawable.widget_card_background_landscape_dark
+                else R.drawable.widget_card_background_landscape_light
+            }
+            // 经典微晶风格 (SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL)
+            val opacity = store.loadWidgetOpacity()
+            return widgetBackgroundResource(opacity, darkTheme)
+        }
+
+        internal fun resolveWidgetCardBackground(context: Context, opacity: Int, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int {
+            val bgStyle = SessionStore(context).loadWidgetBackgroundStyle()
+            if (bgStyle == SessionStore.WIDGET_BG_STYLE_LANDSCAPE) {
+                return if (darkTheme) R.drawable.widget_card_background_landscape_dark
+                else R.drawable.widget_card_background_landscape_light
+            }
+            return widgetBackgroundResource(opacity, darkTheme)
+        }
 
         /** Uses the standard RemoteViews tint operation where supported, with a legacy fallback. */
         internal fun setImageTint(views: RemoteViews, viewId: Int, color: Int) {
@@ -895,7 +919,9 @@ class ControlWidget : AppWidgetProvider() {
         }
 
         private fun applyWidgetBackground(context: Context, views: RemoteViews, darkTheme: Boolean) {
-            views.setInt(R.id.widgetRoot, "setBackgroundResource", resolveWidgetCardBackground(context, darkTheme))
+            val bgRes = resolveWidgetCardBackground(context, darkTheme)
+            views.setImageViewResource(R.id.widgetBackgroundImg, bgRes)
+            views.setInt(R.id.widgetRoot, "setBackgroundResource", 0)
         }
 
         private fun applyStaticAppearance(context: Context, views: RemoteViews) {

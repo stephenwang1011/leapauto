@@ -13,4 +13,19 @@ class SessionStoreFeatureConfigTest {
         val defaultEnabled = false
         assertFalse(defaultEnabled)
     }
+
+    @Test
+    fun `widget background style constants and defaults contract`() {
+        assertEquals("widget_background_style", SessionStore.WIDGET_BACKGROUND_STYLE)
+        assertEquals(0, SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL)
+        assertEquals(1, SessionStore.WIDGET_BG_STYLE_LANDSCAPE)
+        assertEquals(SessionStore.WIDGET_BG_STYLE_LANDSCAPE, SessionStore.WIDGET_BG_STYLE_DEFAULT)
+    }
+
+    @Test
+    fun `widget opacity constants and options contract`() {
+        assertEquals("widget_opacity", SessionStore.WIDGET_OPACITY)
+        assertEquals(100, SessionStore.WIDGET_OPACITY_OPAQUE)
+        assertEquals(listOf(100, 75, 50, 25), SessionStore.WIDGET_OPACITY_OPTIONS)
+    }
 }

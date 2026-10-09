@@ -230,6 +230,8 @@ class MainActivity : ComponentActivity() {
     private var smsCountdownSeconds by mutableStateOf(0)
     private var pin by mutableStateOf("")
     private var widget4x2Actions by mutableStateOf(Widget4x2ActionPolicy.DEFAULT_ACTIONS)
+    private var widgetBackgroundStyle by mutableIntStateOf(SessionStore.WIDGET_BG_STYLE_DEFAULT)
+    private var widgetOpacity by mutableIntStateOf(SessionStore.WIDGET_OPACITY_OPAQUE)
     private var appearanceMode by mutableStateOf(AppearanceMode.SYSTEM)
     private var energyState by mutableStateOf<EnergyAnalyticsState>(EnergyAnalyticsState.Idle)
     @Volatile private var energyLastSuccessAt = 0L
@@ -361,6 +363,8 @@ class MainActivity : ComponentActivity() {
         pin = sessionStore.loadOpPassword() ?: ""
         pinSaved = pin.isNotBlank()
         widget4x2Actions = sessionStore.loadWidget4x2Actions()
+        widgetBackgroundStyle = sessionStore.loadWidgetBackgroundStyle()
+        widgetOpacity = sessionStore.loadWidgetOpacity()
         appearanceMode = AppearanceMode.SYSTEM
         if (sessionStore.loadAppearanceMode() != AppearanceMode.SYSTEM) {
             sessionStore.saveAppearanceMode(AppearanceMode.SYSTEM)
@@ -378,7 +382,9 @@ class MainActivity : ComponentActivity() {
         scheduledPreheatDays = sessionStore.loadScheduledPreheatDays(session.selectedVin)
         ChargeNotificationManager.ensureChannel(this)
         ParkingAnomalyNotificationManager.ensureChannel(this)
-        checkAndPromptPowerType(session.selectedVin)
+        if (pinSaved) {
+            checkAndPromptPowerType(session.selectedVin)
+        }
 
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
@@ -467,6 +473,10 @@ class MainActivity : ComponentActivity() {
                     onCancelPinSetup = ::cancelPinSetup,
                     widget4x2Actions = widget4x2Actions,
                     onWidget4x2ActionsChange = ::saveWidget4x2Actions,
+                    widgetBackgroundStyle = widgetBackgroundStyle,
+                    onWidgetBackgroundStyleChange = ::saveWidgetBackgroundStyle,
+                    widgetOpacity = widgetOpacity,
+                    onWidgetOpacityChange = ::saveWidgetOpacity,
                     onAppearanceModeChange = ::saveAppearanceMode,
                     onSaveVehicleConfig = ::saveVehicleConfig,
                     onUpdateNickname = ::updateVehicleNickname,
@@ -1366,6 +1376,7 @@ class MainActivity : ComponentActivity() {
         pin = ""
         toast("操控密码已保存")
         pendingAction?.invoke()
+        checkAndPromptPowerType(session.selectedVin)
         maybeShowAuthorSupportPrompt()
     }
 
@@ -1374,6 +1385,7 @@ class MainActivity : ComponentActivity() {
         pinSetupInProgress = false
         pinSetupErrorMessage = ""
         clearPendingPinProtectedAction(cancel = true)
+        checkAndPromptPowerType(session.selectedVin)
         maybeShowAuthorSupportPrompt()
     }
 
@@ -1415,6 +1427,20 @@ class MainActivity : ComponentActivity() {
         sessionStore.saveWidget4x2Actions(actions)
         widget4x2Actions = actions
         ControlWidget.refreshAppearance(this)
+    }
+
+    private fun saveWidgetBackgroundStyle(style: Int) {
+        sessionStore.saveWidgetBackgroundStyle(style)
+        widgetBackgroundStyle = style
+        ControlWidget.refreshData(this)
+        CompactControlWidget.refreshData(this)
+    }
+
+    private fun saveWidgetOpacity(opacity: Int) {
+        sessionStore.saveWidgetOpacity(opacity)
+        widgetOpacity = opacity
+        ControlWidget.refreshData(this)
+        CompactControlWidget.refreshData(this)
     }
 
     private fun clearEnergyState() {
@@ -1871,7 +1897,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkAndPromptPowerType(vin: String) {
-        if (vin.isNotBlank() && loggedIn && !sessionStore.isVehiclePowerTypeConfirmed(vin)) {
+        if (vin.isNotBlank() && loggedIn && !pinSetupInProgress && !sessionStore.isVehiclePowerTypeConfirmed(vin)) {
             showPowerTypeDialog = true
         }
     }
@@ -1922,13 +1948,13 @@ class MainActivity : ComponentActivity() {
         mainHandler.removeCallbacks(authorSupportPromptRunnable)
         showAuthorSupportDialog = false
         showVehicleConfigConfirmationPrompt = false
-        checkAndPromptPowerType(session.selectedVin)
         if (PostLoginPinSetupPolicy.shouldPromptPinSetup(isNewLogin = isNewLogin, pinSaved = pinSaved)) {
             pin = ""
             pinSetupErrorMessage = ""
             pinSetupInProgress = true
         } else {
             pinSetupInProgress = false
+            checkAndPromptPowerType(session.selectedVin)
             maybeShowAuthorSupportPrompt()
         }
     }

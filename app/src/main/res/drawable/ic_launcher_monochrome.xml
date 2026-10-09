@@ -5,30 +5,22 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- 外圈六边形 -->
+    <!-- 左翼 L 主干 -->
     <path
-        android:pathData="M54,23.5 L80.5,38.8 L80.5,69.2 L54,84.5 L27.5,69.2 L27.5,38.8 Z"
-        android:strokeWidth="2.0"
-        android:strokeLineJoin="round"
-        android:strokeColor="#FFFFFF"
-        android:fillColor="#00000000" />
-
-    <!-- 左翼 L -->
-    <path
-        android:pathData="M35,42.5 L46,36 L46,69.5 L35,76 Z"
+        android:pathData="M32.94,39.87 L45.13,32.66 L45.13,69.8 L32.94,77.0 Z"
         android:fillColor="#FFFFFF" />
     <path
-        android:pathData="M35,42.5 L46,36 L52,39.5 L41,46 Z"
+        android:pathData="M32.94,39.87 L45.13,32.66 L51.78,36.54 L39.59,43.75 Z"
         android:fillColor="#FFFFFF" />
 
-    <!-- 右翼 P -->
+    <!-- 右翼 P 晶核 -->
     <path
-        android:pathData="M54,34.5 L73,45.5 L67.5,48.5 L48.5,37.5 Z"
+        android:pathData="M54.0,31.0 L75.06,43.19 L68.96,46.52 L47.9,34.33 Z"
         android:fillColor="#FFFFFF" />
     <path
-        android:pathData="M48.5,37.5 L54,34.5 L54,76 L48.5,73 Z"
+        android:pathData="M47.9,34.33 L54.0,31.0 L54.0,77.0 L47.9,73.67 Z"
         android:fillColor="#FFFFFF" />
     <path
-        android:pathData="M54,48 L73,37 L73,61 L62,67.5 L62,56.5 L67.5,53 L67.5,43 L54,51 Z"
+        android:pathData="M54.0,45.96 L75.06,33.77 L75.06,60.37 L62.87,67.58 L62.87,55.39 L68.96,51.51 L68.96,40.42 L54.0,49.29 Z"
         android:fillColor="#FFFFFF" />
 </vector>

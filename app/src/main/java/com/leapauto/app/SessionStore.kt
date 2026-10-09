@@ -423,6 +423,24 @@ class SessionStore(context: Context) {
         ControlWidget.refreshData(appContext)
     }
 
+    fun loadWidgetBackgroundStyle(): Int =
+        appPrefs.getInt(WIDGET_BACKGROUND_STYLE, WIDGET_BG_STYLE_DEFAULT)
+
+    fun saveWidgetBackgroundStyle(style: Int) {
+        appPrefs.edit().putInt(WIDGET_BACKGROUND_STYLE, style).apply()
+        ControlWidget.refreshData(appContext)
+    }
+
+    fun loadWidgetOpacity(): Int =
+        appPrefs.getInt(WIDGET_OPACITY, WIDGET_OPACITY_OPAQUE).takeIf { it in WIDGET_OPACITY_OPTIONS }
+            ?: WIDGET_OPACITY_OPAQUE
+
+    fun saveWidgetOpacity(opacity: Int) {
+        require(opacity in WIDGET_OPACITY_OPTIONS) { "不支持的小组件透明度" }
+        appPrefs.edit().putInt(WIDGET_OPACITY, opacity).apply()
+        ControlWidget.refreshData(appContext)
+    }
+
     /** 最近一次成功同步的小组件数据，用于网络短暂失败时保留可读状态。 */
     fun saveWidgetSnapshot(vin: String, carType: String, range: String, soc: Int, updated: String) {
         saveWidgetSnapshot(
@@ -926,8 +944,13 @@ class SessionStore(context: Context) {
     }
 
     companion object {
+        val WIDGET_OPACITY_OPTIONS = listOf(100, 75, 50, 25)
+        const val WIDGET_OPACITY_OPAQUE = 100
+        const val WIDGET_OPACITY = "widget_opacity"
+        const val WIDGET_BG_STYLE_MICROCRYSTAL = 0
         const val WIDGET_BG_STYLE_LANDSCAPE = 1
         const val WIDGET_BG_STYLE_DEFAULT = WIDGET_BG_STYLE_LANDSCAPE
+        const val WIDGET_BACKGROUND_STYLE = "widget_background_style"
         const val SESSION_GENERATION = "session_generation"
         const val AUTHOR_SUPPORT_LAST_SHOWN_EPOCH_DAY = "author_support_last_shown_epoch_day"
         const val AUTHOR_SUPPORT_PROMPT_DISABLED = "author_support_prompt_disabled"

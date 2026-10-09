@@ -30,11 +30,9 @@ class CompactControlWidget : AppWidgetProvider() {
                     config,
                     snapshot?.carType ?: session.selectedCarType
                 )
-                setInt(
-                    R.id.compactWidgetRoot,
-                    "setBackgroundResource",
-                    ControlWidget.resolveWidgetCardBackground(context, darkTheme)
-                )
+                val bgRes = ControlWidget.resolveWidgetCardBackground(context, darkTheme)
+                setImageViewResource(R.id.compactWidgetBackgroundImg, bgRes)
+                setInt(R.id.compactWidgetRoot, "setBackgroundResource", 0)
                 setVehicleImage(this, appearance, session.selectedVin, context)
                 applyStaticAppearance(themeContext, this)
                 setTextViewText(R.id.txtWCTitle, ControlWidget.widgetTitle(config, appearance))
