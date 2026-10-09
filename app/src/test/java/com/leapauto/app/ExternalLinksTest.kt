@@ -14,4 +14,10 @@ class ExternalLinksTest {
     fun feedbackUrlIsAnHttpsExternalDestination() {
         assertTrue(ExternalLinks.FEEDBACK_URL.startsWith("https://"))
     }
+
+    @Test
+    fun githubRepoUrlMatchesConfiguredRepository() {
+        assertEquals("https://github.com/stephenwang1011/leapauto", ExternalLinks.GITHUB_REPO_URL)
+        assertTrue(ExternalLinks.GITHUB_REPO_URL.startsWith("https://"))
+    }
 }

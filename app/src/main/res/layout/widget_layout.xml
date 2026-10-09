@@ -6,11 +6,17 @@
     android:layout_height="match_parent"
     tools:ignore="UseAppTint">
 
+    <ImageView
+        android:id="@+id/widgetBackgroundImg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_card_background_landscape_dark" />
+
     <LinearLayout
         android:id="@+id/widgetRoot"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@drawable/widget_card_background"
         android:orientation="vertical"
         android:paddingStart="4dp"
         android:paddingTop="4dp"

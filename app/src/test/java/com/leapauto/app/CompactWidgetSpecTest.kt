@@ -235,9 +235,61 @@ class CompactWidgetSpecTest {
         val projectDir = projectDirectory()
         val controlWidget = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
 
+        assertTrue(controlWidget.contains("WIDGET_BG_STYLE_MICROCRYSTAL"))
         assertTrue(controlWidget.contains("WIDGET_BG_STYLE_LANDSCAPE"))
+        assertTrue(controlWidget.contains("widget_card_background_dark"))
+        assertTrue(controlWidget.contains("widget_card_background_light"))
         assertTrue(controlWidget.contains("widget_card_background_landscape_dark"))
         assertTrue(controlWidget.contains("widget_card_background_landscape_light"))
+    }
+
+    @Test
+    fun `settings screen provides widget background style selection card`() {
+        val projectDir = projectDirectory()
+        val screen = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+
+        assertTrue(screen.contains("WidgetBackgroundStyleCard"))
+        assertTrue(screen.contains("小组件背景风格"))
+        assertTrue(screen.contains("经典微晶"))
+        assertTrue(screen.contains("官方山河"))
+    }
+
+    @Test
+    fun `control widget maps opacity resources for microcrystal style`() {
+        val projectDir = projectDirectory()
+        val controlWidget = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
+
+        assertTrue(controlWidget.contains("widgetBackgroundResource"))
+        assertTrue(controlWidget.contains("widget_card_background_75_dark"))
+        assertTrue(controlWidget.contains("widget_card_background_50_dark"))
+        assertTrue(controlWidget.contains("widget_card_background_25_dark"))
+        assertTrue(controlWidget.contains("widget_card_background_75_light"))
+        assertTrue(controlWidget.contains("widget_card_background_50_light"))
+        assertTrue(controlWidget.contains("widget_card_background_25_light"))
+    }
+
+    @Test
+    fun `settings screen displays widget opacity card only when microcrystal style selected`() {
+        val projectDir = projectDirectory()
+        val screen = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+
+        assertTrue(screen.contains("WidgetOpacityCard"))
+        assertTrue(screen.contains("小组件透明度"))
+        assertTrue(screen.contains("widgetBackgroundStyle == SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL"))
+    }
+
+    @Test
+    fun `widget layouts provide dedicated background imageview layers for reliable theme and opacity application`() {
+        val projectDir = projectDirectory()
+        val wideLayout = File(projectDir, "app/src/main/res/layout/widget_layout.xml").readText()
+        val compactLayout = File(projectDir, "app/src/main/res/layout/widget_compact_layout.xml").readText()
+        val wideWidget = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
+        val compactWidget = File(projectDir, "app/src/main/java/com/leapauto/app/CompactControlWidget.kt").readText()
+
+        assertTrue(wideLayout.contains("android:id=\"@+id/widgetBackgroundImg\""))
+        assertTrue(compactLayout.contains("android:id=\"@+id/compactWidgetBackgroundImg\""))
+        assertTrue(wideWidget.contains("setImageViewResource(R.id.widgetBackgroundImg, bgRes)"))
+        assertTrue(compactWidget.contains("setImageViewResource(R.id.compactWidgetBackgroundImg, bgRes)"))
     }
 
     @Test

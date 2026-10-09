@@ -2,9 +2,9 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <gradient
         android:angle="315"
-        android:startColor="#42FFFFFF"
-        android:centerColor="#35F6F8FC"
-        android:endColor="#3AFFFFFF"
+        android:startColor="#33FFFFFF"
+        android:centerColor="#26F6F8FC"
+        android:endColor="#2DFFFFFF"
         android:type="linear" />
     <stroke android:width="1dp" android:color="@color/widget_card_border" />
     <corners android:radius="20dp" />

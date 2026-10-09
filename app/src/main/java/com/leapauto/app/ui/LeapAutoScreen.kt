@@ -1,6 +1,7 @@
 package com.leapauto.app.ui
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Paint
 import android.net.Uri
 import android.widget.Toast
@@ -333,6 +334,10 @@ fun LeapAutoScreen(
     onBluetoothKeyFeatureEnabledChange: (Boolean) -> Unit = {},
     widget4x2Actions: List<String> = Widget4x2ActionPolicy.DEFAULT_ACTIONS,
     onWidget4x2ActionsChange: (List<String>) -> Unit = {},
+    widgetBackgroundStyle: Int = SessionStore.WIDGET_BG_STYLE_DEFAULT,
+    onWidgetBackgroundStyleChange: (Int) -> Unit = {},
+    widgetOpacity: Int = SessionStore.WIDGET_OPACITY_OPAQUE,
+    onWidgetOpacityChange: (Int) -> Unit = {},
     appearanceMode: AppearanceMode,
     energyState: EnergyAnalyticsState = EnergyAnalyticsState.Idle,
     healthyChargeLimitSoc: Int = 80,
@@ -452,7 +457,7 @@ fun LeapAutoScreen(
         !showAuthorSupportDialog
     val hasBlockingPrompt = pinSetupInProgress ||
         showVehicleConfigConfirmationPrompt || showSessionExpiredDialog || showAuthorSupportDialog ||
-        shouldShowVersionUpdatePrompt
+        shouldShowVersionUpdatePrompt || (showPowerTypeDialog && !pinSetupInProgress)
     val closeSubpage: () -> Unit = {
         if (selectedTab == MainNavigationTabs.ACCOUNT) {
             selectedTab = MainNavigationTabs.VEHICLE
@@ -610,7 +615,7 @@ fun LeapAutoScreen(
         )
     }
 
-    if (showPowerTypeDialog) {
+    if (showPowerTypeDialog && !pinSetupInProgress) {
         val detectedPowerType = vehicleConfig.powerType
             ?: if (status?.rangeExtender == true) SessionStore.VehiclePowerType.RANGE_EXTENDER
                else SessionStore.VehiclePowerType.PURE_ELECTRIC
@@ -971,6 +976,10 @@ fun LeapAutoScreen(
                                 onCancelPinSetup = onCancelPinSetup,
                                 widget4x2Actions = widget4x2Actions,
                                 onWidget4x2ActionsChange = onWidget4x2ActionsChange,
+                                widgetBackgroundStyle = widgetBackgroundStyle,
+                                onWidgetBackgroundStyleChange = onWidgetBackgroundStyleChange,
+                                widgetOpacity = widgetOpacity,
+                                onWidgetOpacityChange = onWidgetOpacityChange,
                                 appearanceMode = appearanceMode,
                                 onAppearanceModeChange = onAppearanceModeChange,
                                 vehicleModel = vehicleModel,
@@ -1656,6 +1665,10 @@ private fun MyContent(
     onCancelPinSetup: () -> Unit,
     widget4x2Actions: List<String> = Widget4x2ActionPolicy.DEFAULT_ACTIONS,
     onWidget4x2ActionsChange: (List<String>) -> Unit = {},
+    widgetBackgroundStyle: Int = SessionStore.WIDGET_BG_STYLE_DEFAULT,
+    onWidgetBackgroundStyleChange: (Int) -> Unit = {},
+    widgetOpacity: Int = SessionStore.WIDGET_OPACITY_OPAQUE,
+    onWidgetOpacityChange: (Int) -> Unit = {},
     appearanceMode: AppearanceMode = AppearanceMode.SYSTEM,
     onAppearanceModeChange: (AppearanceMode) -> Unit = {},
     vehicleModel: String,
@@ -1756,10 +1769,24 @@ private fun MyContent(
             onActionsChange = onWidget4x2ActionsChange
         )
 
-        // 3. 下拉控制中心快捷磁贴
+        // 3. 下拉控制中心快捷开关
         QuickSettingsTileCard()
 
-        // 4. 动力模式设置卡片 (纯电 / 增程，置于高德服务上方)
+        // 4. 小组件背景风格 (经典微晶 / 官方山河)
+        WidgetBackgroundStyleCard(
+            style = widgetBackgroundStyle,
+            onStyleChange = onWidgetBackgroundStyleChange
+        )
+
+        // 4.1 小组件透明度 (仅当用户选择经典微晶皮肤时显示)
+        if (widgetBackgroundStyle == SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL) {
+            WidgetOpacityCard(
+                opacity = widgetOpacity,
+                onOpacityChange = onWidgetOpacityChange
+            )
+        }
+
+        // 5. 动力模式设置卡片 (纯电 / 增程，置于高德服务上方)
         PowerTypeConfigCard(
             currentPowerType = vehicleConfig.powerType ?: SessionStore.VehiclePowerType.PURE_ELECTRIC,
             onPowerTypeChange = onPowerTypeChange
@@ -1834,6 +1861,9 @@ private fun MyContent(
             onOpenUpdate = onOpenUpdate,
             onStartInAppUpdate = onStartInAppUpdate
         )
+
+        // 7. 开源代码仓库
+        OpenSourceCodeCard()
 
         LogoutButtonCard(onClick = onLogout)
 
@@ -2101,6 +2131,71 @@ private fun LogoutButtonCard(onClick: () -> Unit) {
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
+
+@Composable
+private fun OpenSourceCodeCard() {
+    val context = LocalContext.current
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable {
+                try {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ExternalLinks.GITHUB_REPO_URL)))
+                } catch (_: Exception) {
+                    Toast.makeText(context, "未找到可用浏览器", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = glassCardBorder(),
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(36.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_phosphor_code),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "开源代码仓库",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "本应用代码已开源 · 点击访问 GitHub 仓库",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "github.com/stephenwang1011/leapauto",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Icon(
+                painter = painterResource(R.drawable.ic_phosphor_caret_right),
+                contentDescription = "访问仓库",
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -3162,6 +3257,134 @@ private fun Widget4x2ActionsCard(
                 showDialog = false
             }
         )
+    }
+}
+
+@Composable
+private fun WidgetBackgroundStyleCard(
+    style: Int,
+    onStyleChange: (Int) -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = glassCardBorder(),
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "小组件背景风格",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = if (style == SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL) "当前为：经典微晶毛玻璃" else "当前为：官方山河天幕画卷",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val isMicrocrystal = style == SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL
+                val isLandscape = style == SessionStore.WIDGET_BG_STYLE_LANDSCAPE
+
+                FilterChip(
+                    selected = isMicrocrystal,
+                    onClick = { onStyleChange(SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL) },
+                    label = { Text("经典微晶", fontWeight = FontWeight.SemiBold) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        selectedLabelColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+
+                FilterChip(
+                    selected = isLandscape,
+                    onClick = { onStyleChange(SessionStore.WIDGET_BG_STYLE_LANDSCAPE) },
+                    label = { Text("官方山河", fontWeight = FontWeight.SemiBold) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        selectedLabelColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WidgetOpacityCard(opacity: Int, onOpacityChange: (Int) -> Unit) {
+    val options = listOf(
+        100 to "不透明",
+        75 to "微透",
+        50 to "半透",
+        25 to "全透"
+    )
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = glassCardBorder(),
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "小组件透明度",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "微晶皮肤通透度调节",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    options.firstOrNull { it.first == opacity }?.second ?: "不透明",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                options.forEachIndexed { index, option ->
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                        onClick = { onOpacityChange(option.first) },
+                        selected = opacity == option.first,
+                        colors = SegmentedButtonDefaults.colors(
+                            activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            activeBorderColor = MaterialTheme.colorScheme.primary,
+                            inactiveContainerColor = MaterialTheme.colorScheme.surface,
+                            inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        label = { Text(option.second, style = MaterialTheme.typography.labelSmall) }
+                    )
+                }
+            }
+        }
     }
 }
 
