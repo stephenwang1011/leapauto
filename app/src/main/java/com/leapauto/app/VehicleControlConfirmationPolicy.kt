@@ -57,4 +57,27 @@ object VehicleControlConfirmationPolicy {
         commandName.startsWith("trunk") ||
         commandName.startsWith("frunk") ||
         commandName.startsWith("window")
+
+    /**
+     * 同座椅加热与通风物理互斥解析：
+     * 若开启加热（level > 0），则同座椅通风自动归零；
+     * 若开启通风（level > 0），则同座椅加热自动归零。
+     */
+    data class SeatComfortState(val heating: Int, val ventilation: Int)
+
+    fun resolveSeatComfort(
+        currentHeating: Int,
+        currentVentilation: Int,
+        newHeating: Int? = null,
+        newVentilation: Int? = null
+    ): SeatComfortState {
+        var h = newHeating ?: currentHeating
+        var v = newVentilation ?: currentVentilation
+        if (newHeating != null && newHeating > 0) {
+            v = 0
+        } else if (newVentilation != null && newVentilation > 0) {
+            h = 0
+        }
+        return SeatComfortState(h, v)
+    }
 }

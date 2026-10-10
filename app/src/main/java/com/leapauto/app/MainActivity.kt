@@ -3773,42 +3773,74 @@ class MainActivity : ComponentActivity() {
                     val lvl = effectiveCmdName.removePrefix("driverSeatHeating_").toIntOrNull() ?: 0
                     lastComfortActionEpochMs = System.currentTimeMillis()
                     optimisticDriverSeatHeating = lvl
-                    status = status?.copy(driverSeatHeating = lvl)
+                    if (lvl > 0) optimisticDriverSeatVentilation = 0
+                    status = status?.copy(
+                        driverSeatHeating = lvl,
+                        driverSeatVentilation = if (lvl > 0) 0 else status?.driverSeatVentilation
+                    )
                 } else if (effectiveCmdName.startsWith("driverSeatVentilation_")) {
                     val lvl = effectiveCmdName.removePrefix("driverSeatVentilation_").toIntOrNull() ?: 0
                     lastComfortActionEpochMs = System.currentTimeMillis()
                     optimisticDriverSeatVentilation = lvl
-                    status = status?.copy(driverSeatVentilation = lvl)
+                    if (lvl > 0) optimisticDriverSeatHeating = 0
+                    status = status?.copy(
+                        driverSeatVentilation = lvl,
+                        driverSeatHeating = if (lvl > 0) 0 else status?.driverSeatHeating
+                    )
                 } else if (effectiveCmdName.startsWith("passengerSeatHeating_")) {
                     val lvl = effectiveCmdName.removePrefix("passengerSeatHeating_").toIntOrNull() ?: 0
                     lastComfortActionEpochMs = System.currentTimeMillis()
                     optimisticPassengerSeatHeating = lvl
-                    status = status?.copy(passengerSeatHeating = lvl)
+                    if (lvl > 0) optimisticPassengerSeatVentilation = 0
+                    status = status?.copy(
+                        passengerSeatHeating = lvl,
+                        passengerSeatVentilation = if (lvl > 0) 0 else status?.passengerSeatVentilation
+                    )
                 } else if (effectiveCmdName.startsWith("passengerSeatVentilation_")) {
                     val lvl = effectiveCmdName.removePrefix("passengerSeatVentilation_").toIntOrNull() ?: 0
                     lastComfortActionEpochMs = System.currentTimeMillis()
                     optimisticPassengerSeatVentilation = lvl
-                    status = status?.copy(passengerSeatVentilation = lvl)
+                    if (lvl > 0) optimisticPassengerSeatHeating = 0
+                    status = status?.copy(
+                        passengerSeatVentilation = lvl,
+                        passengerSeatHeating = if (lvl > 0) 0 else status?.passengerSeatHeating
+                    )
                 } else if (effectiveCmdName.startsWith("leftRearSeatHeating_")) {
                     val lvl = effectiveCmdName.removePrefix("leftRearSeatHeating_").toIntOrNull() ?: 0
                     lastComfortActionEpochMs = System.currentTimeMillis()
                     optimisticLeftRearSeatHeating = lvl
-                    status = status?.copy(leftRearSeatHeating = lvl)
+                    if (lvl > 0) optimisticLeftRearSeatVentilation = 0
+                    status = status?.copy(
+                        leftRearSeatHeating = lvl,
+                        leftRearSeatVentilation = if (lvl > 0) 0 else status?.leftRearSeatVentilation
+                    )
                 } else if (effectiveCmdName.startsWith("leftRearSeatVentilation_")) {
                     val lvl = effectiveCmdName.removePrefix("leftRearSeatVentilation_").toIntOrNull() ?: 0
                     lastComfortActionEpochMs = System.currentTimeMillis()
                     optimisticLeftRearSeatVentilation = lvl
-                    status = status?.copy(leftRearSeatVentilation = lvl)
+                    if (lvl > 0) optimisticLeftRearSeatHeating = 0
+                    status = status?.copy(
+                        leftRearSeatVentilation = lvl,
+                        leftRearSeatHeating = if (lvl > 0) 0 else status?.leftRearSeatHeating
+                    )
                 } else if (effectiveCmdName.startsWith("rightRearSeatHeating_")) {
                     val lvl = effectiveCmdName.removePrefix("rightRearSeatHeating_").toIntOrNull() ?: 0
                     lastComfortActionEpochMs = System.currentTimeMillis()
                     optimisticRightRearSeatHeating = lvl
-                    status = status?.copy(rightRearSeatHeating = lvl)
+                    if (lvl > 0) optimisticRightRearSeatVentilation = 0
+                    status = status?.copy(
+                        rightRearSeatHeating = lvl,
+                        rightRearSeatVentilation = if (lvl > 0) 0 else status?.rightRearSeatVentilation
+                    )
                 } else if (effectiveCmdName.startsWith("rightRearSeatVentilation_")) {
                     val lvl = effectiveCmdName.removePrefix("rightRearSeatVentilation_").toIntOrNull() ?: 0
                     lastComfortActionEpochMs = System.currentTimeMillis()
                     optimisticRightRearSeatVentilation = lvl
-                    status = status?.copy(rightRearSeatVentilation = lvl)
+                    if (lvl > 0) optimisticRightRearSeatHeating = 0
+                    status = status?.copy(
+                        rightRearSeatVentilation = lvl,
+                        rightRearSeatHeating = if (lvl > 0) 0 else status?.rightRearSeatHeating
+                    )
                 } else if (effectiveCmdName.startsWith("steeringWheelHeating_")) {
                     val lvl = effectiveCmdName.removePrefix("steeringWheelHeating_").toIntOrNull() ?: 0
                     lastComfortActionEpochMs = System.currentTimeMillis()

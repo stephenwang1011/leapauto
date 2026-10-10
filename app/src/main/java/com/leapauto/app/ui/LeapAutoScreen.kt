@@ -10244,6 +10244,7 @@ fun SeatComfortControlCard(
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             driverHeating = it
+                                            if (it) driverVent = false
                                             onControl(if (it) "driverSeatHeating_2" else "driverSeatHeating_0")
                                         }
                                     )
@@ -10258,6 +10259,7 @@ fun SeatComfortControlCard(
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             driverVent = it
+                                            if (it) driverHeating = false
                                             onControl(if (it) "driverSeatVentilation_2" else "driverSeatVentilation_0")
                                         }
                                     )
@@ -10293,6 +10295,7 @@ fun SeatComfortControlCard(
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             passengerHeating = it
+                                            if (it) passengerVent = false
                                             onControl(if (it) "passengerSeatHeating_2" else "passengerSeatHeating_0")
                                         }
                                     )
@@ -10307,6 +10310,7 @@ fun SeatComfortControlCard(
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             passengerVent = it
+                                            if (it) passengerHeating = false
                                             onControl(if (it) "passengerSeatVentilation_2" else "passengerSeatVentilation_0")
                                         }
                                     )
@@ -10350,6 +10354,7 @@ fun SeatComfortControlCard(
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             leftRearHeating = it
+                                            if (it) leftRearVent = false
                                             onControl(if (it) "leftRearSeatHeating_2" else "leftRearSeatHeating_0")
                                         }
                                     )
@@ -10364,6 +10369,7 @@ fun SeatComfortControlCard(
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             leftRearVent = it
+                                            if (it) leftRearHeating = false
                                             onControl(if (it) "leftRearSeatVentilation_2" else "leftRearSeatVentilation_0")
                                         }
                                     )
@@ -10399,6 +10405,7 @@ fun SeatComfortControlCard(
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             rightRearHeating = it
+                                            if (it) rightRearVent = false
                                             onControl(if (it) "rightRearSeatHeating_2" else "rightRearSeatHeating_0")
                                         }
                                     )
@@ -10413,6 +10420,7 @@ fun SeatComfortControlCard(
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             rightRearVent = it
+                                            if (it) rightRearHeating = false
                                             onControl(if (it) "rightRearSeatVentilation_2" else "rightRearSeatVentilation_0")
                                         }
                                     )

@@ -102,4 +102,51 @@ class VehicleControlConfirmationPolicyTest {
         assertTrue(VehicleControlConfirmationPolicy.isComfortOrHardwareCommand("fridgeOn"))
         assertFalse(VehicleControlConfirmationPolicy.isComfortOrHardwareCommand("lock"))
     }
+
+    @Test
+    fun `seat heating and ventilation are mutually exclusive on the same seat`() {
+        val initial = VehicleControlConfirmationPolicy.SeatComfortState(heating = 2, ventilation = 0)
+        assertEquals(2, initial.heating)
+        assertEquals(0, initial.ventilation)
+
+        // 打开通风 -> 加热自动归零
+        val switchedToVent = VehicleControlConfirmationPolicy.resolveSeatComfort(
+            currentHeating = initial.heating,
+            currentVentilation = initial.ventilation,
+            newVentilation = 1
+        )
+        assertEquals(0, switchedToVent.heating)
+        assertEquals(1, switchedToVent.ventilation)
+
+        // 打开加热 -> 通风自动归零
+        val switchedToHeating = VehicleControlConfirmationPolicy.resolveSeatComfort(
+            currentHeating = switchedToVent.heating,
+            currentVentilation = switchedToVent.ventilation,
+            newHeating = 2
+        )
+        assertEquals(2, switchedToHeating.heating)
+        assertEquals(0, switchedToHeating.ventilation)
+
+        // 关闭加热 -> 通风保持原样
+        val turnedOff = VehicleControlConfirmationPolicy.resolveSeatComfort(
+            currentHeating = switchedToHeating.heating,
+            currentVentilation = switchedToHeating.ventilation,
+            newHeating = 0
+        )
+        assertEquals(0, turnedOff.heating)
+        assertEquals(0, turnedOff.ventilation)
+    }
+
+    @Test
+    fun `main activity implements mutual exclusion for heating and ventilation`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(java.io.File(workingDirectory)) { it.parentFile }
+            .first { java.io.File(it, "app").isDirectory }
+        val mainActivity = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/MainActivity.kt").readText()
+
+        assertTrue(mainActivity.contains("if (lvl > 0) optimisticDriverSeatVentilation = 0"))
+        assertTrue(mainActivity.contains("if (lvl > 0) optimisticDriverSeatHeating = 0"))
+        assertTrue(mainActivity.contains("if (lvl > 0) optimisticPassengerSeatVentilation = 0"))
+        assertTrue(mainActivity.contains("if (lvl > 0) optimisticPassengerSeatHeating = 0"))
+    }
 }
