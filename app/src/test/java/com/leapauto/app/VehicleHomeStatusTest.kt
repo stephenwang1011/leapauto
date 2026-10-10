@@ -302,4 +302,40 @@ class VehicleHomeStatusTest {
         assertEquals(false, status.anyDoorOpen)
         assertEquals(TrunkState.UNKNOWN, status.trunkState)
     }
+
+    @Test
+    fun `lock button presentation accurately reports locked and unlocked states`() {
+        val lockedPresentation = VehicleHomeStatus.lockButtonPresentation(true)
+        assertEquals(false, lockedPresentation.unlockActive)
+        assertEquals(true, lockedPresentation.lockActive)
+
+        val unlockedPresentation = VehicleHomeStatus.lockButtonPresentation(false)
+        assertEquals(true, unlockedPresentation.unlockActive)
+        assertEquals(false, unlockedPresentation.lockActive)
+
+        val nullPresentation = VehicleHomeStatus.lockButtonPresentation(null)
+        assertEquals(false, nullPresentation.unlockActive)
+        assertEquals(false, nullPresentation.lockActive)
+    }
+
+    @Test
+    fun `main activity implements 15s lock anti-bounce protection and stepped polling`() {
+        val projectDir = projectDirectory()
+        val mainActivity = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/MainActivity.kt").readText()
+
+        // 15s lock protection check
+        assertTrue(mainActivity.contains("val lockProtected = nowMs - lastLockActionEpochMs < 15_000L"))
+        assertTrue(mainActivity.contains("optimisticLockState"))
+        assertTrue(mainActivity.contains("scheduleLockStatusRefreshes"))
+
+        // Stepped polling checkpoints: 1200ms, 1500ms, 2000ms, 2500ms
+        assertTrue(mainActivity.contains("listOf(1_200L, 1_500L, 2_000L, 2_500L)"))
+        assertTrue(mainActivity.contains("800L"))
+    }
+
+    private fun projectDirectory(): java.io.File {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        return generateSequence(java.io.File(workingDirectory)) { it.parentFile }
+            .first { java.io.File(it, "app").isDirectory }
+    }
 }
