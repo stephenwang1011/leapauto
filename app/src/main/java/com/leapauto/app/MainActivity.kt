@@ -2254,6 +2254,34 @@ class MainActivity : ComponentActivity() {
                     val trunk = if (trunkProtected) optimisticTrunkState else null
                     val comfortProtected = nowMs - lastComfortActionEpochMs < 15_000L
                     val fridgeProtected = nowMs - lastFridgeActionEpochMs < 15_000L
+                    if (!comfortProtected) {
+                        optimisticDriverSeatHeating = null
+                        optimisticDriverSeatVentilation = null
+                        optimisticPassengerSeatHeating = null
+                        optimisticPassengerSeatVentilation = null
+                        optimisticLeftRearSeatHeating = null
+                        optimisticLeftRearSeatVentilation = null
+                        optimisticRightRearSeatHeating = null
+                        optimisticRightRearSeatVentilation = null
+                        optimisticSteeringWheelHeating = null
+                        optimisticRearviewMirrorHeating = null
+                    } else {
+                        if (optimisticDriverSeatHeating != null && parsed.driverSeatHeating == optimisticDriverSeatHeating) optimisticDriverSeatHeating = null
+                        if (optimisticDriverSeatVentilation != null && parsed.driverSeatVentilation == optimisticDriverSeatVentilation) optimisticDriverSeatVentilation = null
+                        if (optimisticPassengerSeatHeating != null && parsed.passengerSeatHeating == optimisticPassengerSeatHeating) optimisticPassengerSeatHeating = null
+                        if (optimisticPassengerSeatVentilation != null && parsed.passengerSeatVentilation == optimisticPassengerSeatVentilation) optimisticPassengerSeatVentilation = null
+                        if (optimisticLeftRearSeatHeating != null && parsed.leftRearSeatHeating == optimisticLeftRearSeatHeating) optimisticLeftRearSeatHeating = null
+                        if (optimisticLeftRearSeatVentilation != null && parsed.leftRearSeatVentilation == optimisticLeftRearSeatVentilation) optimisticLeftRearSeatVentilation = null
+                        if (optimisticRightRearSeatHeating != null && parsed.rightRearSeatHeating == optimisticRightRearSeatHeating) optimisticRightRearSeatHeating = null
+                        if (optimisticRightRearSeatVentilation != null && parsed.rightRearSeatVentilation == optimisticRightRearSeatVentilation) optimisticRightRearSeatVentilation = null
+                        if (optimisticSteeringWheelHeating != null && parsed.steeringWheelHeating == optimisticSteeringWheelHeating) optimisticSteeringWheelHeating = null
+                        if (optimisticRearviewMirrorHeating != null && parsed.rearviewMirrorHeating == optimisticRearviewMirrorHeating) optimisticRearviewMirrorHeating = null
+                    }
+                    if (!fridgeProtected) {
+                        optimisticFridgeStatus = null
+                    } else if (optimisticFridgeStatus != null && parsed.fridgeStatus?.enabled == optimisticFridgeStatus?.enabled) {
+                        optimisticFridgeStatus = null
+                    }
                     status = baseRefreshed.copy(
                         locked = effectiveLock,
                         leftFrontWindowPercent = winPercent ?: baseRefreshed.leftFrontWindowPercent,
