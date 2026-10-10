@@ -143,10 +143,12 @@ class ControlService : Service() {
                                 LeapmotorApi(session).uploadBluetoothRecord(action)
                             } catch (_: Exception) {}
                         }.start()
-                        // 1.2 秒对齐官方实车信号刷新，拉取车身 1298 物理门锁信号完成闭环
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            ControlWidget.enqueueCommandSync(appContext)
-                        }, 1200L)
+                        // 阶梯轮询 (1.2s ➔ 2.0s ➔ 2.5s) 拉取车身 1298 物理门锁信号完成闭环
+                        listOf(1200L, 2000L, 2500L).forEach { delayMs ->
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                ControlWidget.enqueueCommandSync(appContext)
+                            }, delayMs)
+                        }
                         if (isLock) {
                             Thread {
                                 try {
@@ -242,6 +244,9 @@ class ControlService : Service() {
                     store.updateWidgetWindowState(session.selectedVin, windowOpen = false)
                 } else if (effectiveCommand == "windowOpen" || effectiveCommand == "windowVent") {
                     store.updateWidgetWindowState(session.selectedVin, windowOpen = true)
+                }
+                if (confirmedLockedState != null || effectiveCommand.startsWith("window") || effectiveCommand.startsWith("trunk")) {
+                    ControlWidget.enqueueCommandSync(this)
                 }
                 ControlWidget.showControlStatus(this, text, confirmedAcState, locked = confirmedLockedState)
                 notifyResult(text)

@@ -327,9 +327,10 @@ class VehicleHomeStatusTest {
         assertTrue(mainActivity.contains("val lockProtected = nowMs - lastLockActionEpochMs < 15_000L"))
         assertTrue(mainActivity.contains("optimisticLockState"))
         assertTrue(mainActivity.contains("scheduleLockStatusRefreshes"))
+        assertTrue(mainActivity.contains("scheduleControlStatusRefreshes"))
 
-        // Stepped polling checkpoints: 1200ms, 1500ms, 2000ms, 2500ms
-        assertTrue(mainActivity.contains("listOf(1_200L, 1_500L, 2_000L, 2_500L)"))
+        // Stepped polling checkpoints and 800ms tactile delay
+        assertTrue(mainActivity.contains("telemetryRefreshScheduleMs"))
         assertTrue(mainActivity.contains("800L"))
     }
 

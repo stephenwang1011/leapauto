@@ -963,17 +963,15 @@ class MainActivity : ComponentActivity() {
         bluetoothKeyController.control(action)
 
         // 800ms 模拟物理机械动作即刻响应状态翻转，并开启 15s 乐观防回弹保护
-        mainHandler.postDelayed({
-            if (loggedIn && !activityDestroyed) {
-                lastLockActionEpochMs = System.currentTimeMillis()
-                optimisticLockState = isLock
-                status = status?.copy(locked = isLock)
-                sessionStore.updateWidgetLockState(session.selectedVin, locked = isLock)
-                com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this@MainActivity)
-                ControlWidget.refreshData(this@MainActivity)
-                CompactControlWidget.refreshData(this@MainActivity)
-            }
-        }, 800L)
+        postOptimisticResponse(800L) {
+            lastLockActionEpochMs = System.currentTimeMillis()
+            optimisticLockState = isLock
+            status = status?.copy(locked = isLock)
+            sessionStore.updateWidgetLockState(session.selectedVin, locked = isLock)
+            com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this@MainActivity)
+            ControlWidget.refreshData(this@MainActivity)
+            CompactControlWidget.refreshData(this@MainActivity)
+        }
 
         // 1.2s ➔ 1.5s ➔ 2.0s ➔ 2.5s 阶梯轮询，实车信号达成即刻早退闭环
         scheduleLockStatusRefreshes(isLock)
@@ -1057,6 +1055,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         clearBluetoothState(closePage = true, endSession = false)
         activityDestroyed = true
+        cancelPendingControlStatusRefreshes()
         NetworkDebugController.disableAndClear()
         operationGeneration += 1L
         worker.shutdownNow()
@@ -1333,6 +1332,13 @@ class MainActivity : ComponentActivity() {
     private fun logout() {
         clearBluetoothState(closePage = true)
         mainHandler.removeCallbacks(authorSupportPromptRunnable)
+        cancelPendingControlStatusRefreshes()
+        optimisticLockState = null
+        lastLockActionEpochMs = 0L
+        optimisticTrunkState = null
+        lastTrunkActionEpochMs = 0L
+        optimisticWindowPercent = null
+        lastWindowActionEpochMs = 0L
         clearPendingPinProtectedAction(cancel = true)
         ErrorLogs.repository.clear()
         energyCacheStore.clearAll()
@@ -2224,7 +2230,24 @@ class MainActivity : ComponentActivity() {
                     if (lockProtected && optimisticLockState != null && parsed.locked == optimisticLockState) {
                         optimisticLockState = null
                         lastLockActionEpochMs = 0L
-                        cancelPendingLockStatusRefreshes()
+                        cancelPendingControlStatusRefreshes()
+                    }
+                    if (trunkProtected && optimisticTrunkState != null && parsed.trunkState == optimisticTrunkState) {
+                        optimisticTrunkState = null
+                        lastTrunkActionEpochMs = 0L
+                        cancelPendingControlStatusRefreshes()
+                    }
+                    if (winProtected && optimisticWindowPercent != null) {
+                        val isAllClosed = parsed.openWindows.isEmpty() && (parsed.leftFrontWindowPercent ?: 0) == 0
+                        if (optimisticWindowPercent == 0 && isAllClosed) {
+                            optimisticWindowPercent = null
+                            lastWindowActionEpochMs = 0L
+                            cancelPendingControlStatusRefreshes()
+                        } else if (optimisticWindowPercent != null && (optimisticWindowPercent ?: 0) > 0 && parsed.openWindows.isNotEmpty()) {
+                            optimisticWindowPercent = null
+                            lastWindowActionEpochMs = 0L
+                            cancelPendingControlStatusRefreshes()
+                        }
                     }
                     val effectiveLock = if (lockProtected && optimisticLockState != null) optimisticLockState else parsed.locked
                     val winPercent = if (winProtected) optimisticWindowPercent else null
@@ -2628,34 +2651,81 @@ class MainActivity : ComponentActivity() {
         }, POST_CONTROL_STATUS_REFRESH_DELAY_MS)
     }
 
-    private fun cancelPendingLockStatusRefreshes() {
+    private val controlStatusRefreshRunnables = mutableListOf<Runnable>()
+    private var pendingOptimisticResponseRunnable: Runnable? = null
+
+    private fun cancelPendingOptimisticResponse() {
+        pendingOptimisticResponseRunnable?.let { mainHandler.removeCallbacks(it) }
+        pendingOptimisticResponseRunnable = null
+    }
+
+    private fun postOptimisticResponse(delayMs: Long, action: () -> Unit) {
+        cancelPendingOptimisticResponse()
+        val r = Runnable {
+            pendingOptimisticResponseRunnable = null
+            if (loggedIn && !activityDestroyed) {
+                action()
+            }
+        }
+        pendingOptimisticResponseRunnable = r
+        mainHandler.postDelayed(r, delayMs)
+    }
+
+    private fun cancelPendingControlStatusRefreshes() {
+        cancelPendingOptimisticResponse()
+        controlStatusRefreshRunnables.forEach { mainHandler.removeCallbacks(it) }
+        controlStatusRefreshRunnables.clear()
         lockStatusRefreshRunnables.forEach { mainHandler.removeCallbacks(it) }
         lockStatusRefreshRunnables.clear()
     }
 
-    /** 车门锁专属极速阶梯早退轮询时序：1.2s ➔ 1.5s ➔ 2.0s ➔ 2.5s，实车信号达成即刻早退闭环 */
-    private fun scheduleLockStatusRefreshes(targetLock: Boolean) {
-        cancelPendingLockStatusRefreshes()
-        val checkpoints = listOf(1_200L, 1_500L, 2_000L, 2_500L)
+    private fun cancelPendingLockStatusRefreshes() = cancelPendingControlStatusRefreshes()
+
+    private fun isControlConfirmed(commandName: String): Boolean = when {
+        commandName == "lock" -> optimisticLockState == null && status?.locked == true
+        commandName == "unlock" -> optimisticLockState == null && status?.locked == false
+        commandName == "trunkOpen" -> optimisticTrunkState == null && status?.trunkState == TrunkState.OPEN
+        commandName == "trunkClose" -> optimisticTrunkState == null && status?.trunkState == TrunkState.CLOSED
+        commandName == "windowClose" -> optimisticWindowPercent == null && (status?.openWindows.isNullOrEmpty())
+        commandName == "windowVent" || commandName == "windowOpen" -> optimisticWindowPercent == null
+        commandName.startsWith("driverSeatHeating_") -> optimisticDriverSeatHeating == null
+        commandName.startsWith("driverSeatVentilation_") -> optimisticDriverSeatVentilation == null
+        commandName.startsWith("passengerSeatHeating_") -> optimisticPassengerSeatHeating == null
+        commandName.startsWith("passengerSeatVentilation_") -> optimisticPassengerSeatVentilation == null
+        commandName.startsWith("steeringWheelHeating") -> optimisticSteeringWheelHeating == null
+        commandName.startsWith("rearviewMirrorHeating") -> optimisticRearviewMirrorHeating == null
+        commandName.startsWith("fridge") -> optimisticFridgeStatus == null
+        else -> false
+    }
+
+    /** 统一整车控车极速阶梯早退轮询：实车信号达成即刻早退闭环 */
+    private fun scheduleControlStatusRefreshes(commandName: String) {
+        cancelPendingControlStatusRefreshes()
+        val checkpoints = VehicleControlConfirmationPolicy.telemetryRefreshScheduleMs(commandName)
         checkpoints.forEach { delayMs ->
             val runnable = object : Runnable {
                 override fun run() {
                     if (activityDestroyed || !loggedIn) return
                     // 智能早退：若实车信号已与目标一致，提前终止后续轮询
-                    if (status?.locked == targetLock && optimisticLockState == null) {
-                        cancelPendingLockStatusRefreshes()
+                    if (isControlConfirmed(commandName)) {
+                        cancelPendingControlStatusRefreshes()
                         return
                     }
                     refreshStatus(silent = true) { _ ->
-                        if (status?.locked == targetLock) {
-                            cancelPendingLockStatusRefreshes()
+                        if (isControlConfirmed(commandName)) {
+                            cancelPendingControlStatusRefreshes()
                         }
                     }
                 }
             }
-            lockStatusRefreshRunnables.add(runnable)
+            controlStatusRefreshRunnables.add(runnable)
             mainHandler.postDelayed(runnable, delayMs)
         }
+    }
+
+    /** 车门锁专属极速阶梯早退轮询时序：1.2s ➔ 1.5s ➔ 2.0s ➔ 2.5s，实车信号达成即刻早退闭环 */
+    private fun scheduleLockStatusRefreshes(targetLock: Boolean) {
+        scheduleControlStatusRefreshes(if (targetLock) "lock" else "unlock")
     }
 
     private fun quickAc(value: Int, requestId: Long) {
@@ -3611,76 +3681,92 @@ class MainActivity : ComponentActivity() {
         val preControlStatus = status
         when (effectiveCmdName) {
             "lock" -> {
-                mainHandler.postDelayed({
-                    if (loggedIn && !activityDestroyed) {
-                        lastLockActionEpochMs = System.currentTimeMillis()
-                        optimisticLockState = true
-                        status = status?.copy(locked = true)
-                        sessionStore.updateWidgetLockState(session.selectedVin, locked = true)
-                        com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this@MainActivity)
-                        ControlWidget.refreshData(this@MainActivity)
-                        CompactControlWidget.refreshData(this@MainActivity)
-                    }
-                }, 800L)
+                postOptimisticResponse(800L) {
+                    lastLockActionEpochMs = System.currentTimeMillis()
+                    optimisticLockState = true
+                    status = status?.copy(locked = true)
+                    sessionStore.updateWidgetLockState(session.selectedVin, locked = true)
+                    com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this@MainActivity)
+                    ControlWidget.refreshData(this@MainActivity)
+                    CompactControlWidget.refreshData(this@MainActivity)
+                }
             }
             "unlock" -> {
-                mainHandler.postDelayed({
-                    if (loggedIn && !activityDestroyed) {
-                        lastLockActionEpochMs = System.currentTimeMillis()
-                        optimisticLockState = false
-                        status = status?.copy(locked = false)
-                        sessionStore.updateWidgetLockState(session.selectedVin, locked = false)
-                        com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this@MainActivity)
-                        ControlWidget.refreshData(this@MainActivity)
-                        CompactControlWidget.refreshData(this@MainActivity)
-                    }
-                }, 800L)
+                postOptimisticResponse(800L) {
+                    lastLockActionEpochMs = System.currentTimeMillis()
+                    optimisticLockState = false
+                    status = status?.copy(locked = false)
+                    sessionStore.updateWidgetLockState(session.selectedVin, locked = false)
+                    com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this@MainActivity)
+                    ControlWidget.refreshData(this@MainActivity)
+                    CompactControlWidget.refreshData(this@MainActivity)
+                }
             }
             "trunkOpen" -> {
-                lastTrunkActionEpochMs = System.currentTimeMillis()
-                optimisticTrunkState = TrunkState.OPEN
-                status = status?.copy(trunkState = TrunkState.OPEN)
+                postOptimisticResponse(800L) {
+                    lastTrunkActionEpochMs = System.currentTimeMillis()
+                    optimisticTrunkState = TrunkState.OPEN
+                    status = status?.copy(trunkState = TrunkState.OPEN)
+                    ControlWidget.refreshData(this@MainActivity)
+                    CompactControlWidget.refreshData(this@MainActivity)
+                }
             }
             "trunkClose" -> {
-                lastTrunkActionEpochMs = System.currentTimeMillis()
-                optimisticTrunkState = TrunkState.CLOSED
-                status = status?.copy(trunkState = TrunkState.CLOSED)
+                postOptimisticResponse(800L) {
+                    lastTrunkActionEpochMs = System.currentTimeMillis()
+                    optimisticTrunkState = TrunkState.CLOSED
+                    status = status?.copy(trunkState = TrunkState.CLOSED)
+                    ControlWidget.refreshData(this@MainActivity)
+                    CompactControlWidget.refreshData(this@MainActivity)
+                }
             }
             "windowVent" -> {
-                lastWindowActionEpochMs = System.currentTimeMillis()
-                optimisticWindowPercent = 15
-                if (session.selectedVin.isNotBlank()) sessionStore.saveLastTargetWindowPercent(session.selectedVin, 15)
-                status = status?.copy(
-                    leftFrontWindowPercent = 15,
-                    rightFrontWindowPercent = 15,
-                    leftRearWindowPercent = 15,
-                    rightRearWindowPercent = 15,
-                    openWindows = listOf("左前", "右前", "左后", "右后")
-                )
+                postOptimisticResponse(500L) {
+                    lastWindowActionEpochMs = System.currentTimeMillis()
+                    optimisticWindowPercent = 15
+                    if (session.selectedVin.isNotBlank()) sessionStore.saveLastTargetWindowPercent(session.selectedVin, 15)
+                    status = status?.copy(
+                        leftFrontWindowPercent = 15,
+                        rightFrontWindowPercent = 15,
+                        leftRearWindowPercent = 15,
+                        rightRearWindowPercent = 15,
+                        openWindows = listOf("左前", "右前", "左后", "右后")
+                    )
+                    ControlWidget.refreshData(this@MainActivity)
+                    CompactControlWidget.refreshData(this@MainActivity)
+                }
             }
             "windowOpen" -> {
-                lastWindowActionEpochMs = System.currentTimeMillis()
-                optimisticWindowPercent = 50
-                if (session.selectedVin.isNotBlank()) sessionStore.saveLastTargetWindowPercent(session.selectedVin, 50)
-                status = status?.copy(
-                    leftFrontWindowPercent = 50,
-                    rightFrontWindowPercent = 50,
-                    leftRearWindowPercent = 50,
-                    rightRearWindowPercent = 50,
-                    openWindows = listOf("左前", "右前", "左后", "右后")
-                )
+                postOptimisticResponse(500L) {
+                    lastWindowActionEpochMs = System.currentTimeMillis()
+                    optimisticWindowPercent = 50
+                    if (session.selectedVin.isNotBlank()) sessionStore.saveLastTargetWindowPercent(session.selectedVin, 50)
+                    status = status?.copy(
+                        leftFrontWindowPercent = 50,
+                        rightFrontWindowPercent = 50,
+                        leftRearWindowPercent = 50,
+                        rightRearWindowPercent = 50,
+                        openWindows = listOf("左前", "右前", "左后", "右后")
+                    )
+                    ControlWidget.refreshData(this@MainActivity)
+                    CompactControlWidget.refreshData(this@MainActivity)
+                }
             }
             "windowClose" -> {
-                lastWindowActionEpochMs = System.currentTimeMillis()
-                optimisticWindowPercent = 0
-                if (session.selectedVin.isNotBlank()) sessionStore.saveLastTargetWindowPercent(session.selectedVin, 0)
-                status = status?.copy(
-                    leftFrontWindowPercent = 0,
-                    rightFrontWindowPercent = 0,
-                    leftRearWindowPercent = 0,
-                    rightRearWindowPercent = 0,
-                    openWindows = emptyList()
-                )
+                postOptimisticResponse(500L) {
+                    lastWindowActionEpochMs = System.currentTimeMillis()
+                    optimisticWindowPercent = 0
+                    if (session.selectedVin.isNotBlank()) sessionStore.saveLastTargetWindowPercent(session.selectedVin, 0)
+                    status = status?.copy(
+                        leftFrontWindowPercent = 0,
+                        rightFrontWindowPercent = 0,
+                        leftRearWindowPercent = 0,
+                        rightRearWindowPercent = 0,
+                        openWindows = emptyList()
+                    )
+                    ControlWidget.refreshData(this@MainActivity)
+                    CompactControlWidget.refreshData(this@MainActivity)
+                }
             }
             else -> {
                 if (effectiveCmdName.startsWith("driverSeatHeating_")) {
@@ -3778,11 +3864,7 @@ class MainActivity : ComponentActivity() {
                             ControlFeedbackKind.SUCCESS
                         )
                     }
-                    if (effectiveCmdName == "lock" || effectiveCmdName == "unlock") {
-                        scheduleLockStatusRefreshes(effectiveCmdName == "lock")
-                    } else {
-                        refreshStatusAfterControl(generation)
-                    }
+                    scheduleControlStatusRefreshes(effectiveCmdName)
                     if (commandName != null && ParkingAnomalyPolicy.shouldCheck(commandName, commandAccepted = true)) {
                         scheduleParkingAnomalyCheck(generation)
                     }
@@ -3821,11 +3903,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 if (completed) {
-                    if (effectiveCmdName == "lock" || effectiveCmdName == "unlock") {
-                        scheduleLockStatusRefreshes(effectiveCmdName == "lock")
-                    } else {
-                        refreshStatusAfterControl(generation)
-                    }
+                    scheduleControlStatusRefreshes(effectiveCmdName)
                 }
                 if (commandName != null && ParkingAnomalyPolicy.shouldCheck(commandName, commandAccepted = completed)) {
                     scheduleParkingAnomalyCheck(generation)
@@ -3850,11 +3928,26 @@ class MainActivity : ComponentActivity() {
                     )
                 )
                 runOnMain(generation) {
-                    if (effectiveCmdName == "lock" || effectiveCmdName == "unlock") {
-                        lastLockActionEpochMs = 0L
-                        optimisticLockState = null
-                        cancelPendingLockStatusRefreshes()
-                    }
+                    cancelPendingControlStatusRefreshes()
+                    lastLockActionEpochMs = 0L
+                    optimisticLockState = null
+                    lastTrunkActionEpochMs = 0L
+                    optimisticTrunkState = null
+                    lastWindowActionEpochMs = 0L
+                    optimisticWindowPercent = null
+                    lastComfortActionEpochMs = 0L
+                    optimisticDriverSeatHeating = null
+                    optimisticDriverSeatVentilation = null
+                    optimisticPassengerSeatHeating = null
+                    optimisticPassengerSeatVentilation = null
+                    optimisticLeftRearSeatHeating = null
+                    optimisticLeftRearSeatVentilation = null
+                    optimisticRightRearSeatHeating = null
+                    optimisticRightRearSeatVentilation = null
+                    optimisticSteeringWheelHeating = null
+                    optimisticRearviewMirrorHeating = null
+                    lastFridgeActionEpochMs = 0L
+                    optimisticFridgeStatus = null
                     status = preControlStatus
                     if (OperationPasswordErrorPolicy.isPasswordError(e)) {
                         promptUpdateOperationPassword(
