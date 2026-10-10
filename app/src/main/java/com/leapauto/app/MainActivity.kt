@@ -111,6 +111,7 @@ data class VehicleStatus(
     val chargeState: Int?,
     val locationSummary: VehicleLocationSummary? = null,
     val trunkState: TrunkState = TrunkState.UNKNOWN,
+    val hoodOpen: Boolean = false,
     val driverDoorOpen: Boolean = false,
     val passengerDoorOpen: Boolean = false,
     val leftRearDoorOpen: Boolean = false,
@@ -203,6 +204,8 @@ class MainActivity : ComponentActivity() {
     @Volatile private var lastWindowActionEpochMs = 0L
     @Volatile private var optimisticTrunkState: TrunkState? = null
     @Volatile private var lastTrunkActionEpochMs = 0L
+    @Volatile private var optimisticHoodOpen: Boolean? = null
+    @Volatile private var lastFrunkActionEpochMs = 0L
     @Volatile private var optimisticLockState: Boolean? = null
     @Volatile private var lastLockActionEpochMs = 0L
     private val lockStatusRefreshRunnables = mutableListOf<Runnable>()
@@ -2067,6 +2070,8 @@ class MainActivity : ComponentActivity() {
         if (!silent) {
             optimisticTrunkState = null
             lastTrunkActionEpochMs = 0L
+            optimisticHoodOpen = null
+            lastFrunkActionEpochMs = 0L
             optimisticWindowPercent = null
             lastWindowActionEpochMs = 0L
             optimisticLockState = null
@@ -2224,7 +2229,9 @@ class MainActivity : ComponentActivity() {
                     val trunkProtected = nowMs - lastTrunkActionEpochMs < 15_000L
                     val winProtected = nowMs - lastWindowActionEpochMs < 15_000L
                     val lockProtected = nowMs - lastLockActionEpochMs < 15_000L
+                    val frunkProtected = nowMs - lastFrunkActionEpochMs < 15_000L
                     if (!trunkProtected) optimisticTrunkState = null
+                    if (!frunkProtected) optimisticHoodOpen = null
                     if (!winProtected) optimisticWindowPercent = null
                     if (!lockProtected) optimisticLockState = null
                     if (lockProtected && optimisticLockState != null && parsed.locked == optimisticLockState) {
@@ -2235,6 +2242,11 @@ class MainActivity : ComponentActivity() {
                     if (trunkProtected && optimisticTrunkState != null && parsed.trunkState == optimisticTrunkState) {
                         optimisticTrunkState = null
                         lastTrunkActionEpochMs = 0L
+                        cancelPendingControlStatusRefreshes()
+                    }
+                    if (frunkProtected && optimisticHoodOpen != null && parsed.hoodOpen == optimisticHoodOpen) {
+                        optimisticHoodOpen = null
+                        lastFrunkActionEpochMs = 0L
                         cancelPendingControlStatusRefreshes()
                     }
                     if (winProtected && optimisticWindowPercent != null) {
@@ -2250,6 +2262,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     val effectiveLock = if (lockProtected && optimisticLockState != null) optimisticLockState else parsed.locked
+                    val effectiveHoodOpen = if (frunkProtected && optimisticHoodOpen != null) (optimisticHoodOpen == true) else parsed.hoodOpen
                     val winPercent = if (winProtected) optimisticWindowPercent else null
                     val trunk = if (trunkProtected) optimisticTrunkState else null
                     val comfortProtected = nowMs - lastComfortActionEpochMs < 15_000L
@@ -2284,6 +2297,7 @@ class MainActivity : ComponentActivity() {
                     }
                     status = baseRefreshed.copy(
                         locked = effectiveLock,
+                        hoodOpen = effectiveHoodOpen,
                         leftFrontWindowPercent = winPercent ?: baseRefreshed.leftFrontWindowPercent,
                         rightFrontWindowPercent = winPercent ?: baseRefreshed.rightFrontWindowPercent,
                         leftRearWindowPercent = winPercent ?: baseRefreshed.leftRearWindowPercent,
@@ -2714,6 +2728,8 @@ class MainActivity : ComponentActivity() {
         commandName == "unlock" -> optimisticLockState == null && status?.locked == false
         commandName == "trunkOpen" -> optimisticTrunkState == null && status?.trunkState == TrunkState.OPEN
         commandName == "trunkClose" -> optimisticTrunkState == null && status?.trunkState == TrunkState.CLOSED
+        commandName == "frunkOpen" || commandName == "frunk" -> optimisticHoodOpen == null && status?.hoodOpen == true
+        commandName == "frunkClose" -> optimisticHoodOpen == null && status?.hoodOpen == false
         commandName == "windowClose" -> optimisticWindowPercent == null && (status?.openWindows.isNullOrEmpty())
         commandName == "windowVent" || commandName == "windowOpen" -> optimisticWindowPercent == null
         commandName.startsWith("driverSeatHeating_") -> optimisticDriverSeatHeating == null
@@ -3333,6 +3349,22 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        val hoodSignal = m.opt("hoodStatus")
+            ?: m.opt("bonnetStatus")
+            ?: m.opt("frontCoverStatus")
+            ?: m.opt("fbcmHoodStatus")
+            ?: m.opt("fbcmFrontCoverStatus")
+            ?: m.opt("engineHoodStatus")
+            ?: m.opt("1282")
+            ?: m.opt("1276")
+            ?: m.opt("frunkStatus")
+        val isHoodOpen = when (hoodSignal) {
+            is Boolean -> hoodSignal
+            is Number -> hoodSignal.toInt() == 1
+            is String -> hoodSignal == "1" || hoodSignal.equals("true", ignoreCase = true) || hoodSignal.equals("OPEN", ignoreCase = true)
+            else -> false
+        }
+
         return VehicleStatus(
             soc = effectiveSoc,
             preciseSoc = preciseSocStr ?: standardSocStr,
@@ -3389,6 +3421,7 @@ class MainActivity : ComponentActivity() {
             chargeLabel = ChargeStatus.label(charge?.toString()?.toIntOrNull()),
             chargeState = charge?.toString()?.toIntOrNull(),
             trunkState = TrunkStateMapper.fromSignal(m.opt("bbcmBackDoorStatus")),
+            hoodOpen = isHoodOpen,
             driverDoorOpen = m.optBool("lbcmDriverDoorStatus") == true,
             passengerDoorOpen = m.optBool("rbcmDriverDoorStatus") == true,
             leftRearDoorOpen = m.optBool("lbcmLeftRearDoorStatus") == true,
@@ -3396,7 +3429,8 @@ class MainActivity : ComponentActivity() {
             anyDoorOpen = (m.optBool("lbcmDriverDoorStatus") == true) ||
                 (m.optBool("rbcmDriverDoorStatus") == true) ||
                 (m.optBool("lbcmLeftRearDoorStatus") == true) ||
-                (m.optBool("rbcmRightRearDoorStatus") == true),
+                (m.optBool("rbcmRightRearDoorStatus") == true) ||
+                isHoodOpen,
             driverSeatHeating = m.opt("driverSeatHeating")?.toString()?.toIntOrNull(),
             driverSeatVentilation = m.opt("driverSeatVentilation")?.toString()?.toIntOrNull(),
             passengerSeatHeating = m.opt("passengerSeatHeating")?.toString()?.toIntOrNull(),
@@ -3744,6 +3778,24 @@ class MainActivity : ComponentActivity() {
                     lastTrunkActionEpochMs = System.currentTimeMillis()
                     optimisticTrunkState = TrunkState.CLOSED
                     status = status?.copy(trunkState = TrunkState.CLOSED)
+                    ControlWidget.refreshData(this@MainActivity)
+                    CompactControlWidget.refreshData(this@MainActivity)
+                }
+            }
+            "frunkOpen" -> {
+                postOptimisticResponse(600L) {
+                    lastFrunkActionEpochMs = System.currentTimeMillis()
+                    optimisticHoodOpen = true
+                    status = status?.copy(hoodOpen = true)
+                    ControlWidget.refreshData(this@MainActivity)
+                    CompactControlWidget.refreshData(this@MainActivity)
+                }
+            }
+            "frunkClose" -> {
+                postOptimisticResponse(600L) {
+                    lastFrunkActionEpochMs = System.currentTimeMillis()
+                    optimisticHoodOpen = false
+                    status = status?.copy(hoodOpen = false)
                     ControlWidget.refreshData(this@MainActivity)
                     CompactControlWidget.refreshData(this@MainActivity)
                 }

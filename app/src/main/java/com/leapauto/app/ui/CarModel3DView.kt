@@ -366,12 +366,15 @@ internal class CarModelWebView(
         val winRl = resolveWindowPercent(status?.leftRearWindowPercent, "左后")
         val winRr = resolveWindowPercent(status?.rightRearWindowPercent, "右后")
 
+        val bonnet = if (status?.hoodOpen == true) 1 else 0
         obj.put("immediately", immediately)
         obj.put("door_fl", doorFl)
         obj.put("door_fr", doorFr)
         obj.put("door_rl", doorRl)
         obj.put("door_rr", doorRr)
         obj.put("trunk", trunk)
+        obj.put("bonnet", bonnet)
+        obj.put("hood", bonnet)
 
         val doors = JSONObject().apply {
             put("fl", doorFl)
@@ -379,6 +382,8 @@ internal class CarModelWebView(
             put("rl", doorRl)
             put("rr", doorRr)
             put("trunk", trunk)
+            put("bonnet", bonnet)
+            put("hood", bonnet)
             put("driverDoor", doorFl)
             put("passengerDoor", doorFr)
             put("leftRearDoor", doorRl)
@@ -465,9 +470,6 @@ internal class CarModelWebView(
         obj.put("lowBeam", shouldLowBeam)
         obj.put("stopLight", isBraking)
         obj.put("markLight", shouldMarkLight)
-
-        // 6. 前舱盖 (引擎盖/前备箱) 状态
-        obj.put("bonnet", 0)
         return obj.toString()
     }
 
@@ -501,6 +503,7 @@ internal class CarModelWebView(
                     var doorRlOpen = state.door_rl > 0;
                     var doorRrOpen = state.door_rr > 0;
                     var trunkOpen = state.trunk > 0;
+                    var bonnetOpen = (state.bonnet > 0) || (state.hood > 0);
 
                     // 3. 唤醒 WebGL 高帧率渲染动力调度 (3.5 秒 60 FPS，覆盖车门 0.5s 与车窗 3.0s 全过程)
                     var v = window.viewer || (c && c.viewer);
@@ -519,7 +522,8 @@ internal class CarModelWebView(
                                         { type: imm ? 'RightFront_DoorImmediately' : 'RightFront_Door', open: doorFrOpen },
                                         { type: imm ? 'LeftRear_DoorImmediately' : 'LeftRear_Door', open: doorRlOpen },
                                         { type: imm ? 'RightRear_DoorImmediately' : 'RightRear_Door', open: doorRrOpen },
-                                        { type: imm ? 'TrunkImmediately' : 'Trunk', open: trunkOpen }
+                                        { type: imm ? 'TrunkImmediately' : 'Trunk', open: trunkOpen },
+                                        { type: imm ? 'BonnetImmediately' : 'Bonnet', open: bonnetOpen }
                                     ]
                                 },
                                 {
@@ -549,6 +553,7 @@ internal class CarModelWebView(
                             }, 600);
                         }
                     }
+                    if (typeof c.handleBonnet === 'function') c.handleBonnet(bonnetOpen, imm);
                     if (typeof c.handleLFDoor === 'function') c.handleLFDoor(doorFlOpen, imm);
                     if (typeof c.handleRFDoor === 'function') c.handleRFDoor(doorFrOpen, imm);
                     if (typeof c.handleLRDoor === 'function') c.handleLRDoor(doorRlOpen, imm);
@@ -580,6 +585,10 @@ internal class CarModelWebView(
                         if (c.trunkNode) {
                             c.trunkNode.rotation.z = trunkOpen ? c.maxTrunkOpenAngle : 0;
                             c.__TrunkState__ = 0;
+                        }
+                        if (c.bonnetNode) {
+                            c.bonnetNode.rotation.z = bonnetOpen ? -c.maxBonnetOpenAngle : 0;
+                            c.__BonnetState__ = 0;
                         }
                     }
 

@@ -326,6 +326,7 @@ object VehicleHealthDiagnostics {
         if (status.leftRearDoorOpen) openDoors.add("左后门")
         if (status.rightRearDoorOpen) openDoors.add("右后门")
         if (status.trunkState == TrunkState.OPEN) openDoors.add("后备箱")
+        if (status.hoodOpen) openDoors.add("前机盖")
 
         if (openDoors.isNotEmpty()) {
             score -= 10

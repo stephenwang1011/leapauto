@@ -67,13 +67,15 @@ object SignalTable {
         "1694" to "rightFrontWindowStatus",
         "1695" to "leftRearWindowStatus",
         "1696" to "rightRearWindowStatus",
-        // 车门 / 门锁
+        // 车门 / 门锁 / 前后舱
         "1298" to "driverDoorLockStatus",
         "1277" to "lbcmDriverDoorStatus",
         "1278" to "rbcmDriverDoorStatus",
         "1279" to "lbcmLeftRearDoorStatus",
         "1280" to "rbcmRightRearDoorStatus",
         "1281" to "bbcmBackDoorStatus",
+        "1282" to "hoodStatus",
+        "1276" to "fbcmHoodStatus",
         // 胎压
         "2646" to "leftFrontTirePressure",
         "2653" to "rightFrontTirePressure",
