@@ -69,4 +69,15 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.pendingCommand)
         XCTAssertNotNil(model.errorMessage)
     }
+
+    func testOfflineWidgetSynchronizationStaysInert() {
+        XCTAssertTrue(AppModel.isOfflineTestRun)
+        let model = AppModel()
+        model.refreshWidgetSnapshot()
+        XCTAssertNil(model.widgetMessage)
+        model.enterDemo()
+        model.refreshWidgetSnapshot()
+        XCTAssertNil(model.widgetMessage)
+        XCTAssertEqual(model.mode, .demo)
+    }
 }

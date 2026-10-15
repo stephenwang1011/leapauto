@@ -2,9 +2,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 scripts/validate_structure.py
-find LeapAuto LeapAutoTests LeapAutoUITests -name "*.swift" -print0 | xargs -0 swiftc -frontend -parse
+find LeapAuto LeapAutoTests LeapAutoUITests LeapAutoWidget Shared -name "*.swift" -print0 | xargs -0 swiftc -frontend -parse
 if command -v plutil >/dev/null 2>&1; then
-  plutil -lint -- LeapAuto.xcodeproj/project.pbxproj LeapAuto/Info.plist LeapAuto/PrivacyInfo.xcprivacy
+  plutil -lint -- LeapAuto.xcodeproj/project.pbxproj LeapAuto/Info.plist LeapAuto/PrivacyInfo.xcprivacy LeapAuto/LeapAuto.entitlements LeapAutoWidget/Info.plist LeapAutoWidget/PrivacyInfo.xcprivacy LeapAutoWidget/LeapAutoWidget.entitlements
 fi
 swift test --package-path Packages/LeapCore
 CHECK_DIR="$(mktemp -d)"

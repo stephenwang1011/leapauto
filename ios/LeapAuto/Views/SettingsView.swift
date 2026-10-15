@@ -36,7 +36,8 @@ struct SettingsView: View {
                     Label("登录会话保存在本机钥匙串", systemImage: "key.horizontal")
                     Label("操作密码每次输入，不持久保存", systemImage: "lock.shield")
                     Label("真实控车需本机身份验证", systemImage: "faceid")
-                    Label("车况与位置仅保留在会话内存", systemImage: "location.slash")
+                    Label("位置与完整车况仅保留在会话内存", systemImage: "location.slash")
+                    Label("小组件仅共享匿名电量、续航与充电快照", systemImage: "square.grid.2x2")
                     Text("会话文件包含凭据。请勿发给他人、提交到代码仓库或粘贴到聊天中。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -62,9 +63,18 @@ struct SettingsView: View {
                     Divider()
                     UnavailableFeature(title: "短信登录", detail: "使用开发者会话文件接入。", symbol: "message")
                     Divider()
-                    UnavailableFeature(title: "蓝牙钥匙", detail: "尚未实现蓝牙配对、钥匙激活或近场控制。", symbol: "key")
+                    UnavailableFeature(title: "蓝牙钥匙", detail: "已有离线协议和禁用的传输适配；完整 SM2、配对及实车未验收，保持关闭。", symbol: "key")
                     Divider()
-                    UnavailableFeature(title: "桌面小组件", detail: "尚未包含 Widget 扩展与后台同步。", symbol: "square.grid.2x2")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("只读状态小组件", systemImage: "square.grid.2x2")
+                            .font(.headline)
+                        Text("支持小/中尺寸。主 App 更新本机匿名快照，iOS 决定刷新时机；不会后台联网或直接控车。需先在 Xcode 配置两 target 的同一 App Group。")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Button("更新本机小组件快照") { model.refreshWidgetSnapshot() }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("widget.refreshLocal")
+                    }
+                    .padding(.vertical, 10)
                     Divider()
                     UnavailableFeature(title: "充电通知", detail: "尚未包含后台充电状态通知。", symbol: "bell")
                 }
@@ -87,7 +97,7 @@ struct SettingsView: View {
                 .accessibilityIdentifier("session.confirmLogout")
                 Button("取消", role: .cancel) { }
             } message: {
-                Text("将清除本机保存的登录会话与内存中的车况、位置。不会向车辆发送任何控制指令。")
+                Text("将清除登录会话、内存车况与位置，以及共享小组件快照。系统缓存的卡片可能需等待刷新才消失。不会向车辆发送控制指令。")
             }
 
             Text("零跑智控 · iOS 原生预览\n非官方个人客户端，与零跑汽车无隶属关系。")

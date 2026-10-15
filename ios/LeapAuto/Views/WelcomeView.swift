@@ -77,9 +77,14 @@ struct WelcomeView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             UnavailableFeature(title: "短信登录", detail: "当前版本仅提供开发者会话导入。", symbol: "message")
                             Divider()
-                            UnavailableFeature(title: "蓝牙钥匙", detail: "未实现蓝牙配对或近场控车。", symbol: "key")
+                            UnavailableFeature(title: "蓝牙钥匙", detail: "协议可离线测试，完整握手和实车尚未验收，蓝牙保持禁用。", symbol: "key")
                             Divider()
-                            UnavailableFeature(title: "桌面小组件", detail: "当前版本未包含 Widget 扩展。", symbol: "square.grid.2x2")
+                            Label("只读状态小组件 · 需配置 App Group 并经 Xcode 验证", systemImage: "square.grid.2x2")
+                                .font(.subheadline).padding(.vertical, 12)
+                            if model.widgetMessage != nil {
+                                Button("重试清除小组件缓存") { model.refreshWidgetSnapshot() }
+                                    .buttonStyle(.bordered)
+                            }
                         }
                     }
                 }

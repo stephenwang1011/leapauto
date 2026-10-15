@@ -26,6 +26,13 @@
 			path = "LeapAutoUITests.xctest";
 			sourceTree = "BUILT_PRODUCTS_DIR";
 		};
+		76A4701181DB9253A447C9E9 = {
+			isa = "PBXFileReference";
+			explicitFileType = "wrapper.app-extension";
+			includeInIndex = "0";
+			path = "LeapAutoWidget.appex";
+			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
 		C780BA21F61E4BD87706C2D1 = {
 			isa = "XCLocalSwiftPackageReference";
 			relativePath = "Packages/LeapCore";
@@ -40,6 +47,10 @@
 			productRef = "F4B42394554D8DA9A52BF2ED";
 		};
 		5E2CE2EC8B360D1BC0BCD852 = {
+			isa = "PBXBuildFile";
+			productRef = "F4B42394554D8DA9A52BF2ED";
+		};
+		6E8815A191AD737952AD123C = {
 			isa = "PBXBuildFile";
 			productRef = "F4B42394554D8DA9A52BF2ED";
 		};
@@ -72,6 +83,16 @@
 		72661A9693268FBA6B96D1EC = {
 			isa = "PBXBuildFile";
 			fileRef = "E3DA1CF472555CC5DD471F6E";
+		};
+		CAE6A5FA924C0D2EADCEE766 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/Bluetooth/BLETransport.swift";
+			sourceTree = "<group>";
+		};
+		ED506B50E184BA30E01C3A01 = {
+			isa = "PBXBuildFile";
+			fileRef = "CAE6A5FA924C0D2EADCEE766";
 		};
 		27EEBC437AD0EF0FC4BA6D97 = {
 			isa = "PBXFileReference";
@@ -223,10 +244,50 @@
 			isa = "PBXBuildFile";
 			fileRef = "373DAD3EF77CC5EA04881F71";
 		};
+		A2983F1B1B21B192315F69C6 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAutoWidget/LeapAutoStatusWidget.swift";
+			sourceTree = "<group>";
+		};
+		FD21C81B0A79787C2D2B2697 = {
+			isa = "PBXBuildFile";
+			fileRef = "A2983F1B1B21B192315F69C6";
+		};
+		43218C704984F96BA5BB7735 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Shared/WidgetSnapshotPublisher.swift";
+			sourceTree = "<group>";
+		};
+		77C162DAC8681D7ED149290E = {
+			isa = "PBXBuildFile";
+			fileRef = "43218C704984F96BA5BB7735";
+		};
+		A7BCC4EDDA019949D3AFFA8A = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Shared/WidgetSnapshotStore.swift";
+			sourceTree = "<group>";
+		};
+		9EBA364439B5B5BF2D828DE8 = {
+			isa = "PBXBuildFile";
+			fileRef = "A7BCC4EDDA019949D3AFFA8A";
+		};
+		357B72BB97BFD99611C754A0 = {
+			isa = "PBXBuildFile";
+			fileRef = "A7BCC4EDDA019949D3AFFA8A";
+		};
 		56FF465F6CC6FFFEAB18D29E = {
 			isa = "PBXFileReference";
 			lastKnownFileType = "text.plist.xml";
 			path = "LeapAuto/Info.plist";
+			sourceTree = "<group>";
+		};
+		E6CFAAD359C49EA3558C8535 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "text.plist.entitlements";
+			path = "LeapAuto/LeapAuto.entitlements";
 			sourceTree = "<group>";
 		};
 		A382B1935B18781A60442396 = {
@@ -249,16 +310,66 @@
 			isa = "PBXBuildFile";
 			fileRef = "CAE6A08D10AD319F081501BA";
 		};
+		BF86C0087D093FFF34F8E237 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "text.plist.xml";
+			path = "LeapAutoWidget/Info.plist";
+			sourceTree = "<group>";
+		};
+		EC98021CB673975902397BEB = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "text.plist.entitlements";
+			path = "LeapAutoWidget/LeapAutoWidget.entitlements";
+			sourceTree = "<group>";
+		};
+		4B82F7C27908B46A8D19A736 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "text.xml";
+			path = "LeapAutoWidget/PrivacyInfo.xcprivacy";
+			sourceTree = "<group>";
+		};
+		D341026C4C6C8779ED215ECF = {
+			isa = "PBXBuildFile";
+			fileRef = "4B82F7C27908B46A8D19A736";
+		};
 		0A3E27B8CA818264D75C8D81 = {
 			isa = "PBXGroup";
-			children = ("763D774377779C412BB71F6F", "00444E2C37DD529B70E931A2", "93B29C63186928624CCE7B68",);
+			children = ("763D774377779C412BB71F6F", "00444E2C37DD529B70E931A2", "93B29C63186928624CCE7B68", "76A4701181DB9253A447C9E9",);
 			name = "Products";
 			sourceTree = "<group>";
 		};
 		0035FE99EA2940F7FA633A58 = {
 			isa = "PBXGroup";
-			children = ("48DCCA93094F2C5451BD660E", "1E54DFDB6BEF97C859B7B0E0", "E3DA1CF472555CC5DD471F6E", "27EEBC437AD0EF0FC4BA6D97", "9BF5C269C037CF23D0E58802", "6D6A0D18C6EF23CCCFE2AFC8", "4528D972D1CFA3CB4E67F127", "9C062C24EBE2B6F8CE2FC22C", "9CC99DDCE5FD55DD2EEE2F43", "F6009F1ADB4EBA5333E11DB7", "1A3F72CB11C6BD0C036A187B", "F49FD128621411EE9784DB16", "3602F7B2AB9978CD13F15052", "41A47B4FA9AE5C37995A87D7", "FB4715ACA1F78D896260CD1C", "3A0E989CBCEEF2E7F6C418DE", "036AB13188B8AD32E7DAF8FE", "373DAD3EF77CC5EA04881F71", "56FF465F6CC6FFFEAB18D29E", "A382B1935B18781A60442396", "CAE6A08D10AD319F081501BA", "0A3E27B8CA818264D75C8D81",);
+			children = ("48DCCA93094F2C5451BD660E", "1E54DFDB6BEF97C859B7B0E0", "E3DA1CF472555CC5DD471F6E", "CAE6A5FA924C0D2EADCEE766", "27EEBC437AD0EF0FC4BA6D97", "9BF5C269C037CF23D0E58802", "6D6A0D18C6EF23CCCFE2AFC8", "4528D972D1CFA3CB4E67F127", "9C062C24EBE2B6F8CE2FC22C", "9CC99DDCE5FD55DD2EEE2F43", "F6009F1ADB4EBA5333E11DB7", "1A3F72CB11C6BD0C036A187B", "F49FD128621411EE9784DB16", "3602F7B2AB9978CD13F15052", "41A47B4FA9AE5C37995A87D7", "FB4715ACA1F78D896260CD1C", "3A0E989CBCEEF2E7F6C418DE", "036AB13188B8AD32E7DAF8FE", "373DAD3EF77CC5EA04881F71", "A2983F1B1B21B192315F69C6", "43218C704984F96BA5BB7735", "A7BCC4EDDA019949D3AFFA8A", "56FF465F6CC6FFFEAB18D29E", "E6CFAAD359C49EA3558C8535", "A382B1935B18781A60442396", "CAE6A08D10AD319F081501BA", "BF86C0087D093FFF34F8E237", "EC98021CB673975902397BEB", "4B82F7C27908B46A8D19A736", "0A3E27B8CA818264D75C8D81",);
 			sourceTree = "<group>";
+		};
+		46DD5C3011618C51430B555A = {
+			isa = "PBXContainerItemProxy";
+			containerPortal = "244210E48437B6556980A702";
+			proxyType = "1";
+			remoteGlobalIDString = "86A838FE5EDBD92D4572B4DE";
+			remoteInfo = "LeapAutoWidget";
+		};
+		875C1FA0DA5A77AA8F0F665F = {
+			isa = "PBXTargetDependency";
+			target = "86A838FE5EDBD92D4572B4DE";
+			targetProxy = "46DD5C3011618C51430B555A";
+		};
+		3EDFC8FD8978227DC5B6A52C = {
+			isa = "PBXBuildFile";
+			fileRef = "76A4701181DB9253A447C9E9";
+			settings = {
+				ATTRIBUTES = ("RemoveHeadersOnCopy",);
+			};
+		};
+		70169F10B8C6D32730D688FB = {
+			isa = "PBXCopyFilesBuildPhase";
+			buildActionMask = "2147483647";
+			dstPath = "";
+			dstSubfolderSpec = "13";
+			files = ("3EDFC8FD8978227DC5B6A52C",);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = "0";
 		};
 		B00CCDD09424E369308D67FA = {
 			isa = "XCBuildConfiguration";
@@ -277,8 +388,9 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				INFOPLIST_FILE = "LeapAuto/Info.plist";
 				GENERATE_INFOPLIST_FILE = "NO";
-				MARKETING_VERSION = "0.1.0";
-				CURRENT_PROJECT_VERSION = "1";
+				CODE_SIGN_ENTITLEMENTS = "LeapAuto/LeapAuto.entitlements";
+				MARKETING_VERSION = "0.2.0";
+				CURRENT_PROJECT_VERSION = "2";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "AccentColor";
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks",);
 				SUPPORTS_MACCATALYST = "NO";
@@ -307,8 +419,9 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				INFOPLIST_FILE = "LeapAuto/Info.plist";
 				GENERATE_INFOPLIST_FILE = "NO";
-				MARKETING_VERSION = "0.1.0";
-				CURRENT_PROJECT_VERSION = "1";
+				CODE_SIGN_ENTITLEMENTS = "LeapAuto/LeapAuto.entitlements";
+				MARKETING_VERSION = "0.2.0";
+				CURRENT_PROJECT_VERSION = "2";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "AccentColor";
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks",);
 				SUPPORTS_MACCATALYST = "NO";
@@ -327,7 +440,7 @@
 		D8AFF257B45D0C513672EC45 = {
 			isa = "PBXSourcesBuildPhase";
 			buildActionMask = "2147483647";
-			files = ("C57971547C758D128625573B", "1720C0276E990DA428248705", "72661A9693268FBA6B96D1EC", "7F74BDBEDE2AD7D396981BAB", "A96519BF85A04E2D20365F09", "D39C6CF304F95AE2BFDE9177", "2BC4B2707A5F0271B0FA409A", "E181AFDC5D75E07D35F5BABE", "BCBDD3B6C919E1B0E3BAD24F", "2D0293FB55E90225BCF0F36D", "AE7671C1201354E179B2F686", "1F3A7783F8282B1396B78C09", "3896F83C425832BE1CE25A8D", "8B9143FB598CDCA15E01EDD4", "71D236CA98CDC5A6C6AB4309", "ACFC6B8F8EF78958F1D57726",);
+			files = ("C57971547C758D128625573B", "1720C0276E990DA428248705", "72661A9693268FBA6B96D1EC", "ED506B50E184BA30E01C3A01", "7F74BDBEDE2AD7D396981BAB", "A96519BF85A04E2D20365F09", "D39C6CF304F95AE2BFDE9177", "2BC4B2707A5F0271B0FA409A", "E181AFDC5D75E07D35F5BABE", "BCBDD3B6C919E1B0E3BAD24F", "2D0293FB55E90225BCF0F36D", "AE7671C1201354E179B2F686", "1F3A7783F8282B1396B78C09", "3896F83C425832BE1CE25A8D", "8B9143FB598CDCA15E01EDD4", "71D236CA98CDC5A6C6AB4309", "ACFC6B8F8EF78958F1D57726", "77C162DAC8681D7ED149290E", "9EBA364439B5B5BF2D828DE8",);
 			runOnlyForDeploymentPostprocessing = "0";
 		};
 		91024282FFD499F5807DB5BC = {
@@ -345,14 +458,110 @@
 		AC44A5EE06496B21A17CA082 = {
 			isa = "PBXNativeTarget";
 			buildConfigurationList = "952F4DF8105729797025EDD4";
-			buildPhases = ("D8AFF257B45D0C513672EC45", "91024282FFD499F5807DB5BC", "DC549ACCB7C726C62ECFD4E2",);
+			buildPhases = ("D8AFF257B45D0C513672EC45", "91024282FFD499F5807DB5BC", "DC549ACCB7C726C62ECFD4E2", "70169F10B8C6D32730D688FB",);
 			buildRules = ();
-			dependencies = ();
+			dependencies = ("875C1FA0DA5A77AA8F0F665F",);
 			name = "LeapAuto";
 			packageProductDependencies = ("F4B42394554D8DA9A52BF2ED",);
 			productName = "LeapAuto";
 			productReference = "763D774377779C412BB71F6F";
 			productType = "com.apple.product-type.application";
+		};
+		9AD757328FBA0087E54990FE = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
+				SWIFT_VERSION = "5.0";
+				SDKROOT = "iphoneos";
+				CLANG_ENABLE_MODULES = "YES";
+				CLANG_ENABLE_OBJC_ARC = "YES";
+				SWIFT_STRICT_CONCURRENCY = "complete";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.leapauto.ios.widget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				INFOPLIST_FILE = "LeapAutoWidget/Info.plist";
+				GENERATE_INFOPLIST_FILE = "NO";
+				CODE_SIGN_ENTITLEMENTS = "LeapAutoWidget/LeapAutoWidget.entitlements";
+				MARKETING_VERSION = "0.2.0";
+				CURRENT_PROJECT_VERSION = "2";
+				SKIP_INSTALL = "YES";
+				APPLICATION_EXTENSION_API_ONLY = "YES";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks",);
+				SUPPORTS_MACCATALYST = "NO";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				DEBUG_INFORMATION_FORMAT = "dwarf";
+				ENABLE_TESTABILITY = "YES";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+			};
+			name = "Debug";
+		};
+		D20A933185A2F18535D467E0 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
+				SWIFT_VERSION = "5.0";
+				SDKROOT = "iphoneos";
+				CLANG_ENABLE_MODULES = "YES";
+				CLANG_ENABLE_OBJC_ARC = "YES";
+				SWIFT_STRICT_CONCURRENCY = "complete";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.leapauto.ios.widget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				INFOPLIST_FILE = "LeapAutoWidget/Info.plist";
+				GENERATE_INFOPLIST_FILE = "NO";
+				CODE_SIGN_ENTITLEMENTS = "LeapAutoWidget/LeapAutoWidget.entitlements";
+				MARKETING_VERSION = "0.2.0";
+				CURRENT_PROJECT_VERSION = "2";
+				SKIP_INSTALL = "YES";
+				APPLICATION_EXTENSION_API_ONLY = "YES";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks",);
+				SUPPORTS_MACCATALYST = "NO";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+			};
+			name = "Release";
+		};
+		3EC30693E21CEF51D0F8BAC0 = {
+			isa = "XCConfigurationList";
+			buildConfigurations = ("9AD757328FBA0087E54990FE", "D20A933185A2F18535D467E0",);
+			defaultConfigurationIsVisible = "0";
+			defaultConfigurationName = "Release";
+		};
+		22D724CE2CC6B5D6F6EFBDBE = {
+			isa = "PBXSourcesBuildPhase";
+			buildActionMask = "2147483647";
+			files = ("FD21C81B0A79787C2D2B2697", "357B72BB97BFD99611C754A0",);
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		BF4D34BF683C906CF34F6E55 = {
+			isa = "PBXFrameworksBuildPhase";
+			buildActionMask = "2147483647";
+			files = ("6E8815A191AD737952AD123C",);
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		73B75A37698D92659A180FC5 = {
+			isa = "PBXResourcesBuildPhase";
+			buildActionMask = "2147483647";
+			files = ("D341026C4C6C8779ED215ECF",);
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		86A838FE5EDBD92D4572B4DE = {
+			isa = "PBXNativeTarget";
+			buildConfigurationList = "3EC30693E21CEF51D0F8BAC0";
+			buildPhases = ("22D724CE2CC6B5D6F6EFBDBE", "BF4D34BF683C906CF34F6E55", "73B75A37698D92659A180FC5",);
+			buildRules = ();
+			dependencies = ();
+			name = "LeapAutoWidget";
+			packageProductDependencies = ("F4B42394554D8DA9A52BF2ED",);
+			productName = "LeapAutoWidget";
+			productReference = "76A4701181DB9253A447C9E9";
+			productType = "com.apple.product-type.app-extension";
 		};
 		F168FCEC9242136A272F6D22 = {
 			isa = "PBXContainerItemProxy";
@@ -584,6 +793,19 @@
 				TargetAttributes = {
 					AC44A5EE06496B21A17CA082 = {
 						CreatedOnToolsVersion = "16.0";
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = {
+								enabled = "1";
+							};
+						};
+					};
+					86A838FE5EDBD92D4572B4DE = {
+						CreatedOnToolsVersion = "16.0";
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = {
+								enabled = "1";
+							};
+						};
 					};
 					3A0C9CEF9D8F3BC090274361 = {
 						CreatedOnToolsVersion = "16.0";
@@ -605,7 +827,7 @@
 			productRefGroup = "0A3E27B8CA818264D75C8D81";
 			projectDirPath = "";
 			projectRoot = "";
-			targets = ("AC44A5EE06496B21A17CA082", "3A0C9CEF9D8F3BC090274361", "554A54670641A9ADACBED38F",);
+			targets = ("AC44A5EE06496B21A17CA082", "3A0C9CEF9D8F3BC090274361", "554A54670641A9ADACBED38F", "86A838FE5EDBD92D4572B4DE",);
 		};
 	};
 	rootObject = "244210E48437B6556980A702";

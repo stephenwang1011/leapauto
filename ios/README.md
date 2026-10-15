@@ -4,16 +4,17 @@
 
 > **状态：核心 Swift 包已在 Linux 实际编译并运行离线测试；Xcode 编译、模拟器 UI、iPhone 和实车尚未验证。不是可直接安装的 IPA，也不是功能完整的发布版。**
 >
-> 普通短信登录、BLE 钥匙、后台常驻、小组件及部分高级车控尚未移植。详见[功能与平台门槛](docs/PLATFORM-GATES.md)、[实现范围](docs/FEATURE-MATRIX.md)和[验证记录](docs/VALIDATION.md)。
+> 普通短信登录、可用的 BLE 钥匙、后台常驻及部分高级车控仍未完成。第二轮已新增只读 WidgetKit 小组件、BLE 离线协议和默认禁用的传输适配。详见[功能与平台门槛](docs/PLATFORM-GATES.md)、[实现范围](docs/FEATURE-MATRIX.md)和[验证记录](docs/VALIDATION.md)。
 
 ## 1. 在 Mac 上打开
 
-需要 Xcode 16 或更高版本、iOS 17 或更高版本。首次只运行离线演示，无需账号、开发者会员或车钥匙。
+需要 Xcode 16 或更高版本、iOS 17 或更高版本；命令行验证脚本还需可用的 Python 3（仅标准库）。首次只运行离线演示，无需账号、开发者会员或车钥匙。
 
 1. 打开 `LeapAuto.xcodeproj`，选择 `LeapAuto` scheme。
 2. 选择一个 iPhone 模拟器，点击 Run。
 3. 首页点击「体验离线演示」。所有数据都来自本机样例，确认控车仅展示流程。
 4. 真机运行时在 Signing & Capabilities 选择自己的 Team，必要时修改 bundle identifier。工程未包含签名证书或 provisioning profile。
+5. 小组件需要主 App 和 `LeapAutoWidget` target 使用同一 App Group。示例为 `group.com.leapauto.ios`；如改名，同时修改两个 `.entitlements` 与 `Shared/WidgetSnapshotStore.swift` 常量，并在你自己的开发者团队配置。这里没有替你注册能力或购买会员。未配置时 App 仍可演示，小组件显示不可用。
 
 工程使用本地 Swift Package，没有 CocoaPods、XcodeGen 或外部 Swift 包依赖。直接打开即可，无需先生成项目。
 
@@ -44,6 +45,8 @@ Linux 会明确跳过 Apple CryptoKit/AES/RSA 测试；这不构成这些路径�
 - iPhone 本机钥匙串保存会话；每次控车要求四位操作密码和本机设备密码/生物识别
 - 仅允许最新五分钟内、速度为零且 P 挡的明确车况发出指令；缺少状态、源时间或未知挡位会阻止控制
 - 单次命令只发一次 POST，不因网络失败、认证失败或超时自动重发
+- 小/中尺寸只读桌面小组件，显示匿名本机电量、纯电续航、充电状态和源时间；演示数据始终带标识
+- BLE 帧/分片/回执及状态机离线回归；SM3、SM4 和 SM2 协议编排仅作离线兼容性参考，完整 SM2 后端与真实蓝牙始终禁用
 
 上述网络/车控路径已有代码和离线测试，但**未用真实账号或车辆验证**，不能保证服务端接受 iOS 请求。
 
@@ -73,6 +76,8 @@ Android 登录依赖数美设备安全 SDK 和极验风控。仓库只有 Androi
 - Keychain 为 `WhenUnlockedThisDeviceOnly`，关闭同步；不把凭据/PIN写入 UserDefaults、日志或源码
 - 操作密码仅本次使用，不保存；离开确认页或进入后台时清除输入框
 - 车辆位置仅保留内存；当前没有外部地图导航、地址上传或位置后台跟踪
+- 完整车况不落盘；仅匿名小组件快照存入受保护 App Group 文件，排除备份，不含 VIN、账号、Token、PIN 或坐标。五分钟起标旧，三十分钟起隐藏数值；iOS 控制刷新时机，不保证实时
+- 小组件没有网络客户端入口、钥匙串访问或直接控制按钮，点击只打开 App。退出清共享快照并请求刷新，但系统缓存卡片可能稍后才消失
 - 请求只允许已验证的零跑 HTTPS 域名，全部重定向拒绝，禁用 HTTP 缓存和 cookie
 - 退出登录使未完成响应失效；本机删除失败会明确提示并提供重试按钮。仅在本机偏好中保留非敏感“待清理”标记，重启也不会恢复该会话
 - 服务端受理不等于车辆完成。未提供查询 ID、超时或网络错误都不会显示“车辆已执行”
@@ -89,6 +94,9 @@ ios/
   LeapAuto/App/                状态管理、演示数据与 App 入口
   LeapAuto/Views/              SwiftUI 页面
   LeapAuto/Security/           Keychain 与本机身份认证
+  LeapAuto/Bluetooth/          硬件门禁固定关闭的 CoreBluetooth 适配
+  LeapAutoWidget/              只读 WidgetKit 扩展与接入说明
+  Shared/                     最小快照存储与仅主 App 发布器
   Packages/LeapCore/           协议、网络、模型、指令和离线 XCTest
   LeapAutoTests/               App 状态离线测试（需 Xcode）
   LeapAutoUITests/             离线演示和确认取消测试（需 Xcode）
@@ -105,7 +113,7 @@ ios/
 3. 确定正式 iOS 登录 SDK 的使用权、配置、隐私和服务端支持
 4. 用户在本人开发设备验证登录、续期、车况和车辆切换
 5. 用户明确授权后，在安全场地逐项验证真实命令与超时，不自动重试
-6. BLE、WidgetKit、通知和高级功能分别实施，不宣称 Android 常驻行为在 iOS 等价可用
+6. 验收 WidgetKit 的 App Group、锁屏保护、过期和退出清理；BLE 按 [离线实现边界](docs/BLE-OFFLINE.md) 补齐经审计后端与真机条件；通知和高级功能另行逐项实施
 
 未经正式验收，不用于依赖自动解锁/锁车或安全告警的实际场景。
 

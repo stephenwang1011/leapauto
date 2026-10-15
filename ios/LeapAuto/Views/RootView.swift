@@ -21,6 +21,9 @@ struct RootView: View {
             if let message = model.operationMessage {
                 FeedbackBanner(text: message, isError: false) { model.operationMessage = nil }
             }
+            if let message = model.widgetMessage {
+                FeedbackBanner(text: message, isError: false) { model.widgetMessage = nil }
+            }
             if model.mode == .signedOut {
                 WelcomeView()
             } else {

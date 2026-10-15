@@ -16,12 +16,14 @@ final class AppModel: ObservableObject {
     @Published var pendingCommand: LeapCommand?
     @Published var isCommandRunning = false
     @Published var sessionDeletionFailed = false
+    @Published var widgetMessage: String?
 
     private var api: LeapAPI?
     private let keychain = KeychainStore()
     private let lifecycle = SessionLifecycleStore()
     private var generation = UUID()
     private var didRestore = false
+    private lazy var widgetPublisher: WidgetSnapshotPublisher? = Self.isOfflineTestRun ? nil : WidgetSnapshotPublisher()
 
     static var isOfflineTestRun: Bool {
         let env = ProcessInfo.processInfo.environment
@@ -42,6 +44,7 @@ final class AppModel: ObservableObject {
     func restore() async {
         guard !Self.isOfflineTestRun, !didRestore, mode == .signedOut else { return }
         didRestore = true
+        clearWidgetSnapshot()
         guard !lifecycle.logoutRequested else {
             sessionDeletionFailed = true
             errorMessage = "上次退出尚未完成本机会话清理，请点击“重试清除会话”。"
@@ -50,6 +53,7 @@ final class AppModel: ObservableObject {
         do {
             guard let session = try keychain.load(Session.self, account: "session"), session.isAuthenticated else { return }
             api = LeapAPI(session: session)
+            beginWidgetSession(source: .vehicle)
             mode = .connected
             await bootstrap()
         } catch {
@@ -63,9 +67,11 @@ final class AppModel: ObservableObject {
         generation = UUID()
         api = nil
         mode = .demo
+        beginWidgetSession(source: .demo)
         vehicles = [DemoFixtures.vehicle]
         selectedVehicle = DemoFixtures.vehicle
         status = DemoFixtures.status()
+        if let status { publishWidgetStatus(status) }
         errorMessage = nil
         operationMessage = nil
     }
@@ -81,6 +87,7 @@ final class AppModel: ObservableObject {
         generation = UUID()
         let scope = generation
         var importedClientCommitted = false
+        beginWidgetSession(source: mode == .demo ? .demo : .vehicle)
         defer { if generation == scope { isBusy = false } }
         do {
             let accessed = url.startAccessingSecurityScopedResource()
@@ -99,6 +106,7 @@ final class AppModel: ObservableObject {
             try keychain.save(imported, account: "session")
             api = client
             importedClientCommitted = true
+            beginWidgetSession(source: .vehicle)
             lifecycle.clearLogoutRequest()
             mode = .connected
             vehicles = []
@@ -114,6 +122,7 @@ final class AppModel: ObservableObject {
                 let fresh = try await client.refreshStatus()
                 guard generation == scope else { return }
                 status = fresh
+                publishWidgetStatus(fresh)
             }
             await persistCurrentSession(scope: scope)
             guard generation == scope else { return }
@@ -121,7 +130,11 @@ final class AppModel: ObservableObject {
         } catch {
             guard generation == scope else { return }
             if importedClientCommitted { await handleConnectedFailure(error, scope: scope) }
-            else { errorMessage = safeMessage(error) }
+            else {
+                errorMessage = safeMessage(error)
+                if mode == .signedOut { clearWidgetSnapshot() }
+                else if let status { publishWidgetStatus(status) }
+            }
         }
     }
 
@@ -140,6 +153,7 @@ final class AppModel: ObservableObject {
                 let fresh = try await client.refreshStatus()
                 guard generation == scope else { return }
                 status = fresh
+                publishWidgetStatus(fresh)
             }
             await persistCurrentSession(scope: scope)
             guard generation == scope else { return }
@@ -153,6 +167,7 @@ final class AppModel: ObservableObject {
         guard !isBusy, !isCommandRunning else { return }
         if mode == .demo {
             status = DemoFixtures.status()
+            if let status { publishWidgetStatus(status) }
             operationMessage = "演示数据已刷新；没有网络请求。"
             return
         }
@@ -166,6 +181,7 @@ final class AppModel: ObservableObject {
             let fresh = try await client.refreshStatus()
             guard generation == scope else { return }
             status = fresh
+            publishWidgetStatus(fresh)
             await persistCurrentSession(scope: scope)
             guard generation == scope else { return }
         } catch {
@@ -181,6 +197,7 @@ final class AppModel: ObservableObject {
         isBusy = true
         status = nil
         selectedVehicle = nil
+        beginWidgetSession(source: .vehicle)
         operationMessage = nil
         defer { if generation == scope { isBusy = false } }
         do {
@@ -190,6 +207,7 @@ final class AppModel: ObservableObject {
             let fresh = try await client.refreshStatus()
             guard generation == scope else { return }
             status = fresh
+            publishWidgetStatus(fresh)
             await persistCurrentSession(scope: scope)
             guard generation == scope else { return }
         } catch {
@@ -240,6 +258,7 @@ final class AppModel: ObservableObject {
             let fresh = try await client.refreshStatus()
             guard generation == scope, selectedVehicle?.vin == vin else { return }
             status = fresh
+            publishWidgetStatus(fresh)
             try command.validate(status: fresh)
             // Once this call starts, a network error does not prove that the
             // vehicle did not receive the instruction. Never automatically resend.
@@ -281,6 +300,7 @@ final class AppModel: ObservableObject {
                 let fresh = try await client.refreshStatus()
                 guard generation == scope else { return }
                 status = fresh
+                publishWidgetStatus(fresh)
                 operationMessage = "车辆接口已确认指令完成，车况已刷新。"
                 return
             case .failed(let message):
@@ -300,6 +320,7 @@ final class AppModel: ObservableObject {
         lifecycle.markLogoutRequested()
         generation = UUID()
         let logoutScope = generation
+        clearWidgetSnapshot()
         let old = api
         api = nil
         mode = .signedOut
@@ -336,6 +357,10 @@ final class AppModel: ObservableObject {
             return
         }
         errorMessage = safeMessage(error)
+        if !Self.isOfflineTestRun {
+            do { try widgetPublisher?.markRefreshFailed(generation: scope) }
+            catch { widgetMessage = "小组件快照不可更新，请检查 App Group 配置或解锁设备。" }
+        }
         await persistCurrentSession(scope: scope)
     }
 
@@ -345,6 +370,39 @@ final class AppModel: ObservableObject {
         guard generation == scope else { return }
         do { try keychain.save(snapshot, account: "session") }
         catch { errorMessage = "会话更新未能保存到本机钥匙串，请解锁设备后重试。" }
+    }
+
+    func refreshWidgetSnapshot() {
+        guard !Self.isOfflineTestRun else { return }
+        if mode == .signedOut { clearWidgetSnapshot(); return }
+        beginWidgetSession(source: mode == .demo ? .demo : .vehicle)
+        if let status { publishWidgetStatus(status) }
+    }
+
+    private func beginWidgetSession(source: WidgetSnapshot.Source) {
+        guard !Self.isOfflineTestRun else { return }
+        do {
+            try widgetPublisher?.beginSession(generation: generation, source: source)
+            widgetMessage = nil
+        } catch { widgetMessage = "小组件共享未配置或暂不可写，请检查 App Group 配置。" }
+    }
+
+    private func publishWidgetStatus(_ fresh: VehicleStatus) {
+        guard !Self.isOfflineTestRun else { return }
+        do {
+            try widgetPublisher?.publish(status: fresh, generation: generation)
+            widgetMessage = nil
+        } catch { widgetMessage = "小组件快照不可更新，请检查 App Group 配置或解锁设备。" }
+    }
+
+    private func clearWidgetSnapshot() {
+        guard !Self.isOfflineTestRun else { return }
+        do {
+            try widgetPublisher?.clear()
+            widgetMessage = nil
+        } catch {
+            widgetMessage = "小组件缓存清理未完成，请解锁后重试；系统缓存可能暂时保留旧卡片。"
+        }
     }
 
     private func safeMessage(_ error: Error) -> String {
