@@ -1,5 +1,11 @@
 # 零跑智控
 
+## iOS 原生移植（开发预览）
+
+新增独立 [`ios/`](ios/README.md) SwiftUI 工程，Android 保持原样。核心 Swift 离线测试可运行；Xcode/模拟器/实车尚未验证，普通短信登录和 BLE 等仍有明确接入门槛。请先阅读 [iOS 使用说明](ios/README.md) 与 [实际实现范围](ios/docs/FEATURE-MATRIX.md)。
+
+---
+
 零跑智控是一款基于 Kotlin、Jetpack Compose 构建的非官方零跑汽车 Android 车况与远程控车应用，专为个人学习与日常自用车主打造。直接对接零跑官方服务接口，实现高响应度车况读取、全套安全控车与无感近场钥匙。
 
 <p align="center">

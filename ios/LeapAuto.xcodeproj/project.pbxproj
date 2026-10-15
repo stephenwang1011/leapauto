@@ -1,0 +1,612 @@
+// !$*UTF8*$!
+{
+	archiveVersion = "1";
+	classes = {
+	};
+	objectVersion = "56";
+	objects = {
+		763D774377779C412BB71F6F = {
+			isa = "PBXFileReference";
+			explicitFileType = "wrapper.application";
+			includeInIndex = "0";
+			path = "LeapAuto.app";
+			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
+		00444E2C37DD529B70E931A2 = {
+			isa = "PBXFileReference";
+			explicitFileType = "wrapper.cfbundle";
+			includeInIndex = "0";
+			path = "LeapAutoTests.xctest";
+			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
+		93B29C63186928624CCE7B68 = {
+			isa = "PBXFileReference";
+			explicitFileType = "wrapper.cfbundle";
+			includeInIndex = "0";
+			path = "LeapAutoUITests.xctest";
+			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
+		C780BA21F61E4BD87706C2D1 = {
+			isa = "XCLocalSwiftPackageReference";
+			relativePath = "Packages/LeapCore";
+		};
+		F4B42394554D8DA9A52BF2ED = {
+			isa = "XCSwiftPackageProductDependency";
+			package = "C780BA21F61E4BD87706C2D1";
+			productName = "LeapCore";
+		};
+		D8548042BF4146FC550FDCF3 = {
+			isa = "PBXBuildFile";
+			productRef = "F4B42394554D8DA9A52BF2ED";
+		};
+		5E2CE2EC8B360D1BC0BCD852 = {
+			isa = "PBXBuildFile";
+			productRef = "F4B42394554D8DA9A52BF2ED";
+		};
+		48DCCA93094F2C5451BD660E = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/App/AppModel.swift";
+			sourceTree = "<group>";
+		};
+		C57971547C758D128625573B = {
+			isa = "PBXBuildFile";
+			fileRef = "48DCCA93094F2C5451BD660E";
+		};
+		1E54DFDB6BEF97C859B7B0E0 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/App/DemoFixtures.swift";
+			sourceTree = "<group>";
+		};
+		1720C0276E990DA428248705 = {
+			isa = "PBXBuildFile";
+			fileRef = "1E54DFDB6BEF97C859B7B0E0";
+		};
+		E3DA1CF472555CC5DD471F6E = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/App/LeapAutoApp.swift";
+			sourceTree = "<group>";
+		};
+		72661A9693268FBA6B96D1EC = {
+			isa = "PBXBuildFile";
+			fileRef = "E3DA1CF472555CC5DD471F6E";
+		};
+		27EEBC437AD0EF0FC4BA6D97 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/Security/KeychainStore.swift";
+			sourceTree = "<group>";
+		};
+		7F74BDBEDE2AD7D396981BAB = {
+			isa = "PBXBuildFile";
+			fileRef = "27EEBC437AD0EF0FC4BA6D97";
+		};
+		9BF5C269C037CF23D0E58802 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/Security/LocalControlAuthentication.swift";
+			sourceTree = "<group>";
+		};
+		A96519BF85A04E2D20365F09 = {
+			isa = "PBXBuildFile";
+			fileRef = "9BF5C269C037CF23D0E58802";
+		};
+		6D6A0D18C6EF23CCCFE2AFC8 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/Security/SessionLifecycleStore.swift";
+			sourceTree = "<group>";
+		};
+		D39C6CF304F95AE2BFDE9177 = {
+			isa = "PBXBuildFile";
+			fileRef = "6D6A0D18C6EF23CCCFE2AFC8";
+		};
+		4528D972D1CFA3CB4E67F127 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/Views/ChargingView.swift";
+			sourceTree = "<group>";
+		};
+		2BC4B2707A5F0271B0FA409A = {
+			isa = "PBXBuildFile";
+			fileRef = "4528D972D1CFA3CB4E67F127";
+		};
+		9C062C24EBE2B6F8CE2FC22C = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/Views/ClimateView.swift";
+			sourceTree = "<group>";
+		};
+		E181AFDC5D75E07D35F5BABE = {
+			isa = "PBXBuildFile";
+			fileRef = "9C062C24EBE2B6F8CE2FC22C";
+		};
+		9CC99DDCE5FD55DD2EEE2F43 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/Views/CommandConfirmationView.swift";
+			sourceTree = "<group>";
+		};
+		BCBDD3B6C919E1B0E3BAD24F = {
+			isa = "PBXBuildFile";
+			fileRef = "9CC99DDCE5FD55DD2EEE2F43";
+		};
+		F6009F1ADB4EBA5333E11DB7 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/Views/DesignSystem.swift";
+			sourceTree = "<group>";
+		};
+		2D0293FB55E90225BCF0F36D = {
+			isa = "PBXBuildFile";
+			fileRef = "F6009F1ADB4EBA5333E11DB7";
+		};
+		1A3F72CB11C6BD0C036A187B = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/Views/RootView.swift";
+			sourceTree = "<group>";
+		};
+		AE7671C1201354E179B2F686 = {
+			isa = "PBXBuildFile";
+			fileRef = "1A3F72CB11C6BD0C036A187B";
+		};
+		F49FD128621411EE9784DB16 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/Views/SettingsView.swift";
+			sourceTree = "<group>";
+		};
+		1F3A7783F8282B1396B78C09 = {
+			isa = "PBXBuildFile";
+			fileRef = "F49FD128621411EE9784DB16";
+		};
+		3602F7B2AB9978CD13F15052 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/Views/VehicleHomeView.swift";
+			sourceTree = "<group>";
+		};
+		3896F83C425832BE1CE25A8D = {
+			isa = "PBXBuildFile";
+			fileRef = "3602F7B2AB9978CD13F15052";
+		};
+		41A47B4FA9AE5C37995A87D7 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/Views/VehicleLocationView.swift";
+			sourceTree = "<group>";
+		};
+		8B9143FB598CDCA15E01EDD4 = {
+			isa = "PBXBuildFile";
+			fileRef = "41A47B4FA9AE5C37995A87D7";
+		};
+		FB4715ACA1F78D896260CD1C = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/Views/VehicleStatusView.swift";
+			sourceTree = "<group>";
+		};
+		71D236CA98CDC5A6C6AB4309 = {
+			isa = "PBXBuildFile";
+			fileRef = "FB4715ACA1F78D896260CD1C";
+		};
+		3A0E989CBCEEF2E7F6C418DE = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAuto/Views/WelcomeView.swift";
+			sourceTree = "<group>";
+		};
+		ACFC6B8F8EF78958F1D57726 = {
+			isa = "PBXBuildFile";
+			fileRef = "3A0E989CBCEEF2E7F6C418DE";
+		};
+		036AB13188B8AD32E7DAF8FE = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAutoTests/AppModelTests.swift";
+			sourceTree = "<group>";
+		};
+		761CE7A0AEEEEE34464FAA43 = {
+			isa = "PBXBuildFile";
+			fileRef = "036AB13188B8AD32E7DAF8FE";
+		};
+		373DAD3EF77CC5EA04881F71 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "LeapAutoUITests/LeapAutoUITests.swift";
+			sourceTree = "<group>";
+		};
+		D6501395F23E8C721B76CB53 = {
+			isa = "PBXBuildFile";
+			fileRef = "373DAD3EF77CC5EA04881F71";
+		};
+		56FF465F6CC6FFFEAB18D29E = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "text.plist.xml";
+			path = "LeapAuto/Info.plist";
+			sourceTree = "<group>";
+		};
+		A382B1935B18781A60442396 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "text.xml";
+			path = "LeapAuto/PrivacyInfo.xcprivacy";
+			sourceTree = "<group>";
+		};
+		AA3C30676F8EB413191DFD63 = {
+			isa = "PBXBuildFile";
+			fileRef = "A382B1935B18781A60442396";
+		};
+		CAE6A08D10AD319F081501BA = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "folder.assetcatalog";
+			path = "LeapAuto/Assets.xcassets";
+			sourceTree = "<group>";
+		};
+		D03082978EA3BF5687EDD5BF = {
+			isa = "PBXBuildFile";
+			fileRef = "CAE6A08D10AD319F081501BA";
+		};
+		0A3E27B8CA818264D75C8D81 = {
+			isa = "PBXGroup";
+			children = ("763D774377779C412BB71F6F", "00444E2C37DD529B70E931A2", "93B29C63186928624CCE7B68",);
+			name = "Products";
+			sourceTree = "<group>";
+		};
+		0035FE99EA2940F7FA633A58 = {
+			isa = "PBXGroup";
+			children = ("48DCCA93094F2C5451BD660E", "1E54DFDB6BEF97C859B7B0E0", "E3DA1CF472555CC5DD471F6E", "27EEBC437AD0EF0FC4BA6D97", "9BF5C269C037CF23D0E58802", "6D6A0D18C6EF23CCCFE2AFC8", "4528D972D1CFA3CB4E67F127", "9C062C24EBE2B6F8CE2FC22C", "9CC99DDCE5FD55DD2EEE2F43", "F6009F1ADB4EBA5333E11DB7", "1A3F72CB11C6BD0C036A187B", "F49FD128621411EE9784DB16", "3602F7B2AB9978CD13F15052", "41A47B4FA9AE5C37995A87D7", "FB4715ACA1F78D896260CD1C", "3A0E989CBCEEF2E7F6C418DE", "036AB13188B8AD32E7DAF8FE", "373DAD3EF77CC5EA04881F71", "56FF465F6CC6FFFEAB18D29E", "A382B1935B18781A60442396", "CAE6A08D10AD319F081501BA", "0A3E27B8CA818264D75C8D81",);
+			sourceTree = "<group>";
+		};
+		B00CCDD09424E369308D67FA = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
+				SWIFT_VERSION = "5.0";
+				SDKROOT = "iphoneos";
+				CLANG_ENABLE_MODULES = "YES";
+				CLANG_ENABLE_OBJC_ARC = "YES";
+				SWIFT_STRICT_CONCURRENCY = "complete";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.leapauto.ios";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				INFOPLIST_FILE = "LeapAuto/Info.plist";
+				GENERATE_INFOPLIST_FILE = "NO";
+				MARKETING_VERSION = "0.1.0";
+				CURRENT_PROJECT_VERSION = "1";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "AccentColor";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks",);
+				SUPPORTS_MACCATALYST = "NO";
+				ENABLE_PREVIEWS = "YES";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				DEBUG_INFORMATION_FORMAT = "dwarf";
+				ENABLE_TESTABILITY = "YES";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+			};
+			name = "Debug";
+		};
+		1B104479E55E37CF8A63CBDF = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
+				SWIFT_VERSION = "5.0";
+				SDKROOT = "iphoneos";
+				CLANG_ENABLE_MODULES = "YES";
+				CLANG_ENABLE_OBJC_ARC = "YES";
+				SWIFT_STRICT_CONCURRENCY = "complete";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.leapauto.ios";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				INFOPLIST_FILE = "LeapAuto/Info.plist";
+				GENERATE_INFOPLIST_FILE = "NO";
+				MARKETING_VERSION = "0.1.0";
+				CURRENT_PROJECT_VERSION = "1";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "AccentColor";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks",);
+				SUPPORTS_MACCATALYST = "NO";
+				ENABLE_PREVIEWS = "YES";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+			};
+			name = "Release";
+		};
+		952F4DF8105729797025EDD4 = {
+			isa = "XCConfigurationList";
+			buildConfigurations = ("B00CCDD09424E369308D67FA", "1B104479E55E37CF8A63CBDF",);
+			defaultConfigurationIsVisible = "0";
+			defaultConfigurationName = "Release";
+		};
+		D8AFF257B45D0C513672EC45 = {
+			isa = "PBXSourcesBuildPhase";
+			buildActionMask = "2147483647";
+			files = ("C57971547C758D128625573B", "1720C0276E990DA428248705", "72661A9693268FBA6B96D1EC", "7F74BDBEDE2AD7D396981BAB", "A96519BF85A04E2D20365F09", "D39C6CF304F95AE2BFDE9177", "2BC4B2707A5F0271B0FA409A", "E181AFDC5D75E07D35F5BABE", "BCBDD3B6C919E1B0E3BAD24F", "2D0293FB55E90225BCF0F36D", "AE7671C1201354E179B2F686", "1F3A7783F8282B1396B78C09", "3896F83C425832BE1CE25A8D", "8B9143FB598CDCA15E01EDD4", "71D236CA98CDC5A6C6AB4309", "ACFC6B8F8EF78958F1D57726",);
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		91024282FFD499F5807DB5BC = {
+			isa = "PBXFrameworksBuildPhase";
+			buildActionMask = "2147483647";
+			files = ("D8548042BF4146FC550FDCF3",);
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		DC549ACCB7C726C62ECFD4E2 = {
+			isa = "PBXResourcesBuildPhase";
+			buildActionMask = "2147483647";
+			files = ("AA3C30676F8EB413191DFD63", "D03082978EA3BF5687EDD5BF",);
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		AC44A5EE06496B21A17CA082 = {
+			isa = "PBXNativeTarget";
+			buildConfigurationList = "952F4DF8105729797025EDD4";
+			buildPhases = ("D8AFF257B45D0C513672EC45", "91024282FFD499F5807DB5BC", "DC549ACCB7C726C62ECFD4E2",);
+			buildRules = ();
+			dependencies = ();
+			name = "LeapAuto";
+			packageProductDependencies = ("F4B42394554D8DA9A52BF2ED",);
+			productName = "LeapAuto";
+			productReference = "763D774377779C412BB71F6F";
+			productType = "com.apple.product-type.application";
+		};
+		F168FCEC9242136A272F6D22 = {
+			isa = "PBXContainerItemProxy";
+			containerPortal = "244210E48437B6556980A702";
+			proxyType = "1";
+			remoteGlobalIDString = "AC44A5EE06496B21A17CA082";
+			remoteInfo = "LeapAuto";
+		};
+		B9E7EDFEA5781C84549BB689 = {
+			isa = "PBXTargetDependency";
+			target = "AC44A5EE06496B21A17CA082";
+			targetProxy = "F168FCEC9242136A272F6D22";
+		};
+		DD3F495F7D6A5AA1C1769021 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
+				SWIFT_VERSION = "5.0";
+				SDKROOT = "iphoneos";
+				CLANG_ENABLE_MODULES = "YES";
+				CLANG_ENABLE_OBJC_ARC = "YES";
+				SWIFT_STRICT_CONCURRENCY = "complete";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.leapauto.ios.testtests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				GENERATE_INFOPLIST_FILE = "YES";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LeapAuto.app/LeapAuto";
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				DEBUG_INFORMATION_FORMAT = "dwarf";
+				ENABLE_TESTABILITY = "YES";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+			};
+			name = "Debug";
+		};
+		E670BC2FFE794172EBC92AE3 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
+				SWIFT_VERSION = "5.0";
+				SDKROOT = "iphoneos";
+				CLANG_ENABLE_MODULES = "YES";
+				CLANG_ENABLE_OBJC_ARC = "YES";
+				SWIFT_STRICT_CONCURRENCY = "complete";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.leapauto.ios.testtests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				GENERATE_INFOPLIST_FILE = "YES";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LeapAuto.app/LeapAuto";
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+			};
+			name = "Release";
+		};
+		A314C661E13AE4B085126114 = {
+			isa = "XCConfigurationList";
+			buildConfigurations = ("DD3F495F7D6A5AA1C1769021", "E670BC2FFE794172EBC92AE3",);
+			defaultConfigurationIsVisible = "0";
+			defaultConfigurationName = "Release";
+		};
+		B2298129A58493C45A5D7D9A = {
+			isa = "PBXSourcesBuildPhase";
+			buildActionMask = "2147483647";
+			files = ("761CE7A0AEEEEE34464FAA43",);
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		28557525D9B40FEE6754FB60 = {
+			isa = "PBXFrameworksBuildPhase";
+			buildActionMask = "2147483647";
+			files = ("5E2CE2EC8B360D1BC0BCD852",);
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		3F6BC17F79ADBDD97FB52430 = {
+			isa = "PBXResourcesBuildPhase";
+			buildActionMask = "2147483647";
+			files = ();
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		3A0C9CEF9D8F3BC090274361 = {
+			isa = "PBXNativeTarget";
+			buildConfigurationList = "A314C661E13AE4B085126114";
+			buildPhases = ("B2298129A58493C45A5D7D9A", "28557525D9B40FEE6754FB60", "3F6BC17F79ADBDD97FB52430",);
+			buildRules = ();
+			dependencies = ("B9E7EDFEA5781C84549BB689",);
+			name = "LeapAutoTests";
+			packageProductDependencies = ("F4B42394554D8DA9A52BF2ED",);
+			productName = "LeapAutoTests";
+			productReference = "00444E2C37DD529B70E931A2";
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		98F775ACC2BC91B12FF68F75 = {
+			isa = "PBXContainerItemProxy";
+			containerPortal = "244210E48437B6556980A702";
+			proxyType = "1";
+			remoteGlobalIDString = "AC44A5EE06496B21A17CA082";
+			remoteInfo = "LeapAuto";
+		};
+		FD701F7B039F2322FD3D8588 = {
+			isa = "PBXTargetDependency";
+			target = "AC44A5EE06496B21A17CA082";
+			targetProxy = "98F775ACC2BC91B12FF68F75";
+		};
+		156F725150A84FCB69393542 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
+				SWIFT_VERSION = "5.0";
+				SDKROOT = "iphoneos";
+				CLANG_ENABLE_MODULES = "YES";
+				CLANG_ENABLE_OBJC_ARC = "YES";
+				SWIFT_STRICT_CONCURRENCY = "complete";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.leapauto.ios.uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				GENERATE_INFOPLIST_FILE = "YES";
+				TEST_TARGET_NAME = "LeapAuto";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				DEBUG_INFORMATION_FORMAT = "dwarf";
+				ENABLE_TESTABILITY = "YES";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+			};
+			name = "Debug";
+		};
+		C23B5A69B2E27C3E5F160FC6 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
+				SWIFT_VERSION = "5.0";
+				SDKROOT = "iphoneos";
+				CLANG_ENABLE_MODULES = "YES";
+				CLANG_ENABLE_OBJC_ARC = "YES";
+				SWIFT_STRICT_CONCURRENCY = "complete";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.leapauto.ios.uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				GENERATE_INFOPLIST_FILE = "YES";
+				TEST_TARGET_NAME = "LeapAuto";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+			};
+			name = "Release";
+		};
+		FB47F8FFD0C900B005E1923C = {
+			isa = "XCConfigurationList";
+			buildConfigurations = ("156F725150A84FCB69393542", "C23B5A69B2E27C3E5F160FC6",);
+			defaultConfigurationIsVisible = "0";
+			defaultConfigurationName = "Release";
+		};
+		6AD5D292D15FD66B4DB37194 = {
+			isa = "PBXSourcesBuildPhase";
+			buildActionMask = "2147483647";
+			files = ("D6501395F23E8C721B76CB53",);
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		91D9BD03D723BF0123C9DD1D = {
+			isa = "PBXFrameworksBuildPhase";
+			buildActionMask = "2147483647";
+			files = ();
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		A5C60DFF93C6FA09176D759C = {
+			isa = "PBXResourcesBuildPhase";
+			buildActionMask = "2147483647";
+			files = ();
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		554A54670641A9ADACBED38F = {
+			isa = "PBXNativeTarget";
+			buildConfigurationList = "FB47F8FFD0C900B005E1923C";
+			buildPhases = ("6AD5D292D15FD66B4DB37194", "91D9BD03D723BF0123C9DD1D", "A5C60DFF93C6FA09176D759C",);
+			buildRules = ();
+			dependencies = ("FD701F7B039F2322FD3D8588",);
+			name = "LeapAutoUITests";
+			packageProductDependencies = ();
+			productName = "LeapAutoUITests";
+			productReference = "93B29C63186928624CCE7B68";
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		73EBF6644258C120893E685D = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = "NO";
+				CLANG_ANALYZER_NONNULL = "YES";
+				GCC_C_LANGUAGE_STANDARD = "gnu17";
+				SWIFT_VERSION = "5.0";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				DEBUG_INFORMATION_FORMAT = "dwarf";
+				ENABLE_TESTABILITY = "YES";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+			};
+			name = "Debug";
+		};
+		0B0C687DF8B6B8DC790B519C = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = "NO";
+				CLANG_ANALYZER_NONNULL = "YES";
+				GCC_C_LANGUAGE_STANDARD = "gnu17";
+				SWIFT_VERSION = "5.0";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+			};
+			name = "Release";
+		};
+		AAB2723FF2C8E6D1C298C1E4 = {
+			isa = "XCConfigurationList";
+			buildConfigurations = ("73EBF6644258C120893E685D", "0B0C687DF8B6B8DC790B519C",);
+			defaultConfigurationIsVisible = "0";
+			defaultConfigurationName = "Release";
+		};
+		244210E48437B6556980A702 = {
+			isa = "PBXProject";
+			attributes = {
+				BuildIndependentTargetsInParallel = "YES";
+				LastUpgradeCheck = "1600";
+				TargetAttributes = {
+					AC44A5EE06496B21A17CA082 = {
+						CreatedOnToolsVersion = "16.0";
+					};
+					3A0C9CEF9D8F3BC090274361 = {
+						CreatedOnToolsVersion = "16.0";
+						TestTargetID = "AC44A5EE06496B21A17CA082";
+					};
+					554A54670641A9ADACBED38F = {
+						CreatedOnToolsVersion = "16.0";
+						TestTargetID = "AC44A5EE06496B21A17CA082";
+					};
+				};
+			};
+			buildConfigurationList = "AAB2723FF2C8E6D1C298C1E4";
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = "zh-Hans";
+			hasScannedForEncodings = "0";
+			knownRegions = ("zh-Hans", "en", "Base",);
+			mainGroup = "0035FE99EA2940F7FA633A58";
+			packageReferences = ("C780BA21F61E4BD87706C2D1",);
+			productRefGroup = "0A3E27B8CA818264D75C8D81";
+			projectDirPath = "";
+			projectRoot = "";
+			targets = ("AC44A5EE06496B21A17CA082", "3A0C9CEF9D8F3BC090274361", "554A54670641A9ADACBED38F",);
+		};
+	};
+	rootObject = "244210E48437B6556980A702";
+}

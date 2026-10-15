@@ -1,0 +1,148 @@
+PASS: project source membership, XML/plists/assets, local package, and permission/configuration boundaries.
+NOT TESTED by this check: iOS type checking/linking, SwiftUI rendering, signing, Keychain, Face ID or live vehicle behavior.
+LeapAuto.xcodeproj/project.pbxproj: OK
+LeapAuto/Info.plist: OK
+LeapAuto/PrivacyInfo.xcprivacy: OK
+warning: /home/agent/.config/swiftpm/configuration is not accessible or not writable, disabling user-level cache features.
+warning: /home/agent/.config/swiftpm/security is not accessible or not writable, disabling user-level cache features.
+Building for debugging...
+Build complete! (0.43 secs)
+Test Suite 'All tests' started at 2026-10-15 19:45:21.684
+Test Suite 'Debug-linux-x86_64.xctest' started at 2026-10-15 19:45:21.685
+Test Suite 'APIClientTests' started at 2026-10-15 19:45:21.685
+Test Case 'APIClientTests.testBootstrapListsVehiclesAndValidatesRoute' started at 2026-10-15 19:45:21.685
+Test Case 'APIClientTests.testBootstrapListsVehiclesAndValidatesRoute' passed (0.004 seconds)
+Test Case 'APIClientTests.testConcurrentOperationsFailClosed' started at 2026-10-15 19:45:21.689
+Test Case 'APIClientTests.testConcurrentOperationsFailClosed' passed (0.001 seconds)
+Test Case 'APIClientTests.testControlAcceptanceNeverMeansExecution' started at 2026-10-15 19:45:21.690
+Test Case 'APIClientTests.testControlAcceptanceNeverMeansExecution' passed (0.002 seconds)
+Test Case 'APIClientTests.testControlFailuresNeverReplayPOST' started at 2026-10-15 19:45:21.692
+Test Case 'APIClientTests.testControlFailuresNeverReplayPOST' passed (0.008 seconds)
+Test Case 'APIClientTests.testControlNeedsFreshParkedTelemetry' started at 2026-10-15 19:45:21.700
+Test Case 'APIClientTests.testControlNeedsFreshParkedTelemetry' passed (0.0 seconds)
+Test Case 'APIClientTests.testFailedImportDoesNotReplaceExistingSession' started at 2026-10-15 19:45:21.700
+Test Case 'APIClientTests.testFailedImportDoesNotReplaceExistingSession' passed (0.0 seconds)
+Test Case 'APIClientTests.testGatewayCredentialRotationSurvivesLaterReadFailure' started at 2026-10-15 19:45:21.701
+Test Case 'APIClientTests.testGatewayCredentialRotationSurvivesLaterReadFailure' passed (0.001 seconds)
+Test Case 'APIClientTests.testLogoutDiscardsInflightTelemetry' started at 2026-10-15 19:45:21.702
+Test Case 'APIClientTests.testLogoutDiscardsInflightTelemetry' passed (0.001 seconds)
+Test Case 'APIClientTests.testLogoutDuringRefreshPreventsControlDispatch' started at 2026-10-15 19:45:21.703
+Test Case 'APIClientTests.testLogoutDuringRefreshPreventsControlDispatch' passed (0.001 seconds)
+Test Case 'APIClientTests.testReadOnlyAuthenticationFailureRefreshesAndRetriesOnce' started at 2026-10-15 19:45:21.703
+Test Case 'APIClientTests.testReadOnlyAuthenticationFailureRefreshesAndRetriesOnce' passed (0.001 seconds)
+Test Case 'APIClientTests.testRedirectsAndChangedFinalURLAreRejected' started at 2026-10-15 19:45:21.704
+Test Case 'APIClientTests.testRedirectsAndChangedFinalURLAreRejected' passed (0.001 seconds)
+Test Case 'APIClientTests.testSMSFailsClosedWithoutNetwork' started at 2026-10-15 19:45:21.705
+Test Case 'APIClientTests.testSMSFailsClosedWithoutNetwork' passed (0.0 seconds)
+Test Case 'APIClientTests.testSuccessfulImportExchangesBeforeBecomingAuthenticated' started at 2026-10-15 19:45:21.705
+Test Case 'APIClientTests.testSuccessfulImportExchangesBeforeBecomingAuthenticated' passed (0.001 seconds)
+Test Case 'APIClientTests.testUntrustedRouteRejectedBeforeAnyTelemetryRequest' started at 2026-10-15 19:45:21.706
+Test Case 'APIClientTests.testUntrustedRouteRejectedBeforeAnyTelemetryRequest' passed (0.0 seconds)
+Test Suite 'APIClientTests' passed at 2026-10-15 19:45:21.707
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.021 (0.021) seconds
+Test Suite 'CommandTests' started at 2026-10-15 19:45:21.707
+Test Case 'CommandTests.testAcceptedIsNotExecutionAndNoIDCompatibilityNeverClaimsSuccess' started at 2026-10-15 19:45:21.707
+Test Case 'CommandTests.testAcceptedIsNotExecutionAndNoIDCompatibilityNeverClaimsSuccess' passed (0.0 seconds)
+Test Case 'CommandTests.testAllCommandsRequireFreshConfirmedParking' started at 2026-10-15 19:45:21.707
+Test Case 'CommandTests.testAllCommandsRequireFreshConfirmedParking' passed (0.001 seconds)
+Test Case 'CommandTests.testBodyCommandsMatchVerifiedWirePayloads' started at 2026-10-15 19:45:21.708
+Test Case 'CommandTests.testBodyCommandsMatchVerifiedWirePayloads' passed (0.0 seconds)
+Test Case 'CommandTests.testClimatePresetsMatchExecutableUpstream' started at 2026-10-15 19:45:21.708
+Test Case 'CommandTests.testClimatePresetsMatchExecutableUpstream' passed (0.001 seconds)
+Test Case 'CommandTests.testCustomACTemperatureBoundsAndModeSwitch' started at 2026-10-15 19:45:21.709
+Test Case 'CommandTests.testCustomACTemperatureBoundsAndModeSwitch' passed (0.001 seconds)
+Test Case 'CommandTests.testLateResultDoesNotBypassTimeoutAndEarlyClockDoesNotVerify' started at 2026-10-15 19:45:21.709
+Test Case 'CommandTests.testLateResultDoesNotBypassTimeoutAndEarlyClockDoesNotVerify' passed (0.1 seconds)
+Test Case 'CommandTests.testPollingBusinessSuccessIsExplicitAndResultTakesPriority' started at 2026-10-15 19:45:21.810
+Test Case 'CommandTests.testPollingBusinessSuccessIsExplicitAndResultTakesPriority' passed (0.0 seconds)
+Test Case 'CommandTests.testPollingTimingMatchesCurrentExecutablePolicy' started at 2026-10-15 19:45:21.810
+Test Case 'CommandTests.testPollingTimingMatchesCurrentExecutablePolicy' passed (0.0 seconds)
+Test Case 'CommandTests.testVerifiedPollingAndTerminalTimeoutAreDistinct' started at 2026-10-15 19:45:21.810
+Test Case 'CommandTests.testVerifiedPollingAndTerminalTimeoutAreDistinct' passed (0.0 seconds)
+Test Suite 'CommandTests' passed at 2026-10-15 19:45:21.811
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.104 (0.104) seconds
+Test Suite 'ModelTests' started at 2026-10-15 19:45:21.811
+Test Case 'ModelTests.testChargingPowerAndCompletionUseVerifiedState' started at 2026-10-15 19:45:21.811
+Test Case 'ModelTests.testChargingPowerAndCompletionUseVerifiedState' passed (0.0 seconds)
+Test Case 'ModelTests.testDrivingRequiresPositiveParkedEvidenceAndRejectsConflicts' started at 2026-10-15 19:45:21.811
+Test Case 'ModelTests.testDrivingRequiresPositiveParkedEvidenceAndRejectsConflicts' passed (0.0 seconds)
+Test Case 'ModelTests.testEmptyStatusPreservesUnknownValues' started at 2026-10-15 19:45:21.811
+Test Case 'ModelTests.testEmptyStatusPreservesUnknownValues' passed (0.0 seconds)
+Test Case 'ModelTests.testInvalidPercentagesStayUnknownAndPreciseFallsBackToValidSOC' started at 2026-10-15 19:45:21.811
+Test Case 'ModelTests.testInvalidPercentagesStayUnknownAndPreciseFallsBackToValidSOC' passed (0.0 seconds)
+Test Case 'ModelTests.testJSONRoundTripPreservesTypesAndUnknownFields' started at 2026-10-15 19:45:21.811
+Test Case 'ModelTests.testJSONRoundTripPreservesTypesAndUnknownFields' passed (0.0 seconds)
+Test Case 'ModelTests.testLocationFreshnessBoundariesAndSharingGate' started at 2026-10-15 19:45:21.812
+Test Case 'ModelTests.testLocationFreshnessBoundariesAndSharingGate' passed (0.0 seconds)
+Test Case 'ModelTests.testLocationsRejectOutOfRangeAndNonfiniteCoordinates' started at 2026-10-15 19:45:21.812
+Test Case 'ModelTests.testLocationsRejectOutOfRangeAndNonfiniteCoordinates' passed (0.0 seconds)
+Test Case 'ModelTests.testRangeNeverCrossFallsBackForUnknownOrMissingMode' started at 2026-10-15 19:45:21.812
+Test Case 'ModelTests.testRangeNeverCrossFallsBackForUnknownOrMissingMode' passed (0.1 seconds)
+Test Case 'ModelTests.testRawLocationsUseOnlyVerifiedPairAndKnownSourceTime' started at 2026-10-15 19:45:21.912
+Test Case 'ModelTests.testRawLocationsUseOnlyVerifiedPairAndKnownSourceTime' passed (0.004 seconds)
+Test Case 'ModelTests.testRejectedLocationRetainsOldTimestampWithoutRejuvenatingIt' started at 2026-10-15 19:45:21.916
+Test Case 'ModelTests.testRejectedLocationRetainsOldTimestampWithoutRejuvenatingIt' passed (0.0 seconds)
+Test Case 'ModelTests.testScalarHelpersRejectUnknownBooleansAndNonfiniteNumbers' started at 2026-10-15 19:45:21.917
+Test Case 'ModelTests.testScalarHelpersRejectUnknownBooleansAndNonfiniteNumbers' passed (0.0 seconds)
+Test Case 'ModelTests.testTimestampSupportsSecondsMillisecondsAndExplicitChinaTime' started at 2026-10-15 19:45:21.917
+Test Case 'ModelTests.testTimestampSupportsSecondsMillisecondsAndExplicitChinaTime' passed (0.003 seconds)
+Test Case 'ModelTests.testTirePositionsAndClimateDoNotBecomeSwapped' started at 2026-10-15 19:45:21.920
+Test Case 'ModelTests.testTirePositionsAndClimateDoNotBecomeSwapped' passed (0.0 seconds)
+Test Case 'ModelTests.testVehicleDecodesServiceKeysAndRoundTrips' started at 2026-10-15 19:45:21.920
+Test Case 'ModelTests.testVehicleDecodesServiceKeysAndRoundTrips' passed (0.0 seconds)
+Test Case 'ModelTests.testVerifiedBatteryRangeAndNamedFieldPrecedence' started at 2026-10-15 19:45:21.921
+Test Case 'ModelTests.testVerifiedBatteryRangeAndNamedFieldPrecedence' passed (0.0 seconds)
+Test Suite 'ModelTests' passed at 2026-10-15 19:45:21.921
+	 Executed 15 tests, with 0 failures (0 unexpected) in 0.11 (0.11) seconds
+Test Suite 'RequestSigningTests' started at 2026-10-15 19:45:21.921
+Test Case 'RequestSigningTests.testGatewaySigningUsesExplicitSessionPlatform' started at 2026-10-15 19:45:21.921
+Test Case 'RequestSigningTests.testGatewaySigningUsesExplicitSessionPlatform' passed (0.0 seconds)
+Test Case 'RequestSigningTests.testLegacySignatureRemovesCredentialFromOutgoingParameters' started at 2026-10-15 19:45:21.921
+Test Case 'RequestSigningTests.testLegacySignatureRemovesCredentialFromOutgoingParameters' passed (0.0 seconds)
+Test Case 'RequestSigningTests.testQueryAndFormEncodingProtectsReservedCharacters' started at 2026-10-15 19:45:21.921
+Test Case 'RequestSigningTests.testQueryAndFormEncodingProtectsReservedCharacters' passed (0.0 seconds)
+Test Case 'RequestSigningTests.testRequestRejectsHeaderInjectionAndRelativePathEscape' started at 2026-10-15 19:45:21.921
+Test Case 'RequestSigningTests.testRequestRejectsHeaderInjectionAndRelativePathEscape' passed (0.0 seconds)
+Test Case 'RequestSigningTests.testRouteBoundaryRejectsSpoofedHostsAndUnsafeURLs' started at 2026-10-15 19:45:21.922
+Test Case 'RequestSigningTests.testRouteBoundaryRejectsSpoofedHostsAndUnsafeURLs' passed (0.0 seconds)
+Test Case 'RequestSigningTests.testSigningConcatenatesSortedValuesOnlyAndPreservesEmpty' started at 2026-10-15 19:45:21.922
+Test Case 'RequestSigningTests.testSigningConcatenatesSortedValuesOnlyAndPreservesEmpty' passed (0.0 seconds)
+Test Suite 'RequestSigningTests' passed at 2026-10-15 19:45:21.922
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'SessionCryptoTests' started at 2026-10-15 19:45:21.922
+Test Case 'SessionCryptoTests.testAppleAESKnownAnswerAndLegacyTokenDoubling' started at 2026-10-15 19:45:21.922
+/workspace/scratch/d78a48ae292f/leapauto-ios-port/ios/Packages/LeapCore/Tests/LeapCoreTests/SessionCryptoTests.swift:91: SessionCryptoTests.testAppleAESKnownAnswerAndLegacyTokenDoubling : Test skipped - Requires Apple's CommonCrypto and CryptoKit; no substitute encryption is used.
+Test Case 'SessionCryptoTests.testAppleAESKnownAnswerAndLegacyTokenDoubling' skipped (0.001 seconds)
+Test Case 'SessionCryptoTests.testAppleHashKnownAnswerVectors' started at 2026-10-15 19:45:21.923
+/workspace/scratch/d78a48ae292f/leapauto-ios-port/ios/Packages/LeapCore/Tests/LeapCoreTests/SessionCryptoTests.swift:81: SessionCryptoTests.testAppleHashKnownAnswerVectors : Test skipped - Requires Apple's CryptoKit; Linux fixtures do not certify production cryptography.
+Test Case 'SessionCryptoTests.testAppleHashKnownAnswerVectors' skipped (0.0 seconds)
+Test Case 'SessionCryptoTests.testAppleRSAProducesUnpaddedURLSafeRandomizedCiphertext' started at 2026-10-15 19:45:21.923
+/workspace/scratch/d78a48ae292f/leapauto-ios-port/ios/Packages/LeapCore/Tests/LeapCoreTests/SessionCryptoTests.swift:104: SessionCryptoTests.testAppleRSAProducesUnpaddedURLSafeRandomizedCiphertext : Test skipped - Requires Apple's Security RSA implementation; this fixture makes no network requests.
+Test Case 'SessionCryptoTests.testAppleRSAProducesUnpaddedURLSafeRandomizedCiphertext' skipped (0.0 seconds)
+Test Case 'SessionCryptoTests.testImportDoesNotAcceptArbitraryPastedTextOrHugeFiles' started at 2026-10-15 19:45:21.923
+Test Case 'SessionCryptoTests.testImportDoesNotAcceptArbitraryPastedTextOrHugeFiles' passed (0.003 seconds)
+Test Case 'SessionCryptoTests.testJWTMetadataIsParsedWithoutClaimingAuthentication' started at 2026-10-15 19:45:21.926
+Test Case 'SessionCryptoTests.testJWTMetadataIsParsedWithoutClaimingAuthentication' passed (0.0 seconds)
+Test Case 'SessionCryptoTests.testLegacyImportRequiresExplicitExistingDeviceAndPlatform' started at 2026-10-15 19:45:21.926
+Test Case 'SessionCryptoTests.testLegacyImportRequiresExplicitExistingDeviceAndPlatform' passed (0.0 seconds)
+Test Case 'SessionCryptoTests.testPINAndPhoneValidationFailsBeforeCryptography' started at 2026-10-15 19:45:21.927
+Test Case 'SessionCryptoTests.testPINAndPhoneValidationFailsBeforeCryptography' passed (0.0 seconds)
+Test Case 'SessionCryptoTests.testSessionCodableHasNoPINOrTelemetryAndDescriptionRedacts' started at 2026-10-15 19:45:21.927
+Test Case 'SessionCryptoTests.testSessionCodableHasNoPINOrTelemetryAndDescriptionRedacts' passed (0.0 seconds)
+Test Case 'SessionCryptoTests.testSignKeyXORUsesShortestLengthAndRejectsEmpty' started at 2026-10-15 19:45:21.927
+Test Case 'SessionCryptoTests.testSignKeyXORUsesShortestLengthAndRejectsEmpty' passed (0.0 seconds)
+Test Case 'SessionCryptoTests.testUnsupportedProductionCryptoFailsClosed' started at 2026-10-15 19:45:21.927
+Test Case 'SessionCryptoTests.testUnsupportedProductionCryptoFailsClosed' passed (0.0 seconds)
+Test Suite 'SessionCryptoTests' passed at 2026-10-15 19:45:21.928
+	 Executed 10 tests, with 3 tests skipped and 0 failures (0 unexpected) in 0.006 (0.006) seconds
+Test Suite 'Debug-linux-x86_64.xctest' passed at 2026-10-15 19:45:21.928
+	 Executed 54 tests, with 3 tests skipped and 0 failures (0 unexpected) in 0.242 (0.242) seconds
+Test Suite 'All tests' passed at 2026-10-15 19:45:21.928
+	 Executed 54 tests, with 3 tests skipped and 0 failures (0 unexpected) in 0.242 (0.242) seconds
+◇ Test run started.
+↳ Testing Library Version: 6.4.1 (804dc4530ef3666)
+↳ Target Platform: x86_64-unknown-linux-gnu
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
+PASS: non-sensitive logout tombstone lifecycle
+
+Xcode unavailable: iOS app build, Apple crypto tests, Keychain/Face ID and simulator tests NOT RUN.
