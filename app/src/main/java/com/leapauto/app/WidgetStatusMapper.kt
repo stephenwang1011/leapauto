@@ -29,7 +29,8 @@ object WidgetStatusMapper {
         return presentation(
             chargeState = ChargeStatus.state(status),
             chargeRemainTime = ChargeStatus.remainingTime(status.opt("chargeRemainTime")),
-            fallbackLabel = fallback
+            fallbackLabel = fallback,
+            soc = ChargeStatus.socPercent(status.opt("soc"))
         )
     }
 
@@ -37,17 +38,21 @@ object WidgetStatusMapper {
     fun presentation(
         chargeState: Int?,
         chargeRemainTime: String?,
-        fallbackLabel: String?
-    ): WidgetStatusPresentation = when {
-        chargeState == 1 && fallbackLabel != "行驶中" -> {
-            val remaining = chargeRemainTime
-                ?.takeIf { it.isNotBlank() && it != "已充满" }
-                ?: "未知"
-            WidgetStatusPresentation("剩余$remaining", showChargingIcon = true)
+        fallbackLabel: String?,
+        soc: Int? = null
+    ): WidgetStatusPresentation {
+        if (fallbackLabel == "行驶中") return WidgetStatusPresentation(fallbackLabel)
+        val presentation = ChargeStatus.presentation(chargeState, soc, chargeRemainTime)
+        return when (presentation.state) {
+            ChargeStatus.PresentationState.CHARGING -> WidgetStatusPresentation(
+                presentation.remainingTime?.let { "剩余$it" } ?: presentation.label,
+                showChargingIcon = true
+            )
+            ChargeStatus.PresentationState.FULL, ChargeStatus.PresentationState.STOPPED,
+            ChargeStatus.PresentationState.SCHEDULED, ChargeStatus.PresentationState.FAULT ->
+                WidgetStatusPresentation(presentation.label)
+            else -> WidgetStatusPresentation(fallbackLabel)
         }
-        chargeState == 2 && fallbackLabel != "行驶中" ->
-            WidgetStatusPresentation("充电完成")
-        else -> WidgetStatusPresentation(fallbackLabel)
     }
 
     fun locked(status: JSONObject): Boolean? = locked(status.opt("driverDoorLockStatus"))
@@ -84,8 +89,11 @@ object WidgetStatusMapper {
 
     private fun label(valueForKey: (String) -> Any?): String? = when {
         isDrivingGear(valueForKey("gearStatus")) -> "行驶中"
-        ChargeStatus.state(mapOf("chargeState" to valueForKey("chargeState"))) == 1 -> "充电中"
-        ChargeStatus.state(mapOf("chargeState" to valueForKey("chargeState"))) == 2 -> "充电完成"
+        ChargeStatus.state(mapOf("chargeState" to valueForKey("chargeState"))) in setOf(1, 2, 3, 4, 6) ->
+            ChargeStatus.presentation(
+                ChargeStatus.state(mapOf("chargeState" to valueForKey("chargeState"))),
+                ChargeStatus.socPercent(valueForKey("soc"))
+            ).label
         hasOpenWindow(valueForKey) -> "车窗未关闭"
         else -> null
     }

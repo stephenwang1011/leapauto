@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
@@ -63,12 +64,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.leapauto.app.ChargePlanCyclesHelper
+import com.leapauto.app.ChargeStatus
+import com.leapauto.app.ControlFeedback
+import com.leapauto.app.ControlFeedbackKind
 import com.leapauto.app.R
 import com.leapauto.app.VehicleHomeStatus
 import com.leapauto.app.VehicleStatus
 import com.leapauto.app.VehicleStatusMapper
 import com.leapauto.app.ui.theme.LocalAppDarkTheme
 import com.leapauto.app.ui.theme.statusGood
+import com.leapauto.app.ui.theme.statusBad
+import com.leapauto.app.ui.theme.statusWarn
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -114,24 +120,38 @@ fun HealthyChargingBottomSheet(
     ) -> Unit = { _, _, _ -> },
     onControl: (String) -> Unit = {},
     onRefreshStatus: () -> Unit = {},
-    onRefreshTelemetry: () -> Unit = onRefreshStatus
+    onRefreshTelemetry: () -> Unit = {},
+    onTelemetryActiveChange: (Boolean) -> Unit = {},
+    controlFeedback: ControlFeedback? = null,
+    controlInProgress: Boolean = false
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
     var lastToastTime by remember { mutableLongStateOf(0L) }
+    val latestControlInProgress by rememberUpdatedState(controlInProgress)
+    val latestRefreshTelemetry by rememberUpdatedState(onRefreshTelemetry)
+
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onTelemetryActiveChange(true)
+        onDispose { onTelemetryActiveChange(false) }
+    }
 
     // 每次进入充电中心界面，第一时间向服务器拉取最新云端充电计划与车况遥测
     LaunchedEffect(Unit) {
-        onRefreshStatus()
+        if (!latestControlInProgress) {
+            onRefreshStatus()
+        }
     }
 
     // 充电中每 1 秒仅静默轮询底层遥测（功率/电流/电压/倒计时），不重复轮询静态充电计划与控制策略
     val isChargingState = status?.chargeState == 1
-    LaunchedEffect(isChargingState) {
-        if (isChargingState) {
+    LaunchedEffect(isChargingState, controlInProgress) {
+        if (isChargingState && !controlInProgress) {
             while (true) {
                 delay(1000L)
-                onRefreshTelemetry()
+                if (!latestControlInProgress) {
+                    latestRefreshTelemetry()
+                }
             }
         }
     }
@@ -306,7 +326,7 @@ fun HealthyChargingBottomSheet(
                 }
 
                 // 电池温度、充电功率 与 充电剩余时间 精致卡片
-                val formattedRemainTime = formatChargeRemainTime(status?.chargeRemainTime, status?.chargeState)
+                val formattedRemainTime = formatChargeRemainTime(status?.chargeRemainTime, status?.chargeState, status?.chargeSoc?.toString())
                 val minTemp = status?.minBatteryTemp?.trim()?.takeIf { it.isNotBlank() && it != "--" } ?: "-- °C"
                 val chargingPowerText = when {
                     status?.chargeState == 1 -> status.chargingPower?.takeIf { it.isNotBlank() } ?: "充电中"
@@ -430,24 +450,25 @@ fun HealthyChargingBottomSheet(
                 ) {
                     // 左侧线框按钮：解锁充电枪
                     Surface(
+                        onClick = {
+                            if (!latestControlInProgress) {
+                                onControl("unlockCharger")
+                            }
+                        },
+                        enabled = !controlInProgress,
                         shape = RoundedCornerShape(4.dp),
                         color = outlineBtnBg,
                         border = BorderStroke(0.8.dp, outlineBtnBorder),
                         modifier = Modifier
                             .weight(1f)
                             .height(42.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable {
-                                onControl("unlockCharger")
-                                onDismissRequest()
-                            }
                     ) {
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier.fillMaxSize()
                         ) {
                             Text(
-                                text = "解锁充电枪",
+                                text = if (controlInProgress) "处理中…" else "解锁充电枪",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Normal,
                                 color = outlineBtnText
@@ -457,23 +478,24 @@ fun HealthyChargingBottomSheet(
 
                     // 右侧实心深色按钮：结束充电 (充电中) / 开始充电 (未充电)
                     Surface(
+                        onClick = {
+                            if (!latestControlInProgress) {
+                                onControl(mainActionCmd)
+                            }
+                        },
+                        enabled = !controlInProgress,
                         shape = RoundedCornerShape(4.dp),
                         color = solidBtnBg,
                         modifier = Modifier
                             .weight(1f)
                             .height(42.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable {
-                                onControl(mainActionCmd)
-                                onDismissRequest()
-                            }
                     ) {
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier.fillMaxSize()
                         ) {
                             Text(
-                                text = mainActionText,
+                                text = if (controlInProgress) "处理中…" else mainActionText,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Normal,
                                 color = Color.White
@@ -481,6 +503,33 @@ fun HealthyChargingBottomSheet(
                         }
                     }
                 }
+            }
+
+            val displayedFeedback = controlFeedback ?: if (controlInProgress) {
+                ControlFeedback("充电控制处理中，请稍候", ControlFeedbackKind.IN_PROGRESS)
+            } else {
+                null
+            }
+            displayedFeedback?.let { feedback ->
+                val feedbackColor = when (feedback.kind) {
+                    ControlFeedbackKind.IN_PROGRESS, ControlFeedbackKind.SUBMITTED -> MaterialTheme.colorScheme.primary
+                    ControlFeedbackKind.SUCCESS -> MaterialTheme.statusGood
+                    ControlFeedbackKind.WARNING -> MaterialTheme.statusWarn
+                    ControlFeedbackKind.ERROR -> MaterialTheme.statusBad
+                }
+                val feedbackLabel = when (feedback.kind) {
+                    ControlFeedbackKind.IN_PROGRESS -> "处理中"
+                    ControlFeedbackKind.SUBMITTED -> "已提交，等待车辆确认"
+                    ControlFeedbackKind.SUCCESS -> "操作成功"
+                    ControlFeedbackKind.WARNING -> "请注意"
+                    ControlFeedbackKind.ERROR -> "操作失败"
+                }
+                Text(
+                    text = if (feedback.message.isBlank()) feedbackLabel else "$feedbackLabel：${feedback.message}",
+                    color = feedbackColor,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp)
+                )
             }
 
             // 卡片 1: 健康充电（参考图 1）
@@ -1510,29 +1559,7 @@ private fun formatScheduleTimeRange(start: String, end: String): String {
     return if (isNextDay) "$start-次日$end" else "$start-$end"
 }
 
-private fun formatChargeRemainTime(remainTime: String?, chargeState: Int?): String {
-    if (chargeState == 2) return "已充满"
-    if (chargeState != 1 || remainTime.isNullOrBlank() || remainTime == "--") return "未充电"
-
-    val raw = remainTime.trim()
-    val hasHourAndMin = raw.contains("时")
-    val totalMinutes = if (hasHourAndMin) {
-        val h = raw.substringBefore("时").filter { it.isDigit() }.toIntOrNull() ?: 0
-        val m = raw.substringAfter("时").substringBefore("分").filter { it.isDigit() }.toIntOrNull() ?: 0
-        h * 60 + m
-    } else {
-        raw.filter { it.isDigit() || it == '.' }.toDoubleOrNull()?.toInt()
-    }
-
-    if (totalMinutes == null) return raw
-
-    return when {
-        totalMinutes <= 0 -> "已充满"
-        totalMinutes < 60 -> "${totalMinutes}分"
-        else -> {
-            val hours = totalMinutes / 60
-            val mins = totalMinutes % 60
-            if (mins > 0) "${hours}时${mins}分" else "${hours}时"
-        }
-    }
+internal fun formatChargeRemainTime(remainTime: String?, chargeState: Int?, soc: String?): String {
+    val presentation = ChargeStatus.presentation(chargeState, ChargeStatus.socPercent(soc), remainTime)
+    return presentation.remainingTime?.removeSuffix("钟") ?: presentation.label
 }

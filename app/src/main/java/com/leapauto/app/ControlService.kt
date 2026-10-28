@@ -323,6 +323,7 @@ class ControlService : Service() {
             acEnabled = WidgetAcMapper.state(displayStatus),
             chargingPower = ChargeStatus.power(displayStatus),
             chargeState = ChargeStatus.state(displayStatus),
+            chargeSoc = ChargeStatus.socPercent(displayStatus.opt("soc")),
             chargeRemainTime = ChargeStatus.remainingTime(displayStatus.opt("chargeRemainTime")),
             capturedAt = now,
             lastSuccessAt = now,

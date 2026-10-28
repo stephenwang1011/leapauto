@@ -10,6 +10,22 @@ import org.json.JSONObject
 class WidgetStatusMapperTest {
 
     @Test
+    fun `rounded display SOC cannot replace unknown or sub full charging SOC`() {
+        val snapshot = SessionStore.WidgetSnapshot(
+            vin = "fixture", carType = "C16", range = "100", soc = 100, updated = "",
+            chargeState = 2, chargeRemainTime = "已充满"
+        )
+        assertEquals("充电已停止", WidgetStatusMapper.presentation(
+            snapshot.chargeState, snapshot.chargeRemainTime, snapshot.statusLabel, snapshot.chargeSoc
+        ).label)
+        for (rawSoc in listOf(99.9, "未知", org.json.JSONObject.NULL, 101, "NaN")) {
+            assertEquals("充电已停止", WidgetStatusMapper.presentation(
+                JSONObject().put("chargeState", 2).put("soc", rawSoc).put("preciseSoc", 100)
+            ).label)
+        }
+    }
+
+    @Test
     fun `driving gear wins over every other widget status`() {
         assertEquals(
             "行驶中",
@@ -27,7 +43,7 @@ class WidgetStatusMapperTest {
     @Test
     fun `charging and completed states are displayed`() {
         assertEquals("充电中", WidgetStatusMapper.label(mapOf("chargeState" to 1)))
-        assertEquals("充电完成", WidgetStatusMapper.label(mapOf("chargeState" to 2)))
+        assertEquals("充电已停止", WidgetStatusMapper.label(mapOf("chargeState" to 2)))
     }
 
     @Test
@@ -58,9 +74,48 @@ class WidgetStatusMapperTest {
             fallbackLabel = "车窗未关闭"
         )
 
-        assertEquals("充电完成", completed.label)
+        assertEquals("充电已停止", completed.label)
         assertFalse(completed.showChargingIcon)
         assertEquals("车窗未关闭", unpluggedWithOpenWindow.label)
+    }
+
+    @Test
+    fun `raw and snapshot presentations share end state and SOC policy`() {
+        for (state in listOf(2, 6)) {
+            for (soc in listOf(null, 80, 90, 99, 100)) {
+                val expected = if (soc == 100) "已充满" else "充电已停止"
+                val raw = JSONObject().put("chargeState", state).put("soc", soc ?: JSONObject.NULL)
+                    .put("chargeRemainTime", 0).put("leftFrontWindowPercent", 30)
+                val live = WidgetStatusMapper.presentation(raw)
+                val cached = WidgetStatusMapper.presentation(state, "已充满", "充电完成", soc)
+                assertEquals(expected, live.label)
+                assertEquals(live, cached)
+                assertEquals(expected, WidgetStatusMapper.label(raw))
+                assertFalse(live.showChargingIcon)
+            }
+        }
+    }
+
+    @Test
+    fun `charging at full SOC keeps bolt and valid time or charging label`() {
+        for (time in listOf(null, "0分钟", "已充满", "--", "NaN", "-1")) {
+            val result = WidgetStatusMapper.presentation(1, time, "车窗未关闭", 100)
+            assertEquals("充电中", result.label)
+            assertTrue(result.showChargingIcon)
+        }
+        assertEquals("剩余45分钟", WidgetStatusMapper.presentation(1, "45分钟", null, 100).label)
+        assertEquals("充电中", WidgetStatusMapper.presentation(JSONObject().put("chargeState", 1).put("soc", 100).put("chargeRemainTime", 0)).label)
+    }
+
+    @Test
+    fun `schedule fault and driving priority remain and idle does not imply stopped`() {
+        assertEquals("预约充电等待", WidgetStatusMapper.presentation(4, "0分钟", null, 100).label)
+        assertEquals("充电故障", WidgetStatusMapper.presentation(3, "已充满", null, 100).label)
+        assertNull(WidgetStatusMapper.presentation(0, "已充满", null, 100).label)
+        assertEquals("车窗未关闭", WidgetStatusMapper.presentation(0, "0分钟", "车窗未关闭", 100).label)
+        for (state in listOf(1, 2, 3, 4, 6)) {
+            assertEquals("行驶中", WidgetStatusMapper.presentation(state, "0分钟", "行驶中", 100).label)
+        }
     }
 
     @Test

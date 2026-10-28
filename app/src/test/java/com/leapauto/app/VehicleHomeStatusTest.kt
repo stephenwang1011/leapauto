@@ -363,7 +363,7 @@ class VehicleHomeStatusTest {
             .replace("\r\n", "\n")
         assertTrue(screenSource.contains("VehicleStatusCell(\n                    \"总里程\","))
         assertFalse(screenSource.contains("\"今日里程\""))
-        assertTrue(screenSource.contains("?: \"未充电\""))
+        assertTrue(screenSource.contains("formatChargeRemainTime(status?.chargeRemainTime, status?.chargeState, status?.chargeSoc?.toString())"))
     }
 
     private fun projectDirectory(): java.io.File {

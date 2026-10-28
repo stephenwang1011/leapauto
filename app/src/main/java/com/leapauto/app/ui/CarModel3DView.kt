@@ -21,6 +21,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.leapauto.app.CarModel3DManager
 import com.leapauto.app.ControlWidget
 import com.leapauto.app.ThemeManager
+import com.leapauto.app.NightThemePolicy
 import com.leapauto.app.TrunkState
 import com.leapauto.app.VehicleImageCache
 import com.leapauto.app.VehicleStatus
@@ -43,6 +44,9 @@ fun CarModel3DView(
     isCruising: Boolean = false,
     isDark: Boolean = true,
     themeId: String = ThemeManager.DEFAULT_THEME_ID,
+    backgroundTreatment: NightThemePolicy.BackgroundTreatment = NightThemePolicy.BackgroundTreatment(),
+    previewOnly: Boolean = false,
+    onBackgroundSupport: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
     onReady: () -> Unit = {},
     onError: () -> Unit = {},
@@ -57,15 +61,19 @@ fun CarModel3DView(
         modifier = modifier,
         factory = { ctx ->
             val actualModelDir = CarModel3DManager.getModelDir(ctx, h5Key)
-            CarModelWebView(ctx, actualModelDir, h5Key, modelParam, status, vin, isCruising, isDark, themeId, onReady, onError, onCarClick)
+            CarModelWebView(ctx, actualModelDir, h5Key, modelParam, status, vin, isCruising, isDark, themeId, onReady, onError, onCarClick, previewOnly)
         },
         update = { webView ->
             webView.onCarClick = onCarClick
+            webView.onBackgroundSupport = onBackgroundSupport
             if (webView.isReady) {
                 onReady()
             }
             webView.updateVehicleState(status, cruising = isCruising, isDark = isDark, themeId = themeId)
-        }
+            webView.updateBackground(backgroundTreatment)
+        },
+        onReset = null,
+        onRelease = { it.release() }
     )
 }
 
@@ -82,7 +90,8 @@ internal class CarModelWebView(
     private var lastThemeId: String = ThemeManager.DEFAULT_THEME_ID,
     private val onReady: () -> Unit,
     private val onError: () -> Unit,
-    var onCarClick: (() -> Unit)? = null
+    var onCarClick: (() -> Unit)? = null,
+    private val previewOnly: Boolean = false
 ) : WebView(context) {
 
     private var initialTouchX = 0f
@@ -93,6 +102,28 @@ internal class CarModelWebView(
     val isReady: Boolean get() = isSceneReady
     private var snapshotSaved = false
     private var hasAppliedInitialState = false
+    private var released = false
+    private var backgroundTreatment = NightThemePolicy.BackgroundTreatment()
+    var onBackgroundSupport: (Boolean) -> Unit = {}
+    private val backgroundScript by lazy { context.assets.open("night-background.js").bufferedReader().use { it.readText() } }
+
+    fun updateBackground(treatment: NightThemePolicy.BackgroundTreatment, force: Boolean = false) {
+        if (released) return
+        if (!force && backgroundTreatment == treatment) return
+        backgroundTreatment = treatment
+        if (!isSceneReady) return
+        evaluateJavascript(backgroundScript + "\nwindow.leapSetNightBackground(${treatment.gain}, ${treatment.lift});") {
+            if (lastThemeId == ThemeManager.ORIGINAL_SKYBOX_THEME_ID) onBackgroundSupport(it == "true")
+        }
+    }
+
+    fun release() {
+        released = true
+        isSceneReady = false
+        stopLoading()
+        removeJavascriptInterface("LeapNative")
+        destroy()
+    }
 
     init {
         setWebContentsDebuggingEnabled(true)
@@ -121,11 +152,13 @@ internal class CarModelWebView(
             ): WebResourceResponse? {
                 val url = request?.url ?: return null
                 if (url.scheme != ASSETS_SCHEME || url.host != ASSETS_HOST) {
+                    if (previewOnly) return WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
                     return null
                 }
                 val rawPath = url.path?.removePrefix("/") ?: return null
                 val decodedPath = try { Uri.decode(rawPath) } catch (_: Exception) { rawPath }
                 if (decodedPath.startsWith("theme/", ignoreCase = true)) {
+                    if (previewOnly) return WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
                     var bgFile = ThemeManager.get3dBgFile(context, lastThemeId)
                     if (bgFile == null || !bgFile.exists() || bgFile.length() == 0L) {
                         val themeObj = ThemeManager.loadCachedThemeList(context).find { it.themeId == lastThemeId }
@@ -367,16 +400,20 @@ internal class CarModelWebView(
         isDark: Boolean = lastDark,
         themeId: String = lastThemeId
     ) {
+        if (released) return
+        val unchanged = lastStatus == status && lastCruising == cruising && lastDark == isDark && lastThemeId == themeId
         val themeChanged = themeId != lastThemeId
         lastStatus = status
         lastCruising = cruising
         lastDark = isDark
         lastThemeId = themeId
         if (!isSceneReady) return
+        if (hasAppliedInitialState && unchanged && !forceImmediately) return
         val immediately = forceImmediately || !hasAppliedInitialState || themeChanged
         hasAppliedInitialState = true
         val stateJson = buildStateJson(status, immediately, cruising, isDark, themeId)
         injectStateScript(stateJson)
+        updateBackground(backgroundTreatment, force = true)
     }
 
     internal fun buildStateJson(
@@ -813,6 +850,7 @@ internal class CarModelWebView(
     }
 
     private fun injectInitScript(view: WebView?) {
+        if (released) return
         val paramStr = buildCarParamJson(modelParam).replace("'", "\\'")
         val script = """
         (function() {
@@ -876,6 +914,7 @@ internal class CarModelWebView(
     }
 
     private fun tuneViewer(view: WebView?) {
+        if (released) return
         val tuneScript = """
         (function() {
             var v = window.viewer;
@@ -917,7 +956,7 @@ internal class CarModelWebView(
             }
 
             // 2. 保证 WebGL 画布与 HTML 背景绝对透明，并锁定设备视网膜级物理全像素比
-            var dpr = Math.min(Math.max(window.devicePixelRatio || 2.5, 2.5), 3.5);
+            var dpr = ${if (previewOnly) "1.5" else "Math.min(Math.max(window.devicePixelRatio || 2.5, 2.5), 3.5)"};
             if (v.renderer) {
                 v.renderer.setClearColor(0x000000, 0);
                 v.renderer.setClearAlpha(0);
@@ -938,7 +977,7 @@ internal class CarModelWebView(
                 });
             }
             if (v.fpSetter && typeof v.fpSetter.setFPS === 'function') {
-                v.fpSetter.setFPS(60);
+                v.fpSetter.setFPS(${if (previewOnly) 30 else 60});
             }
             if (document.body) document.body.style.background = 'transparent';
             if (document.documentElement) document.documentElement.style.background = 'transparent';
@@ -999,6 +1038,8 @@ internal class CarModelWebView(
     }
 
     private fun capture3DSnapshot(view: WebView?) {
+        if (released) return
+        if (previewOnly) return
         if (snapshotSaved || vin.isBlank()) return
         val captureScript = """
         (function() {
@@ -1071,6 +1112,7 @@ internal class CarModelWebView(
     }
 
     private fun handle3DSnapshot(base64: String) {
+        if (previewOnly) return
         Log.i(TAG, "handle3DSnapshot called, vin='$vin', snapshotSaved=$snapshotSaved")
         if (vin.isBlank() || snapshotSaved) return
         Thread {

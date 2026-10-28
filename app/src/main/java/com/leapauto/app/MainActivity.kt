@@ -14,7 +14,6 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
-import android.view.MotionEvent
 import android.widget.Toast
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -108,6 +107,7 @@ data class VehicleStatus(
     val tires: List<TireStatus>,
     val chargeLabel: String,
     val chargeState: Int?,
+    val chargeSoc: Int? = null,
     val locationSummary: VehicleLocationSummary? = null,
     val trunkState: TrunkState = TrunkState.UNKNOWN,
     val hoodOpen: Boolean = false,
@@ -167,6 +167,12 @@ class MainActivity : ComponentActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
     private val asyncWorker = Executors.newFixedThreadPool(3)
+    private val resourceWorker = BoundedTaskLane(8, "vehicle-resources")
+    private val chargingTelemetryWorker = BoundedTaskLane(1, "charging-telemetry")
+    private val chargingTelemetryGate = TelemetryRefreshGate()
+    private val chargingTelemetryOrder = ChargingTelemetryOrder()
+    @Volatile private var backgroundEpoch = 0L
+    private var chargingTelemetryActive = false
     private val statusRefreshInFlight = AtomicBoolean(false)
     private val statusRefreshRequested = AtomicBoolean(false)
     private val statusRefreshRequestedVerbose = AtomicBoolean(false)
@@ -192,6 +198,25 @@ class MainActivity : ComponentActivity() {
     @Volatile private var lastGeocodedLocation: Pair<Double, Double>? = null
     private var statusError by mutableStateOf("")
     private var controlFeedback by mutableStateOf<ControlFeedback?>(null)
+    private var chargingControlFeedback by mutableStateOf<ControlFeedback?>(null)
+    private var chargingControlInProgress by mutableStateOf(false)
+    @Volatile private var chargingControlRevision = 0L
+    private var awaitingChargingConfirmation: ChargingConfirmation? = null
+
+    private data class ChargingControlContext(
+        val revision: Long,
+        val generation: Long,
+        val sourceSession: Session,
+        val requestSession: Session,
+        val name: String,
+        var credentialSnapshot: BackgroundSession
+    )
+
+    private data class ChargingConfirmation(
+        val context: ChargingControlContext,
+        val query: ChargingControlQueryOutcome,
+        val acceptedAtMs: Long
+    )
     private var activeControlCommandName by mutableStateOf<String?>(null)
     private var climateTemperatureRequestState by mutableStateOf(ClimateControlRequestState())
     @Volatile private var climateStatusRevision = 0L
@@ -261,7 +286,6 @@ class MainActivity : ComponentActivity() {
     private var showPowerTypeDialog by mutableStateOf(false)
     private var handledUpdateVersion by mutableStateOf<String?>(null)
     private var downloadUpdateProgress by mutableStateOf<Int?>(null)
-    private var showAuthorSupportDialog by mutableStateOf(false)
     private var showSessionExpiredDialog by mutableStateOf(false)
     private var availableVehicles by mutableStateOf<List<Vehicle>>(emptyList())
     private var vehicleImageVersion by mutableIntStateOf(0)
@@ -290,15 +314,6 @@ class MainActivity : ComponentActivity() {
     private var bluetoothCertificateJob: Job? = null
     private var bluetoothPermissionGeneration: Long? = null
     private var bluetoothScanAfterPermissionGeneration: Long? = null
-
-    private val authorSupportPromptRunnable = Runnable {
-        if (canShowAuthorSupportPrompt()) {
-            sessionStore.recordAuthorSupportPromptShown()
-            showAuthorSupportDialog = true
-        } else if (canArmAuthorSupportPrompt()) {
-            maybeShowAuthorSupportPrompt()
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -375,22 +390,23 @@ class MainActivity : ComponentActivity() {
         ThemeManager.cleanInvalidBlurredCache(this)
         ThemeManager.updateCurrentVehicle3DSupported(this, session.selectedVin)
         selectedThemeId = ThemeManager.getActiveThemeId(this, session.selectedVin)
-        worker.execute {
-            VehicleImageCache.loadCachedBitmap(this@MainActivity, session.selectedVin)
+        val startupSnapshot = BackgroundSession(session, backgroundEpoch)
+        resourceWorker.submit("prewarm") {
+            VehicleImageCache.loadCachedBitmap(applicationContext, startupSnapshot.vin)
         }
-        if (selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {
+        if (ThemeManager.isVehicle3DSupported(this, session.selectedVin) && selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {
             if (!ThemeManager.isThemeReady(this, selectedThemeId)) {
-                worker.execute {
-                    val themeObj = ThemeManager.loadCachedThemeList(this).find { it.themeId == selectedThemeId }
-                        ?: ThemeManager.PRESET_THEMES.find { it.themeId == selectedThemeId }
+                val themeVin = session.selectedVin
+                val requestedThemeId = selectedThemeId
+                resourceWorker.submit("startup-theme") {
+                    if (!isCurrentBackground(startupSnapshot) || !ThemeManager.isVehicle3DSupported(this, themeVin)) return@submit
+                    val themeObj = ThemeManager.loadCachedThemeList(this).find { it.themeId == requestedThemeId }
+                        ?: ThemeManager.PRESET_THEMES.find { it.themeId == requestedThemeId }
                     if (themeObj != null) {
-                        val api = runCatching { LeapmotorApi(session) }.getOrNull()
+                        val api = LeapmotorApi(startupSnapshot.request, allowCredentialRefresh = false)
                         val success = ThemeManager.syncThemePackage(this@MainActivity, api, themeObj)
                         if (success) {
-                            runOnUiThread {
-                                selectedThemeId = ThemeManager.getActiveThemeId(this@MainActivity, session.selectedVin)
-                                vehicleImageVersion++
-                            }
+                            refreshDownloadedTheme(startupSnapshot, requestedThemeId)
                         }
                     }
                 }
@@ -496,7 +512,6 @@ class MainActivity : ComponentActivity() {
                     onInstallVehicleOta = ::installVehicleOta,
                     onScheduleVehicleOta = ::scheduleVehicleOta,
                     handledUpdateVersion = handledUpdateVersion,
-                    showAuthorSupportDialog = showAuthorSupportDialog,
                     showSessionExpiredDialog = showSessionExpiredDialog,
                     phone = phone,
                     onPhoneChange = { phone = it.take(11) },
@@ -532,14 +547,11 @@ class MainActivity : ComponentActivity() {
                     onOpenVersionUpdatePrompt = ::openVersionUpdatePage,
                     downloadUpdateProgress = downloadUpdateProgress,
                     onStartInAppUpdate = ::startInAppUpdateDownload,
-                    onDismissAuthorSupport = { showAuthorSupportDialog = false },
-                    onDisableAuthorSupport = {
-                        sessionStore.disableAuthorSupportPrompt()
-                        showAuthorSupportDialog = false
-                    },
                     onOpenFeedback = ::openFeedback,
                     onSessionExpiredConfirmed = ::logout,
                     onRefresh = ::refreshStatus,
+                    onRefreshChargingTelemetry = ::refreshChargingTelemetry,
+                    onChargingTelemetryActiveChange = ::setChargingTelemetryActive,
                     onRefreshEnergy = { refreshEnergy(force = true) },
                     onAutoRefreshActiveChange = ::setAutoRefreshActive,
                     onLogout = ::logout,
@@ -551,7 +563,9 @@ class MainActivity : ComponentActivity() {
                     onOpenBluetoothKey = ::openBluetoothKey,
                     onRetryDownload3D = ::retryDownload3DModel,
                     bluetoothSettingsRequestId = bluetoothSettingsRequestId,
-                    onPowerTypeChange = ::savePowerType
+                    onPowerTypeChange = ::savePowerType,
+                    chargingControlFeedback = chargingControlFeedback,
+                    chargingControlInProgress = chargingControlInProgress
                 )
                 if (showBluetoothKey && !pinSetupInProgress) {
                     BluetoothKeyDialog(
@@ -621,15 +635,29 @@ class MainActivity : ComponentActivity() {
 
     private fun syncThemesAndEnsureActive() {
         val vin = session.selectedVin
-        android.util.Log.i("ThemeDebug", "syncThemesAndEnsureActive: vin='$vin'")
         if (vin.isBlank()) return
-        worker.execute {
+        val snapshot = BackgroundSession(session, backgroundEpoch)
+        val vehicles = availableVehicles.toList()
+        val requestedThemeId = selectedThemeId
+        resourceWorker.submit("themes") {
             runCatching {
-                val api = LeapmotorApi(session)
+                if (!isCurrentBackground(snapshot)) return@runCatching
+                if (!ThemeManager.isVehicle3DSupported(this@MainActivity, vin)) {
+                    runOnUiThread {
+                        if (isCurrentBackground(snapshot)) {
+                            selectedThemeId = ThemeManager.getActiveThemeId(this@MainActivity, vin)
+                            vehicleImageVersion++
+                            ControlWidget.refreshData(this@MainActivity)
+                        }
+                    }
+                    return@runCatching
+                }
+                val api = LeapmotorApi(snapshot.request, allowCredentialRefresh = false)
                 var themes = api.listThemeList(vin)
                 android.util.Log.i("ThemeDebug", "syncThemesAndEnsureActive: remote themes=${themes.size}")
-                if (themes.isEmpty() && availableVehicles.size > 1) {
-                    for (other in availableVehicles) {
+                if (themes.isEmpty() && vehicles.size > 1) {
+                    for (other in vehicles) {
+                        if (!isCurrentBackground(snapshot)) return@runCatching
                         if (other.vin != vin && other.vin.isNotBlank()) {
                             val candidate = runCatching { api.listThemeList(other.vin) }.getOrNull()
                             if (!candidate.isNullOrEmpty()) {
@@ -639,10 +667,14 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                if (themes.isNotEmpty()) {
-                    ThemeManager.saveThemeListCache(this@MainActivity, themes)
+                runOnUiThread {
+                    if (isCurrentBackground(snapshot)) {
+                        mergeBackgroundCredentials(snapshot)
+                        if (themes.isNotEmpty()) ThemeManager.saveThemeListCache(this@MainActivity, themes)
+                    }
                 }
-                val activeThemeId = ThemeManager.getActiveThemeId(this@MainActivity, vin)
+                if (!isCurrentBackground(snapshot)) return@runCatching
+                val activeThemeId = requestedThemeId
                 val ready = ThemeManager.isThemeReady(this@MainActivity, activeThemeId)
                 android.util.Log.i("ThemeDebug", "syncThemesAndEnsureActive: activeThemeId=$activeThemeId, isReady=$ready")
                 if (activeThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID && !ready) {
@@ -652,15 +684,29 @@ class MainActivity : ComponentActivity() {
                         val ok = ThemeManager.syncThemePackage(this@MainActivity, api, target)
                         android.util.Log.i("ThemeDebug", "syncThemesAndEnsureActive: syncThemePackage result=$ok")
                         if (ok) {
-                            runOnUiThread {
-                                selectedThemeId = activeThemeId
-                                vehicleImageVersion++
-                            }
+                            refreshDownloadedTheme(snapshot, activeThemeId)
                         }
                     }
                 }
             }.onFailure { err ->
-                android.util.Log.w("ThemeDebug", "syncThemesAndEnsureActive failed", err)
+                if (err !is BackgroundCredentialRefreshDeferredException) {
+                    android.util.Log.w("ThemeDebug", "syncThemesAndEnsureActive failed", err)
+                }
+            }
+        }
+    }
+
+    private fun refreshDownloadedTheme(snapshot: BackgroundSession, requestedThemeId: String) {
+        runOnUiThread {
+            if (!isCurrentBackground(snapshot)) return@runOnUiThread
+            val activeThemeId = ThemeManager.getActiveThemeId(this, session.selectedVin)
+            if (VehicleThemePolicy.canApplyDownloadResult(
+                    snapshot.vin, session.selectedVin, requestedThemeId, activeThemeId,
+                    ThemeManager.isVehicle3DSupported(this, session.selectedVin)
+                )) {
+                selectedThemeId = activeThemeId
+                vehicleImageVersion++
+                ControlWidget.refreshData(this)
             }
         }
     }
@@ -672,8 +718,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun updateSelectedTheme(themeId: String) {
-        selectedThemeId = themeId
-        ThemeManager.setActiveThemeId(this, session.selectedVin, themeId)
+        selectedThemeId = VehicleThemePolicy.activeThemeId(
+            ThemeManager.isVehicle3DSupported(this, session.selectedVin), themeId
+        )
+        ThemeManager.setActiveThemeId(this, session.selectedVin, selectedThemeId)
         ControlWidget.refreshData(this)
     }
 
@@ -1190,16 +1238,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun enterSessionExpiredState() {
+        invalidateBackgroundTasks()
+        clearChargingControlState()
         clearBluetoothState(closePage = true)
-        mainHandler.removeCallbacks(authorSupportPromptRunnable)
         clearPendingPinProtectedAction(cancel = true)
         pinSetupInProgress = false
         showVehicleConfigConfirmationPrompt = false
-        showAuthorSupportDialog = false
         showSessionExpiredDialog = true
     }
 
     override fun onDestroy() {
+        invalidateBackgroundTasks()
+        resourceWorker.close()
+        chargingTelemetryWorker.close()
+        clearChargingControlState()
         clearBluetoothState(closePage = true, endSession = false)
         activityDestroyed = true
         cancelPendingControlStatusRefreshes()
@@ -1230,12 +1282,11 @@ class MainActivity : ComponentActivity() {
         }
         checkForUpdate()
         updateAutoRefreshLoop()
-        maybeShowAuthorSupportPrompt()
     }
 
     override fun onPause() {
         activityResumed = false
-        mainHandler.removeCallbacks(authorSupportPromptRunnable)
+        cancelChargingTelemetry()
         updateAutoRefreshLoop()
         super.onPause()
     }
@@ -1276,17 +1327,6 @@ class MainActivity : ComponentActivity() {
         val requestedGeneration = bluetoothScanAfterPermissionGeneration ?: return
         bluetoothScanAfterPermissionGeneration = null
         if (requestedGeneration == bluetoothGeneration) startBluetoothScan()
-    }
-
-    override fun onUserInteraction() {
-        super.onUserInteraction()
-        maybeShowAuthorSupportPrompt()
-    }
-
-    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        // Activity.onUserInteraction only guarantees the start of a gesture; moves keep resetting idle time.
-        maybeShowAuthorSupportPrompt()
-        return super.dispatchTouchEvent(event)
     }
 
     private fun setAutoRefreshActive(active: Boolean) {
@@ -1481,8 +1521,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun logout() {
+        invalidateBackgroundTasks()
+        clearChargingControlState()
         clearBluetoothState(closePage = true)
-        mainHandler.removeCallbacks(authorSupportPromptRunnable)
         cancelPendingControlStatusRefreshes()
         optimisticLockState = null
         lastLockActionEpochMs = 0L
@@ -1524,7 +1565,6 @@ class MainActivity : ComponentActivity() {
         climatePreControlStatus = null
         pendingClimateConfirmation = null
         climateStatusRevision += 1L
-        showAuthorSupportDialog = false
         showSessionExpiredDialog = false
         loggedIn = false
         versionUpdateState = VersionUpdateState.Idle
@@ -1549,7 +1589,6 @@ class MainActivity : ComponentActivity() {
         toast("操控密码已保存")
         pendingAction?.invoke()
         checkAndPromptPowerType(session.selectedVin)
-        maybeShowAuthorSupportPrompt()
     }
 
     private fun cancelPinSetup() {
@@ -1558,7 +1597,6 @@ class MainActivity : ComponentActivity() {
         pinSetupErrorMessage = ""
         clearPendingPinProtectedAction(cancel = true)
         checkAndPromptPowerType(session.selectedVin)
-        maybeShowAuthorSupportPrompt()
     }
 
     private fun requestOperationPassword(
@@ -1570,7 +1608,6 @@ class MainActivity : ComponentActivity() {
         pin = ""
         pinSetupErrorMessage = ""
         pinSetupInProgress = true
-        mainHandler.removeCallbacks(authorSupportPromptRunnable)
     }
 
     private fun promptUpdateOperationPassword(
@@ -2246,7 +2283,6 @@ class MainActivity : ComponentActivity() {
         showVehicleConfigConfirmationPrompt = false
         ControlWidget.refreshData(this)
         if (previousPowerType != powerType) refreshStatus()
-        maybeShowAuthorSupportPrompt()
     }
 
     private fun savePowerType(powerType: SessionStore.VehiclePowerType) {
@@ -2292,38 +2328,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun maybeShowAuthorSupportPrompt() {
-        mainHandler.removeCallbacks(authorSupportPromptRunnable)
-        if (canArmAuthorSupportPrompt()) {
-            mainHandler.postDelayed(
-                authorSupportPromptRunnable,
-                PostLoginPromptTiming.AUTHOR_SUPPORT_IDLE_MS
-            )
-        }
-    }
-
-    private fun canArmAuthorSupportPrompt(): Boolean =
-        AuthorSupportIdlePolicy.canArm(
-            AuthorSupportPromptContext(
-                activityAlive = !activityDestroyed,
-                foreground = activityResumed,
-                loggedIn = loggedIn,
-                busy = busy,
-                pinPromptVisible = false,
-                pinSetupInProgress = pinSetupInProgress,
-                vehicleConfigPromptVisible = showVehicleConfigConfirmationPrompt,
-                sessionExpiredPromptVisible = showSessionExpiredDialog,
-                authorSupportPromptVisible = showAuthorSupportDialog,
-                authorSupportScreenOpening = false,
-                reminderEligibleToday = sessionStore.shouldShowAuthorSupportPrompt()
-            )
-        )
-
-    private fun canShowAuthorSupportPrompt(): Boolean = canArmAuthorSupportPrompt()
-
     private fun beginPostLoginPrompts(isNewLogin: Boolean = false) {
-        mainHandler.removeCallbacks(authorSupportPromptRunnable)
-        showAuthorSupportDialog = false
         showVehicleConfigConfirmationPrompt = false
         if (PostLoginPinSetupPolicy.shouldPromptPinSetup(isNewLogin = isNewLogin, pinSaved = pinSaved)) {
             pin = ""
@@ -2332,7 +2337,6 @@ class MainActivity : ComponentActivity() {
         } else {
             pinSetupInProgress = false
             checkAndPromptPowerType(session.selectedVin)
-            maybeShowAuthorSupportPrompt()
         }
     }
 
@@ -2492,6 +2496,69 @@ class MainActivity : ComponentActivity() {
 
     // ------------------------------------------------------------- 状态查询
 
+    private fun isCurrentBackground(snapshot: BackgroundSession): Boolean =
+        !activityDestroyed && !showSessionExpiredDialog && snapshot.matches(session, backgroundEpoch)
+
+    private fun mergeBackgroundCredentials(snapshot: BackgroundSession) {
+        if (!isCurrentBackground(snapshot) || !snapshot.credentialsChanged()) return
+        runCatching { sessionStore.mergeBackgroundCredentials(snapshot, session) }
+            .onFailure { Log.w("BackgroundSession", "Credential merge failed") }
+    }
+
+    private fun cancelChargingTelemetry() {
+        chargingTelemetryGate.cancel()
+        chargingTelemetryWorker.cancelAll()
+    }
+
+    private fun invalidateBackgroundTasks() {
+        backgroundEpoch += 1L
+        resourceWorker.cancelAll()
+        cancelChargingTelemetry()
+    }
+
+    private fun setChargingTelemetryActive(active: Boolean) {
+        chargingTelemetryActive = active
+        if (!active) cancelChargingTelemetry()
+    }
+
+    private fun refreshChargingTelemetry() {
+        if (!chargingTelemetryActive || !activityResumed || !loggedIn || activityDestroyed ||
+            showSessionExpiredDialog || chargingControlInProgress || session.selectedVin.isBlank()) return
+        val startedAt = android.os.SystemClock.elapsedRealtime()
+        val ticket = chargingTelemetryGate.begin(startedAt) ?: return
+        val snapshot = BackgroundSession(session, backgroundEpoch)
+        val revision = chargingControlRevision
+        val submitted = chargingTelemetryWorker.submit("telemetry") {
+            val request = chargingTelemetryOrder.begin(snapshot.epoch, revision)
+            val result = runCatching {
+                if (!isCurrentBackground(snapshot)) {
+                    runOnMain { chargingTelemetryGate.finish(ticket) }
+                    return@submit
+                }
+                LeapmotorApi(snapshot.request, allowCredentialRefresh = false).getVehicleState()
+            }
+            runOnMain {
+                if (!chargingTelemetryGate.isCurrent(ticket)) return@runOnMain
+                try {
+                    if (!isCurrentBackground(snapshot) || !activityResumed || !chargingTelemetryActive) return@runOnMain
+                    mergeBackgroundCredentials(snapshot)
+                    if (chargingControlInProgress || revision != chargingControlRevision) return@runOnMain
+                    result.getOrNull()?.let { values ->
+                        val current = status ?: return@let
+                        val refreshed = ChargingTelemetry.merge(current, values, snapshot.request.selectedCarType)
+                        if (!chargingTelemetryOrder.accept(request, backgroundEpoch, chargingControlRevision)) return@let
+                        status = refreshed
+                        confirmChargingFromRefresh(values, startedAt, revision)
+                    }
+                    // Background failures retain the last telemetry and all control feedback.
+                } finally {
+                    chargingTelemetryGate.finish(ticket)
+                }
+            }
+        }
+        if (!submitted) chargingTelemetryGate.finish(ticket)
+    }
+
     private fun refreshStatus(silent: Boolean = false, completion: ((Boolean) -> Unit)? = null) {
         if (!silent) {
             optimisticTrunkState = null
@@ -2513,9 +2580,13 @@ class MainActivity : ComponentActivity() {
             return
         }
         val refreshClimateRevision = climateStatusRevision
+        val refreshEpoch = backgroundEpoch
         busy(showBusy = !silent) { generation ->
+            val chargingRefreshStartedAtMs = android.os.SystemClock.elapsedRealtime()
+            val chargingRefreshRevision = chargingControlRevision
             try {
                 val api = LeapmotorApi(session)
+                val chargingRequest = chargingTelemetryOrder.begin(refreshEpoch, chargingRefreshRevision)
                 val signalMap = api.getVehicleState()
                 val receivedAtEpochMs = System.currentTimeMillis()
                 val legacyT03Location = session.selectedCarType.contains("T03", ignoreCase = true)
@@ -2616,6 +2687,7 @@ class MainActivity : ComponentActivity() {
                     ),
                     chargingPower = parsed.chargingPower,
                     chargeState = ChargeStatus.state(signalMap),
+                    chargeSoc = ChargeStatus.socPercent(signalMap.opt("soc")),
                     chargeRemainTime = ChargeStatus.remainingTime(signalMap.opt("chargeRemainTime")),
                     driving = parsed.isDriving,
                     trunkState = parsed.trunkState,
@@ -2625,6 +2697,7 @@ class MainActivity : ComponentActivity() {
                 ControlWidget.updateSyncCadence(this@MainActivity, parsed.isDriving)
                 ControlWidget.refreshData(this@MainActivity)
                 runOnMain(generation) {
+                    if (refreshEpoch != backgroundEpoch) return@runOnMain
                     // Replace the activity-only snapshot only when this refresh yields a valid position.
                     vehicleLocationSnapshot = locationSnapshot
                     vehicleLocationSnapshotState = locationSnapshot
@@ -2736,7 +2809,7 @@ class MainActivity : ComponentActivity() {
                     } else if (optimisticFridgeStatus != null && parsed.fridgeStatus?.enabled == optimisticFridgeStatus?.enabled) {
                         optimisticFridgeStatus = null
                     }
-                    status = baseRefreshed.copy(
+                    val refreshedStatus = baseRefreshed.copy(
                         locked = effectiveLock,
                         hoodOpen = effectiveHoodOpen,
                         sunroofOpen = effectiveSunroofOpen,
@@ -2772,6 +2845,11 @@ class MainActivity : ComponentActivity() {
                             sessionStore.loadHealthyChargeLimit(session.selectedVin)
                         }
                     )
+                    val chargingAccepted = chargingTelemetryOrder.accept(chargingRequest, backgroundEpoch, chargingControlRevision)
+                    status = chargingTelemetryOrder.mergeFullRefresh(status, refreshedStatus, chargingAccepted)
+                    if (chargingAccepted) {
+                        confirmChargingFromRefresh(signalMap, chargingRefreshStartedAtMs, chargingRefreshRevision)
+                    }
                     statusUpdatedAtEpochMs = receivedAtEpochMs
                     climateOptimisticGuard = ClimateTelemetryMergePolicy.consume(guard, decision)
                     if (decision == ClimateTelemetryMergeDecision.APPLY) {
@@ -2874,29 +2952,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val vehicleImageSyncInFlight = AtomicBoolean(false)
-    private val vehicleListRefreshInFlight = AtomicBoolean(false)
-
     private fun refreshVehicleList() {
         if (session.selectedVin.isBlank()) return
-        if (!vehicleListRefreshInFlight.compareAndSet(false, true)) return
-        worker.execute {
+        val snapshot = BackgroundSession(session, backgroundEpoch)
+        resourceWorker.submit("vehicles") {
             try {
-                val api = LeapmotorApi(session)
+                if (!isCurrentBackground(snapshot)) return@submit
+                val api = LeapmotorApi(snapshot.request, allowCredentialRefresh = false)
                 val vehicles = api.listVehicles()
-                if (vehicles.isNotEmpty()) {
-                    sessionStore.saveVehicles(vehicles)
-                    runOnMain {
+                runOnMain {
+                    if (!isCurrentBackground(snapshot)) return@runOnMain
+                    mergeBackgroundCredentials(snapshot)
+                    if (vehicles.isNotEmpty()) {
+                        sessionStore.saveVehicles(vehicles)
                         availableVehicles = vehicles.map { v ->
                             val localNick = sessionStore.loadVehicleConfig(v.vin).nickname.trim()
                             if (localNick.isNotBlank()) v.copy(nickname = localNick) else v
                         }
                     }
-                }
-                val selected = vehicles.firstOrNull { it.vin == session.selectedVin } ?: vehicles.firstOrNull()
-                if (selected != null) {
-                    sessionStore.save(session)
-                    runOnMain {
+                    val selected = vehicles.firstOrNull { it.vin == snapshot.vin }
+                    if (selected != null) {
                         val current = vehicleConfig
                         val updatedNickname = current.nickname.trim().ifBlank {
                             selected.nickname.ifBlank { current.model }
@@ -2912,49 +2987,52 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             } catch (_: Exception) {
-            } finally {
-                vehicleListRefreshInFlight.set(false)
             }
         }
     }
 
-    private fun syncVehicleImage(vin: String) {
-        if (vin.isBlank()) return
-        if (!vehicleImageSyncInFlight.compareAndSet(false, true)) return
-        worker.execute {
+    private fun syncVehicleImage(vin: String, cleanModel: Boolean = false) {
+        if (vin.isBlank() || vin != session.selectedVin) return
+        val snapshot = BackgroundSession(session, backgroundEpoch)
+        val requestedThemeId = selectedThemeId
+        resourceWorker.submit("vehicle-image") {
             try {
-                val api = LeapmotorApi(session)
-                val updated = VehicleImageCache.sync(this@MainActivity, api, vin)
-                if (updated) {
-                    runOnUiThread {
+                if (!isCurrentBackground(snapshot)) return@submit
+                if (cleanModel) VehicleImageCache.getCachedMeta(this, vin)?.h5Key?.let {
+                    CarModel3DManager.cleanModelPackage(this, it)
+                }
+                val api = LeapmotorApi(snapshot.request, allowCredentialRefresh = false)
+                val previouslySupported = ThemeManager.isVehicle3DSupported(this@MainActivity, vin)
+                val updated = VehicleImageCache.sync(applicationContext, api, vin) { isCurrentBackground(snapshot) }
+                val capabilityChanged = previouslySupported != ThemeManager.isVehicle3DSupported(this@MainActivity, vin)
+                runOnUiThread {
+                    if (!isCurrentBackground(snapshot)) return@runOnUiThread
+                    mergeBackgroundCredentials(snapshot)
+                    val currentSupportChanged = ThemeManager.isCurrentVehicle3DSupported !=
+                        ThemeManager.isVehicle3DSupported(this@MainActivity, vin)
+                    if (updated || capabilityChanged || currentSupportChanged) {
+                        ThemeManager.updateCurrentVehicle3DSupported(this@MainActivity, vin)
+                        if (selectedThemeId == requestedThemeId) {
+                            selectedThemeId = ThemeManager.getActiveThemeId(this@MainActivity, vin)
+                        }
                         vehicleImageVersion++
+                        ControlWidget.refreshData(this@MainActivity)
                     }
-                    ControlWidget.refreshData(this@MainActivity)
                 }
             } catch (_: Exception) {
                 // Keep local fallback
-            } finally {
-                vehicleImageSyncInFlight.set(false)
             }
         }
     }
 
     private fun retryDownload3DModel() {
-        val vin = session.selectedVin
-        if (vin.isBlank()) return
-        worker.execute {
-            val meta = VehicleImageCache.getCachedMeta(this@MainActivity, vin)
-            meta?.h5Key?.let { h5Key ->
-                CarModel3DManager.cleanModelPackage(this@MainActivity, h5Key)
-            }
-            vehicleImageSyncInFlight.set(false)
-            syncVehicleImage(vin)
-        }
+        syncVehicleImage(session.selectedVin, cleanModel = true)
     }
 
     private fun handleCustomVehicleImage(uri: Uri) {
         val vin = session.selectedVin
         if (vin.isBlank()) return
+        val snapshot = BackgroundSession(session, backgroundEpoch)
         Log.i("LeapVehiclePic", "收到选图回调: $uri")
         try {
             contentResolver.takePersistableUriPermission(
@@ -2965,21 +3043,16 @@ class MainActivity : ComponentActivity() {
             // 不支持持久化权限的 URI provider 安全忽略
         }
 
-        // 立即在主线程持有鲜活权限时，一次性把输入流读入内存字节数组，彻底杜绝跨线程权限失效
-        val imageBytes = try {
-            contentResolver.openInputStream(uri)?.use { it.readBytes() }
-        } catch (e: Exception) {
-            Log.e("LeapVehiclePic", "主线程读取选图输入流异常", e)
-            null
-        }
-
-        if (imageBytes == null || imageBytes.isEmpty()) {
-            toast("读取图片数据失败，请重试")
-            return
-        }
-
-        worker.execute {
+        resourceWorker.submit("custom-image") {
             try {
+                if (!isCurrentBackground(snapshot)) return@submit
+                val imageBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (imageBytes == null || imageBytes.isEmpty()) {
+                    runOnUiThread {
+                        if (isCurrentBackground(snapshot)) toast("读取图片数据失败，请重试")
+                    }
+                    return@submit
+                }
                 val original = VehicleImageProcessor.decodeBitmapFromBytes(
                     bytes = imageBytes,
                     reqWidth = 1920,
@@ -2992,24 +3065,26 @@ class MainActivity : ComponentActivity() {
                 )
                 if (original == null) {
                     runOnUiThread {
-                        toast("图片解析失败，请重试")
+                        if (isCurrentBackground(snapshot)) toast("图片解析失败，请重试")
                     }
-                    return@execute
+                    return@submit
                 }
                 val processed = VehicleImageProcessor.processUserVehicleImage(original)
                 if (processed !== original) {
                     original.recycle()
                 }
+                if (!isCurrentBackground(snapshot)) return@submit
                 VehicleImageCache.saveCustomImage(this@MainActivity, vin, processed)
                 runOnUiThread {
+                    if (!isCurrentBackground(snapshot)) return@runOnUiThread
                     vehicleImageVersion++
                     toast("爱车主图已更新")
+                    ControlWidget.refreshData(this@MainActivity)
                 }
-                ControlWidget.refreshData(this@MainActivity)
             } catch (e: Exception) {
                 Log.e("LeapVehiclePic", "处理自定义车图失败", e)
                 runOnUiThread {
-                    toast("保存主图失败: ${e.message}")
+                    if (isCurrentBackground(snapshot)) toast("保存主图失败: ${e.message}")
                 }
             }
         }
@@ -3018,20 +3093,17 @@ class MainActivity : ComponentActivity() {
     private fun resetCustomVehicleImage() {
         val vin = session.selectedVin
         if (vin.isBlank()) return
-        VehicleImageCache.removeCustomImage(this, vin)
-        vehicleImageVersion++
-        toast("已恢复默认官方车模")
-        worker.execute {
-            ControlWidget.refreshData(this@MainActivity)
-            val api = runCatching { LeapmotorApi(session) }.getOrNull()
-            if (api != null) {
-                val updated = VehicleImageCache.sync(this@MainActivity, api, vin)
-                if (updated) {
-                    runOnUiThread {
-                        vehicleImageVersion++
-                    }
-                    ControlWidget.refreshData(this@MainActivity)
-                }
+        val snapshot = BackgroundSession(session, backgroundEpoch)
+        resourceWorker.submit("reset-custom-image") {
+            if (!isCurrentBackground(snapshot)) return@submit
+            VehicleImageCache.removeCustomImage(applicationContext, vin)
+            if (!isCurrentBackground(snapshot)) return@submit
+            ControlWidget.refreshData(applicationContext)
+            runOnMain {
+                if (!isCurrentBackground(snapshot)) return@runOnMain
+                vehicleImageVersion++
+                toast("已恢复默认官方车模")
+                syncVehicleImage(vin)
             }
         }
     }
@@ -3039,6 +3111,8 @@ class MainActivity : ComponentActivity() {
     private fun switchVehicle(targetVin: String) {
         if (targetVin.isBlank() || targetVin == session.selectedVin) return
         val target = availableVehicles.firstOrNull { it.vin == targetVin } ?: return
+        invalidateBackgroundTasks()
+        clearChargingControlState()
         clearBluetoothState(closePage = true)
         session.selectedVin = target.vin
         session.selectedCarType = target.carType
@@ -3796,6 +3870,7 @@ class MainActivity : ComponentActivity() {
 
         return VehicleStatus(
             soc = effectiveSoc,
+            chargeSoc = ChargeStatus.socPercent(m.opt("soc")),
             preciseSoc = preciseSocStr ?: standardSocStr,
             fuelSoc = fuelSocStr,
             mileage = displayMileage?.let { "${it}km" },
@@ -4049,7 +4124,250 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun clearChargingControlState() {
+        chargingControlRevision += 1L
+        chargingControlInProgress = false
+        chargingControlFeedback = null
+        awaitingChargingConfirmation = null
+    }
+
+    private fun isCurrentChargingControl(context: ChargingControlContext): Boolean =
+        !activityDestroyed && loggedIn && !showSessionExpiredDialog &&
+            context.generation == operationGeneration && context.revision == chargingControlRevision &&
+            session === context.sourceSession && session.generation == context.requestSession.generation &&
+            session.selectedVin == context.requestSession.selectedVin
+
+    private fun chargingContext(name: String): ChargingControlContext {
+        val source = session
+        // Freeze the target vehicle even if the user switches vehicles during an HTTP call.
+        val request = source.requestSnapshot()
+        return ChargingControlContext(++chargingControlRevision, operationGeneration, source, request, name,
+            BackgroundSession(source, backgroundEpoch))
+    }
+
+    private fun submitChargingControl(name: String) {
+        if (activityDestroyed || chargingControlInProgress) return
+        if (!loggedIn || showSessionExpiredDialog || session.selectedVin.isBlank()) {
+            chargingControlFeedback = ControlFeedback("请先登录并选择车辆", ControlFeedbackKind.ERROR)
+            return
+        }
+        if (VehicleDrivingSafetyPolicy.isDrivingGear(status?.gearStatus)) {
+            chargingControlFeedback = ControlFeedback(
+                VehicleDrivingSafetyPolicy.DRIVING_OPERATION_PROHIBITED_HINT, ControlFeedbackKind.WARNING
+            )
+            return
+        }
+        val context = chargingContext(name)
+        awaitingChargingConfirmation = null
+        chargingControlInProgress = true
+        val savedPin = sessionStore.loadOpPassword()
+        if (savedPin.isNullOrBlank()) {
+            chargingControlFeedback = ControlFeedback("需要设置四位操作密码后才能执行充电控制", ControlFeedbackKind.WARNING)
+            requestOperationPassword(
+                action = {
+                    if (isCurrentChargingControl(context)) {
+                        chargingControlInProgress = false
+                        submitChargingControl(name)
+                    }
+                },
+                onCancel = {
+                    if (isCurrentChargingControl(context)) {
+                        chargingControlInProgress = false
+                        chargingControlFeedback = ControlFeedback("需要操作密码，充电指令未发送", ControlFeedbackKind.WARNING)
+                    }
+                }
+            )
+            return
+        }
+        chargingControlFeedback = ControlFeedback("正在发送充电指令…", ControlFeedbackKind.IN_PROGRESS)
+        worker.execute { executeChargingControl(context, savedPin) }
+    }
+
+    private fun saveChargingSession(context: ChargingControlContext) {
+        if (!isCurrentChargingControl(context)) return
+        val snapshot = context.credentialSnapshot
+        val refreshed = context.requestSession.requestSnapshot()
+        snapshot.request.oldAuth = refreshed.oldAuth
+        snapshot.request.newAuth = refreshed.newAuth
+        // Capture each stage separately; a delayed main-thread save cannot read a later mutation.
+        context.credentialSnapshot = BackgroundSession(refreshed, snapshot.epoch)
+        // Persist on the main thread so logout/vehicle switching cannot interleave with the save.
+        runOnMain(context.generation) {
+            if (!isCurrentChargingControl(context)) return@runOnMain
+            try {
+                mergeBackgroundCredentials(snapshot)
+            } catch (e: Exception) {
+                recordChargingFailure(context, ChargingControlFailureStage.SESSION_SAVE, e)
+            }
+        }
+    }
+
+    private fun executeChargingControl(context: ChargingControlContext, savedPin: String) {
+        var postAccepted = false
+        var stage = ChargingControlFailureStage.SUBMISSION
+        try {
+            if (!isCurrentChargingControl(context)) return
+            if (VehicleDrivingSafetyPolicy.isDrivingGear(status?.gearStatus)) {
+                runOnMain(context.generation) {
+                    if (isCurrentChargingControl(context)) chargingControlFeedback = ControlFeedback(
+                        VehicleDrivingSafetyPolicy.DRIVING_OPERATION_PROHIBITED_HINT, ControlFeedbackKind.WARNING
+                    )
+                }
+                return
+            }
+            context.credentialSnapshot = BackgroundSession(context.sourceSession, backgroundEpoch)
+            context.requestSession.oldAuth = context.credentialSnapshot.request.oldAuth
+            context.requestSession.newAuth = context.credentialSnapshot.request.newAuth
+            val api = LeapmotorApi(context.requestSession)
+            val result = api.sendControl(Commands.build(context.name), savedPin)
+            postAccepted = true
+            val acceptedAtMs = android.os.SystemClock.elapsedRealtime()
+            if (!isCurrentChargingControl(context)) return
+            saveChargingSession(context)
+            runOnMain(context.generation) {
+                if (isCurrentChargingControl(context)) chargingControlFeedback = ControlFeedback(
+                    "指令已发送，执行结果待确认…", ControlFeedbackKind.IN_PROGRESS
+                )
+            }
+            stage = ChargingControlFailureStage.RESULT_QUERY
+            val query = queryChargingResult(api, context, result)
+            if (!isCurrentChargingControl(context)) return
+            val confirmation = ChargingConfirmation(context, query, acceptedAtMs)
+            stage = ChargingControlFailureStage.TELEMETRY
+            val chargeState = if (context.name == "unlockCharger") null else readChargingTelemetry(api, confirmation)
+            if (!isCurrentChargingControl(context)) return
+            val outcome = ChargingControlPolicy.outcome(context.name, query, chargeState)
+            runOnMain(context.generation) {
+                if (!isCurrentChargingControl(context)) return@runOnMain
+                chargingControlFeedback = ChargingControlPolicy.feedback(context.name, outcome)
+                awaitingChargingConfirmation = confirmation.takeIf {
+                    outcome == ChargingControlOutcome.AWAITING_CONFIRMATION &&
+                        query != ChargingControlQueryOutcome.UNCONFIRMED && context.name != "unlockCharger"
+                }
+            }
+        } catch (e: Exception) {
+            if (e is InterruptedException) Thread.currentThread().interrupt()
+            if (isCurrentChargingControl(context)) {
+                recordChargingFailure(context, stage, e)
+                runOnMain(context.generation) {
+                    if (!isCurrentChargingControl(context)) return@runOnMain
+                    chargingControlFeedback = if (OperationPasswordErrorPolicy.isPasswordError(e)) {
+                        ControlFeedback(OperationPasswordErrorPolicy.ERROR_PROMPT_MESSAGE, ControlFeedbackKind.ERROR)
+                    } else ChargingControlPolicy.failureFeedback(postAccepted, stage)
+                    handleSessionFailure(e)
+                    if (OperationPasswordErrorPolicy.isPasswordError(e)) {
+                        promptUpdateOperationPassword(retryAction = null)
+                    }
+                }
+            }
+        } finally {
+            runOnMain(context.generation) {
+                if (context.revision == chargingControlRevision) chargingControlInProgress = false
+            }
+        }
+    }
+
+    private fun queryChargingResult(
+        api: LeapmotorApi,
+        context: ChargingControlContext,
+        result: ControlResult
+    ): ChargingControlQueryOutcome {
+        if (!result.hasPollingId()) return ChargingControlQueryOutcome.NO_ID
+        repeat(ControlResultPollingPolicy.appMaxAttempts) { attempt ->
+            if (!isCurrentChargingControl(context)) return ChargingControlQueryOutcome.UNCONFIRMED
+            Thread.sleep(ControlResultPollingPolicy.delayBeforeAttempt(attempt))
+            if (!isCurrentChargingControl(context)) return ChargingControlQueryOutcome.UNCONFIRMED
+            val response = api.queryControlResult(result.msgID)
+            saveChargingSession(context)
+            if (SentryModeControlPolicy.querySucceeded(response.opt("result"), response.opt("code"))) {
+                return ChargingControlQueryOutcome.CONFIRMED
+            }
+            // Reuse known error classifiers; do not guess meanings for other result codes.
+            val queryError = ApiException(response.optString("msg").ifBlank { response.optString("message") })
+            if (OperationPasswordErrorPolicy.isPasswordError(queryError) ||
+                SessionExpiry.isRefreshTokenInvalid(queryError.message)
+            ) throw queryError
+        }
+        recordChargingFailure(context, ChargingControlFailureStage.RESULT_QUERY, null)
+        return ChargingControlQueryOutcome.UNCONFIRMED
+    }
+
+    private fun readChargingTelemetry(api: LeapmotorApi, confirmation: ChargingConfirmation): Int? {
+        val context = confirmation.context
+        var latestState: Int? = null
+        var lastError: Exception? = null
+        repeat(ChargingControlPolicy.TELEMETRY_ATTEMPTS) { attempt ->
+            if (!isCurrentChargingControl(context)) return null
+            if (attempt > 0) Thread.sleep(ChargingControlPolicy.TELEMETRY_INTERVAL_MS)
+            if (!isCurrentChargingControl(context)) return null
+            try {
+                val request = chargingTelemetryOrder.begin(context.credentialSnapshot.epoch, context.revision)
+                val latest = api.getVehicleState()
+                saveChargingSession(context)
+                val refreshed = parseStatus(latest)
+                val receivedState = refreshed.chargeState
+                latestState = receivedState
+                lastError = null
+                runOnMain(context.generation) {
+                    if (!isCurrentChargingControl(context)) return@runOnMain
+                    val current = status ?: return@runOnMain
+                    if (!chargingTelemetryOrder.accept(request, backgroundEpoch, chargingControlRevision)) return@runOnMain
+                    status = ChargingControlPolicy.mergeTelemetry(current, refreshed)
+                }
+                if (ChargingControlPolicy.telemetryMatches(context.name, latestState)) return latestState
+            } catch (e: Exception) {
+                if (e is InterruptedException || SessionExpiry.isRefreshTokenInvalid(e.message)) throw e
+                recordChargingFailure(context, ChargingControlFailureStage.TELEMETRY, e)
+                lastError = e
+            }
+        }
+        lastError?.let { error ->
+            runOnMain(context.generation) {
+                if (isCurrentChargingControl(context) && confirmation.query != ChargingControlQueryOutcome.UNCONFIRMED) {
+                    awaitingChargingConfirmation = confirmation
+                }
+            }
+            throw error
+        }
+        return latestState
+    }
+
+    private fun confirmChargingFromRefresh(signalMap: JSONObject, refreshStartedAtMs: Long, refreshRevision: Long) {
+        val pending = awaitingChargingConfirmation ?: return
+        if (!isCurrentChargingControl(pending.context) || refreshRevision != pending.context.revision) return
+        val nowMs = android.os.SystemClock.elapsedRealtime()
+        val ageMs = nowMs - pending.acceptedAtMs
+        if (ageMs > ChargingControlPolicy.LATE_CONFIRMATION_WINDOW_MS) {
+            awaitingChargingConfirmation = null
+            return
+        }
+        if (!ChargingControlPolicy.canConfirmFromRefresh(pending.acceptedAtMs, refreshStartedAtMs, nowMs)) return
+        val outcome = ChargingControlPolicy.outcome(pending.context.name, pending.query, ChargeStatus.state(signalMap))
+        if (outcome == ChargingControlOutcome.SUCCESS) {
+            chargingControlFeedback = ChargingControlPolicy.feedback(pending.context.name, outcome)
+            awaitingChargingConfirmation = null
+        }
+    }
+
+    private fun recordChargingFailure(
+        context: ChargingControlContext,
+        stage: ChargingControlFailureStage,
+        error: Exception?
+    ) {
+        if (!isCurrentChargingControl(context)) return
+        ErrorLogs.repository.record(ErrorLogEntry(
+            timestampMs = System.currentTimeMillis(), category = ErrorLogCategory.CONTROL_FAILURE,
+            stage = "charging_${stage.name.lowercase()}", httpStatus = (error as? ApiException)?.httpStatus,
+            appVersion = BuildConfig.VERSION_NAME,
+            message = "${context.name}: ${error?.javaClass?.simpleName ?: "result_not_confirmed"}"
+        ))
+    }
+
     private fun control(name: String) {
+        if (ChargingControlPolicy.supports(name)) {
+            submitChargingControl(name)
+            return
+        }
         if (VehicleDrivingSafetyPolicy.isDrivingGear(status?.gearStatus)) {
             toast(VehicleDrivingSafetyPolicy.DRIVING_OPERATION_PROHIBITED_HINT)
             return
@@ -4623,7 +4941,6 @@ class MainActivity : ComponentActivity() {
         val generation = operationGeneration
         if (showBusy) {
             busy = true
-            mainHandler.removeCallbacks(authorSupportPromptRunnable)
         }
         worker.execute {
             if (activityDestroyed || generation != operationGeneration) return@execute
@@ -4636,7 +4953,6 @@ class MainActivity : ComponentActivity() {
             } finally {
                 if (showBusy) runOnMain(generation) {
                     busy = false
-                    maybeShowAuthorSupportPrompt()
                 }
             }
         }

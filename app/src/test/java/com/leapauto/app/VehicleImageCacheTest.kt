@@ -164,24 +164,43 @@ class VehicleImageCacheTest {
     }
 
     @Test
-    fun `resetCustomVehicleImage executes widget refresh asynchronously in worker thread`() {
+    fun `reset custom image refresh runs inside resource lane and outside main callback`() {
         val projectDir = projectDirectory()
         val mainActivityFile = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/MainActivity.kt")
         val content = mainActivityFile.readText().replace("\r\n", "\n")
 
-        // 验证 resetCustomVehicleImage 不在主线程直接同步调用 ControlWidget.refreshData
         val resetMethod = content.substringAfter("private fun resetCustomVehicleImage()")
             .substringBefore("private fun switchVehicle")
+        val laneCall = "resourceWorker.submit(\"reset-custom-image\")"
+        val laneStart = resetMethod.indexOf(laneCall)
+        org.junit.Assert.assertTrue("Reset must use the bounded resource lane", laneStart >= 0)
+        val laneBody = blockAt(resetMethod, resetMethod.indexOf('{', laneStart))
+        val mainStart = laneBody.indexOf("runOnMain")
+        org.junit.Assert.assertTrue("UI updates must return to main", mainStart >= 0)
+        val mainBody = blockAt(laneBody, laneBody.indexOf('{', mainStart))
+        val refresh = "ControlWidget.refreshData(applicationContext)"
+        org.junit.Assert.assertEquals("Only one immediate widget refresh", 1,
+            Regex("ControlWidget\\.refreshData\\(").findAll(resetMethod).count())
+        org.junit.Assert.assertTrue(laneBody.substringBefore("runOnMain").contains(refresh))
+        org.junit.Assert.assertTrue(laneBody.substringBefore("runOnMain").contains("VehicleImageCache.removeCustomImage(applicationContext, vin)"))
+        org.junit.Assert.assertTrue(laneBody.contains("if (!isCurrentBackground(snapshot)) return@submit"))
+        org.junit.Assert.assertFalse(mainBody.contains("ControlWidget.refreshData"))
+        org.junit.Assert.assertFalse(resetMethod.substringBefore(laneCall).contains("ControlWidget.refreshData"))
+        org.junit.Assert.assertFalse("Must not consume the control lane", resetMethod.contains("worker.execute"))
+        org.junit.Assert.assertFalse(resetMethod.contains("CompactControlWidget.refreshData"))
+        org.junit.Assert.assertTrue(mainBody.contains("syncVehicleImage(vin)"))
+    }
 
-        org.junit.Assert.assertTrue(
-            "resetCustomVehicleImage 必须在 worker.execute 内部异步刷新小组件，杜绝主线程卡顿",
-            resetMethod.contains("worker.execute {\n            ControlWidget.refreshData(this@MainActivity)")
-        )
-        // 验证去除了主线程外层冗余的 CompactControlWidget.refreshData
-        org.junit.Assert.assertFalse(
-            "外层不应重复调用 CompactControlWidget.refreshData",
-            resetMethod.substringBefore("worker.execute").contains("CompactControlWidget.refreshData")
-        )
+    private fun blockAt(source: String, opening: Int): String {
+        require(opening >= 0 && source[opening] == '{')
+        var depth = 0
+        for (index in opening until source.length) {
+            when (source[index]) {
+                '{' -> depth++
+                '}' -> if (--depth == 0) return source.substring(opening + 1, index)
+            }
+        }
+        error("Unbalanced source block")
     }
 
     @Test

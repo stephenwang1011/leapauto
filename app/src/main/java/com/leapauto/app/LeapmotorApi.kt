@@ -23,6 +23,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 class ApiException(message: String, val httpStatus: Int? = null, val durationMs: Long? = null, val retryCount: Int = 0, val stage: String = "api") : Exception(message)
 
+internal class BackgroundCredentialRefreshDeferredException : Exception("Background credential refresh deferred")
+
 /**
  * 零跑中国 App 云接口客户端（阻塞式，请在后台线程调用）。
  * 协议移植自 leap-cn-mcp 的 leapmotor-cn-sdk.js。
@@ -30,16 +32,18 @@ class ApiException(message: String, val httpStatus: Int? = null, val durationMs:
 class LeapmotorApi internal constructor(
     private val session: Session,
     private val deviceFingerprintProvider: () -> String,
-    private val loginRequestExecutor: (Request) -> VehicleListRawResponse
+    private val loginRequestExecutor: (Request) -> VehicleListRawResponse,
+    private val allowCredentialRefresh: Boolean = true
 ) {
-    constructor(session: Session) : this(
+    constructor(session: Session, allowCredentialRefresh: Boolean = true) : this(
         session,
         { ShumeiSecurityManager.requireDeviceId() },
         { request ->
             NetworkDebugController.httpClient().newCall(request).execute().use { response ->
                 VehicleListRawResponse(response.code, response.body?.string().orEmpty())
             }
-        }
+        },
+        allowCredentialRefresh
     )
 
     companion object {
@@ -484,6 +488,7 @@ class LeapmotorApi internal constructor(
     }
 
     private fun exchangeNewGateway() {
+        requireCredentialRefreshAllowed()
         val old = session.oldAuth ?: throw ApiException("未登录")
         val body = JSONObject().apply {
             put("identifier", old.accountId)
@@ -505,6 +510,7 @@ class LeapmotorApi internal constructor(
     }
 
     private fun refreshGatewayToken() {
+        requireCredentialRefreshAllowed()
         val auth = session.newAuth ?: throw ApiException("未登录")
         if (auth.refreshToken.isBlank()) throw ApiException("缺少 refreshToken，无法自动续期")
         val body = JSONObject().apply { put("refreshToken", auth.refreshToken) }
@@ -519,6 +525,7 @@ class LeapmotorApi internal constructor(
 
     /** 旧 App token 续期（远控签名用），需手机号。 */
     fun refreshOldToken() {
+        requireCredentialRefreshAllowed()
         val old = session.oldAuth ?: throw ApiException("未登录")
         if (session.phone.isBlank()) throw ApiException("旧 token 续期需要手机号，请重新登录")
         val signed = oldSignedParams(
@@ -2344,6 +2351,7 @@ class LeapmotorApi internal constructor(
 
     /** 网关 refresh token 可能已在旧版本中轮换，用旧链路续期后重新交换网关会话。 */
     private fun refreshAccessTokenWithFallback() {
+        requireCredentialRefreshAllowed()
         val previousAccessToken = session.newAuth?.accessToken
         try {
             refreshGatewayToken()
@@ -2355,6 +2363,11 @@ class LeapmotorApi internal constructor(
         if (session.newAuth?.accessToken == previousAccessToken) {
             exchangeNewGateway()
         }
+    }
+
+    private fun requireCredentialRefreshAllowed() {
+        // Optional background reads must not rotate the control path's refresh token.
+        if (!allowCredentialRefresh) throw BackgroundCredentialRefreshDeferredException()
     }
 
     fun ensureFreshOldToken() {

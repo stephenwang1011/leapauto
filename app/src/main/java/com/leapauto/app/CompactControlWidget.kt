@@ -32,7 +32,7 @@ class CompactControlWidget : AppWidgetProvider() {
                 val vin = session.selectedVin
                 val activeThemeId = ThemeManager.getActiveThemeId(context, vin)
                 val is3dSupported = ThemeManager.isVehicle3DSupported(context, vin)
-                val themeBgBitmap = if (!is3dSupported || activeThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {
+                val themeBgBitmap = if (VehicleThemePolicy.background(is3dSupported, activeThemeId) != VehicleThemePolicy.Background.ORIGINAL) {
                     ThemeManager.loadWidgetBgBitmap(context, activeThemeId, is4x2 = false, darkTheme = darkTheme, vin = vin)
                 } else null
 

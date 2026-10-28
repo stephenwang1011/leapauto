@@ -49,8 +49,10 @@ import androidx.compose.ui.unit.sp
 import com.leapauto.app.ControlWidget
 import com.leapauto.app.LeapmotorApi
 import com.leapauto.app.R
+import com.leapauto.app.SessionStore
 import com.leapauto.app.ThemeManager
 import com.leapauto.app.VehicleTheme
+import com.leapauto.app.VehicleThemePolicy
 import com.leapauto.app.ui.theme.LocalAppDarkTheme
 import com.leapauto.app.ui.theme.statusGood
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +66,7 @@ fun ThemeSelectorBottomSheet(
     currentThemeId: String,
     themes: List<VehicleTheme>,
     api: LeapmotorApi?,
+    is3dSupported: Boolean,
     onDismiss: () -> Unit,
     onThemeApplied: (String) -> Unit,
     onNavigateToHome: () -> Unit = {}
@@ -74,10 +77,14 @@ fun ThemeSelectorBottomSheet(
     val coroutineScope = rememberCoroutineScope()
     var downloadingThemeId by remember { mutableStateOf<String?>(null) }
     var applyingThemeId by remember { mutableStateOf<String?>(null) }
-    var activeThemeId by remember { mutableStateOf(currentThemeId) }
+    var activeThemeId by remember(vin, currentThemeId, is3dSupported) {
+        mutableStateOf(VehicleThemePolicy.activeThemeId(is3dSupported, currentThemeId))
+    }
+    val availableThemes = VehicleThemePolicy.availableThemes(is3dSupported, themes)
     var showSwitchSuccessDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(vin, currentThemeId, is3dSupported) {
+        if (!is3dSupported) return@LaunchedEffect
         withContext(Dispatchers.IO) {
             ThemeManager.cleanInvalidBlurredCache(context)
             if (currentThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID && !ThemeManager.isThemeReady(context, currentThemeId)) {
@@ -87,7 +94,13 @@ fun ThemeSelectorBottomSheet(
                     val ok = ThemeManager.syncThemePackage(context, api, currentObj)
                     if (ok) {
                         withContext(Dispatchers.Main) {
-                            onThemeApplied(currentThemeId)
+                            if (VehicleThemePolicy.canApplyDownloadResult(
+                                    vin, SessionStore(context).load().selectedVin,
+                                    currentThemeId, ThemeManager.getActiveThemeId(context, vin),
+                                    ThemeManager.isVehicle3DSupported(context, vin)
+                                )) {
+                                onThemeApplied(currentThemeId)
+                            }
                         }
                     }
                 }
@@ -115,18 +128,12 @@ fun ThemeSelectorBottomSheet(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text(
                         text = "主题中心",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = "选中的主题将同时应用于爱车 3D 展台背景与桌面小组件皮肤",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 IconButton(
@@ -149,17 +156,31 @@ fun ThemeSelectorBottomSheet(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
-                items(themes, key = { it.themeId }) { theme ->
+                if (isDark) {
+                    item(key = "night_brightness_$activeThemeId") {
+                        NightBrightnessControl(
+                            vin = vin,
+                            themeId = activeThemeId,
+                            supports3d = is3dSupported,
+                            enabled = downloadingThemeId == null && applyingThemeId == null
+                        )
+                    }
+                }
+                items(availableThemes, key = { it.themeId }) { theme ->
                     val isSelected = activeThemeId == theme.themeId
-                    val isReady = ThemeManager.isThemeReady(context, theme.themeId)
+                    val isReady = !is3dSupported || ThemeManager.isThemeReady(context, theme.themeId)
                     val isDownloading = downloadingThemeId == theme.themeId
                     val isApplying = applyingThemeId == theme.themeId
-                    val isBusy = isDownloading || isApplying
+                    val isBusy = downloadingThemeId != null || applyingThemeId != null
 
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
+                            .frostedGlassCard(
+                                shape = RoundedCornerShape(14.dp),
+                                auraColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else null
+                            )
                             .clickable(enabled = !isBusy && (!isSelected || !isReady)) {
                                 if (isBusy || (isSelected && isReady)) return@clickable
                                 if (isReady || theme.themeId == ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {
@@ -198,19 +219,8 @@ fun ThemeSelectorBottomSheet(
                                 }
                             },
                         shape = RoundedCornerShape(14.dp),
-                        color = if (isDark) {
-                            if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                            else Color(0xFF202634).copy(alpha = 0.90f)
-                        } else {
-                            if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-                            else Color.White
-                        },
-                        border = BorderStroke(
-                            width = if (isSelected) 1.5.dp else 0.8.dp,
-                            color = if (isSelected) MaterialTheme.colorScheme.primary
-                            else if (isDark) Color.White.copy(alpha = 0.10f)
-                            else Color.Black.copy(alpha = 0.06f)
-                        ),
+                        color = Color.Transparent,
+                        border = glassCardBorder(),
                         shadowElevation = 0.dp
                     ) {
                         Row(
@@ -224,11 +234,7 @@ fun ThemeSelectorBottomSheet(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    val displayName = when {
-                                        theme.themeId == ThemeManager.ORIGINAL_SKYBOX_THEME_ID || theme.name == "默认主题" || theme.name == "原厂天幕" -> "层峦叠嶂"
-                                        theme.themeId == ThemeManager.DEFAULT_THEME_ID || theme.name == "雾川雪镜" -> "雾川雪境"
-                                        else -> theme.name
-                                    }
+                                    val displayName = VehicleThemePolicy.displayName(is3dSupported, theme.themeId, availableThemes)
                                     Text(
                                         text = displayName,
                                         style = MaterialTheme.typography.titleSmall,
@@ -254,7 +260,7 @@ fun ThemeSelectorBottomSheet(
                                             }
                                         }
                                     }
-                                    val isDefaultTheme = theme.themeId == ThemeManager.DEFAULT_THEME_ID
+                                    val isDefaultTheme = if (is3dSupported) theme.themeId == ThemeManager.DEFAULT_THEME_ID else theme.isDefault
                                     if (isDefaultTheme) {
                                         Box(
                                             modifier = Modifier
@@ -274,18 +280,20 @@ fun ThemeSelectorBottomSheet(
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(5.dp))
-
                                 val displayDesc = when {
+                                    !is3dSupported -> theme.description
                                     theme.themeId == ThemeManager.ORIGINAL_SKYBOX_THEME_ID || theme.name == "默认主题" -> "车模型 3D 原厂天空盒背景"
                                     else -> theme.description
                                 }
-                                Text(
-                                    text = displayDesc,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    lineHeight = 16.sp
-                                )
+                                if (displayDesc.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(5.dp))
+                                    Text(
+                                        text = displayDesc,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        lineHeight = 16.sp
+                                    )
+                                }
                             }
 
                             Spacer(modifier = Modifier.width(12.dp))

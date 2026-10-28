@@ -215,7 +215,8 @@ class ControlWidget : AppWidgetProvider() {
                     WidgetStatusMapper.presentation(
                         chargeState = snapshot.chargeState,
                         chargeRemainTime = snapshot.chargeRemainTime,
-                        fallbackLabel = snapshot.statusLabel
+                        fallbackLabel = snapshot.statusLabel,
+                        soc = snapshot.chargeSoc
                     )
                 )
                 val access = store.widgetAccess(snapshot, session)
@@ -355,7 +356,8 @@ class ControlWidget : AppWidgetProvider() {
                     chargeRemainTime = snapshot.chargeRemainTime,
                     fallbackLabel = snapshot.statusLabel.takeUnless {
                         snapshot.carType.contains("T03", ignoreCase = true) && it == "车窗未关闭"
-                    }
+                    },
+                    soc = snapshot.chargeSoc
                 )
             )
             views.setTextViewText(R.id.txtWUpdated, snapshot.updated)
@@ -941,7 +943,7 @@ class ControlWidget : AppWidgetProvider() {
             val vin = session.selectedVin
             val activeThemeId = ThemeManager.getActiveThemeId(context, vin)
             val is3dSupported = ThemeManager.isVehicle3DSupported(context, vin)
-            val themeBgBitmap = if (!is3dSupported || activeThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {
+            val themeBgBitmap = if (VehicleThemePolicy.background(is3dSupported, activeThemeId) != VehicleThemePolicy.Background.ORIGINAL) {
                 ThemeManager.loadWidgetBgBitmap(context, activeThemeId, is4x2 = true, darkTheme = darkTheme, vin = vin)
             } else null
 

@@ -17,7 +17,7 @@ class ChargingCenterPillPresentationTest {
             chargeScheduleStart = null
         )
         assertEquals(ChargingPillType.CHARGING, model.type)
-        assertEquals("剩1小时20分", model.labelText)
+        assertEquals("剩1时20分", model.labelText)
         assertTrue(model.hasBoltIcon)
     }
 
@@ -40,7 +40,8 @@ class ChargingCenterPillPresentationTest {
         val model = ChargingCenterPillPresentation.resolve(
             chargeState = 2,
             chargeGunConnected = true,
-            chargeRemainTime = "已充满",
+            chargeRemainTime = "0分钟",
+            soc = "100%",
             chargeScheduleEnabled = false,
             chargeScheduleStart = null
         )
@@ -117,5 +118,39 @@ class ChargingCenterPillPresentationTest {
         assertEquals(ChargingPillType.DEFAULT, model.type)
         assertEquals("充电中心", model.labelText)
         assertFalse(model.hasBoltIcon)
+    }
+
+    @Test
+    fun endedOrPausedAtLimitOrUnknownSocShowsStopped() {
+        for (state in listOf(2, 6)) {
+            for (soc in listOf(null, "未知", "--", "80%", "90%", "99%")) {
+                val model = ChargingCenterPillPresentation.resolve(state, false, "已充满", true, "23:00", soc)
+                assertEquals(ChargingPillType.STOPPED, model.type)
+                assertEquals("充电已停止", model.labelText)
+                assertFalse(model.hasBoltIcon)
+            }
+            val full = ChargingCenterPillPresentation.resolve(state, false, null, false, null, "100%")
+            assertEquals(ChargingPillType.CHARGED, full.type)
+            assertEquals("已充满", full.labelText)
+        }
+    }
+
+    @Test
+    fun activeAtFullSocWithZeroOrInvalidTimeStillShowsCharging() {
+        for (time in listOf("0分钟", "已充满", "未知", null)) {
+            val model = ChargingCenterPillPresentation.resolve(1, true, time, true, "23:00", "100%")
+            assertEquals(ChargingPillType.CHARGING, model.type)
+            assertEquals("充电中", model.labelText)
+            assertTrue(model.hasBoltIcon)
+        }
+        assertEquals("剩45分", ChargingCenterPillPresentation.resolve(1, true, "45分钟", false, null, "100%").labelText)
+    }
+
+    @Test
+    fun waitingAndFaultRemainVisibleWithoutConnectionFlagAndIdleDoesNotInferStopped() {
+        assertEquals("预约等待中", ChargingCenterPillPresentation.resolve(4, false, "0分钟", false, null, "100%").labelText)
+        assertEquals("充电故障", ChargingCenterPillPresentation.resolve(3, true, "0分钟", true, "23:00", "100%").labelText)
+        assertEquals("充电中心", ChargingCenterPillPresentation.resolve(0, false, "已充满", false, null, "100%").labelText)
+        assertEquals("充电枪已插", ChargingCenterPillPresentation.resolve(0, true, "已充满", false, null, "100%").labelText)
     }
 }

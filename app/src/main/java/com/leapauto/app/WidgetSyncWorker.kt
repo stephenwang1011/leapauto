@@ -68,6 +68,7 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                     ),
                     chargingPower = ChargeStatus.power(status),
                     chargeState = ChargeStatus.state(status),
+                    chargeSoc = ChargeStatus.socPercent(status.opt("soc")),
                     chargeRemainTime = ChargeStatus.remainingTime(status.opt("chargeRemainTime")),
                     driving = WidgetStatusMapper.isDriving(status),
                     capturedAt = System.currentTimeMillis(),

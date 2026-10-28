@@ -6,6 +6,36 @@ import org.json.JSONObject
 
 /** Shared formatting and interpretation for the verified charging signals. */
 object ChargeStatus {
+    enum class PresentationState { CHARGING, FULL, STOPPED, SCHEDULED, FAULT, IDLE, UNKNOWN }
+
+    data class Presentation(
+        val state: PresentationState,
+        val label: String,
+        val remainingTime: String? = null
+    )
+
+    /** Uses the existing SOC parser without rounding a sub-100 value up to full. */
+    fun socPercent(value: Any?): Int? {
+        val raw = value?.toString()?.trim()?.removeSuffix("%")?.trim() ?: return null
+        val numeric = raw.toDoubleOrNull()?.takeIf { it.isFinite() && it in 0.0..100.0 } ?: return null
+        return BatteryPreheatGatePolicy.parseSocPercent(numeric.toString())
+    }
+
+    /** Client display policy; completion of a charging session does not imply a full battery. */
+    fun presentation(state: Int?, soc: Int?, remainingTime: String? = null): Presentation = when (state) {
+        1 -> Presentation(
+            PresentationState.CHARGING,
+            "充电中",
+            remainingMinutes(remainingTime)?.takeIf { it > 0 }?.let(::formatMinutes)
+        )
+        2, 6 -> if (soc == 100) Presentation(PresentationState.FULL, "已充满")
+            else Presentation(PresentationState.STOPPED, "充电已停止")
+        4 -> Presentation(PresentationState.SCHEDULED, "预约充电等待")
+        3 -> Presentation(PresentationState.FAULT, "充电故障")
+        0 -> Presentation(PresentationState.IDLE, "未充电")
+        else -> Presentation(PresentationState.UNKNOWN, "充电状态未知")
+    }
+
     fun state(status: JSONObject): Int? = state(status.opt("chargeState"))
 
     fun state(values: Map<String, Any?>): Int? = state(values["chargeState"])
@@ -72,25 +102,29 @@ object ChargeStatus {
             ?.takeIf { it.isFinite() }
     }
 
-    fun remainingTime(value: Any?): String? {
-        if (value == null || value == JSONObject.NULL) return null
-        val raw = value.toString().trim()
-        if (raw.isBlank()) return null
-        val numericText = raw
-            .removePrefix("约")
-            .removeSuffix("分钟")
-            .trim()
-        val minutes = numericText.toDoubleOrNull()
-        if (minutes == null || !minutes.isFinite()) return raw
+    /** Formats duration only. Zero minutes is not evidence of charging completion. */
+    fun remainingTime(value: Any?): String? = remainingMinutes(value)?.let(::formatMinutes)
 
-        val roundedMinutes = String.format(Locale.CHINA, "%.0f", minutes).toIntOrNull() ?: return raw
-        if (roundedMinutes < 0) return raw
-        return when {
-            roundedMinutes == 0 -> "已充满"
-            roundedMinutes < 60 -> "${roundedMinutes}分钟"
-            else -> "${roundedMinutes / 60}时${roundedMinutes % 60}分"
+    private fun remainingMinutes(value: Any?): Int? {
+        if (value == null || value == JSONObject.NULL) return null
+        val raw = value.toString().trim().removePrefix("约").trim()
+        val hours = HOUR_DURATION.matchEntire(raw)
+        val minutes = if (hours != null) {
+            val h = hours.groupValues[1].toDoubleOrNull() ?: return null
+            val m = hours.groupValues[2].takeIf { it.isNotEmpty() }?.toDoubleOrNull() ?: 0.0
+            if (m >= 60) return null
+            h * 60 + m
+        } else {
+            raw.removeSuffix("分钟").removeSuffix("分").trim().toDoubleOrNull() ?: return null
         }
+        if (!minutes.isFinite() || minutes < 0) return null
+        return String.format(Locale.US, "%.0f", minutes).toIntOrNull()
     }
+
+    private fun formatMinutes(minutes: Int): String = if (minutes < 60) "${minutes}分钟"
+        else "${minutes / 60}时${minutes % 60}分"
+
+    private val HOUR_DURATION = Regex("(\\d+)\\s*(?:小时|时)(?:\\s*(\\d+)\\s*(?:分钟|分))?")
 
     fun type(status: JSONObject): String? = type(status.opt("dcInputFastCharge"))
 
@@ -126,12 +160,13 @@ object ChargeStatus {
      *
      * Some vehicle variants can expose a non-zero `chargeCompleted` field while
      * the reported charging state is still active. It is retained as decoded
-     * telemetry, but must not independently produce a "full" notification.
+     * telemetry, but must not independently produce a completion notification.
+     * This describes session completion; use presentation for the full-battery label.
      */
     fun completed(status: JSONObject): Boolean = state(status) == 2
 
     /**
-     * Determines whether the traction battery is full for the configured power type.
+     * Determines whether the charging session completed for the configured power type.
      *
      * Range-extender vehicles expose fuel and combined range values in the 325x/326x
      * group, but those values are not charging-completion signals. The charging

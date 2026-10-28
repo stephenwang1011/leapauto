@@ -61,36 +61,3 @@ object VehicleConfigConfirmationPolicy {
     fun initialPrompt(vehicleConfigConfirmed: Boolean): PostLoginPrompt =
         if (vehicleConfigConfirmed) PostLoginPrompt.NONE else PostLoginPrompt.VEHICLE_CONFIG
 }
-
-object PostLoginPromptTiming {
-    const val AUTHOR_SUPPORT_IDLE_MS = 10_000L
-}
-
-data class AuthorSupportPromptContext(
-    val activityAlive: Boolean,
-    val foreground: Boolean,
-    val loggedIn: Boolean,
-    val busy: Boolean,
-    val pinPromptVisible: Boolean,
-    val pinSetupInProgress: Boolean,
-    val vehicleConfigPromptVisible: Boolean,
-    val sessionExpiredPromptVisible: Boolean,
-    val authorSupportPromptVisible: Boolean,
-    val authorSupportScreenOpening: Boolean,
-    val reminderEligibleToday: Boolean
-)
-
-object AuthorSupportIdlePolicy {
-    fun canArm(context: AuthorSupportPromptContext): Boolean =
-        context.activityAlive &&
-            context.foreground &&
-            context.loggedIn &&
-            !context.busy &&
-            !context.pinPromptVisible &&
-            !context.pinSetupInProgress &&
-            !context.vehicleConfigPromptVisible &&
-            !context.sessionExpiredPromptVisible &&
-            !context.authorSupportPromptVisible &&
-            !context.authorSupportScreenOpening &&
-            context.reminderEligibleToday
-}

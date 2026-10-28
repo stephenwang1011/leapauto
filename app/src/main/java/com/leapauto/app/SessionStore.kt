@@ -6,7 +6,6 @@ import com.leapauto.app.bluetooth.BleCertificateSync
 import com.leapauto.app.bluetooth.BleKeyCertificate
 import org.json.JSONArray
 import org.json.JSONObject
-import java.time.LocalDate
 
 /** 车型配置下拉选项，使用短车型名便于用户识别和维护。 */
 val SUPPORTED_VEHICLE_MODELS = listOf(
@@ -47,6 +46,7 @@ class SessionStore(context: Context) {
         val chargingPower: String? = null,
         val chargeState: Int? = null,
         val chargeRemainTime: String? = null,
+        val chargeSoc: Int? = null,
         val capturedAt: Long = 0L,
         val lastSuccessAt: Long = 0L,
         val sessionGeneration: Long = 0L,
@@ -136,6 +136,18 @@ class SessionStore(context: Context) {
             .putString("hvacCapability", s.hvacCapability.toJson().toString())
             .commit()
         true
+    }
+
+    internal fun mergeBackgroundCredentials(snapshot: BackgroundSession, live: Session): Boolean = synchronized(SESSION_LOCK) {
+        // Keep the existing store -> session lock order used by save().
+        synchronized(live) {
+            if (!snapshot.canMergeCredentials(live) || !snapshot.canMergeCredentials(load())) return false
+            val editor = prefs.edit()
+            secureValues.putString(editor, "oldAuth", snapshot.request.oldAuth?.toJson()?.toString().orEmpty())
+            secureValues.putString(editor, "newAuth", snapshot.request.newAuth?.toJson()?.toString().orEmpty())
+            if (!editor.commit()) return false
+            snapshot.mergeCredentials(live)
+        }
     }
 
     fun clear() = synchronized(SESSION_LOCK) {
@@ -581,6 +593,7 @@ class SessionStore(context: Context) {
         chargingPower: String?,
         chargeState: Int? = null,
         chargeRemainTime: String? = null,
+        chargeSoc: Int? = null,
         capturedAt: Long = System.currentTimeMillis(),
         lastSuccessAt: Long = capturedAt,
         sessionGeneration: Long = load().generation,
@@ -641,6 +654,10 @@ class SessionStore(context: Context) {
                 else putString("widget_snapshot_ac_tone", acTone.name)
             }
             .putString("widget_snapshot_charging_power", chargingPower ?: "")
+            .apply {
+                if (chargeSoc == null) remove("widget_snapshot_charge_soc")
+                else putInt("widget_snapshot_charge_soc", chargeSoc)
+            }
             .apply {
                 if (chargeState == null) remove("widget_snapshot_charge_state")
                 else putInt("widget_snapshot_charge_state", chargeState)
@@ -722,6 +739,7 @@ class SessionStore(context: Context) {
             },
             chargeRemainTime = prefs.getString("widget_snapshot_charge_remain_time", null)
                 ?.takeIf { it.isNotBlank() },
+            chargeSoc = if (prefs.contains("widget_snapshot_charge_soc")) prefs.getInt("widget_snapshot_charge_soc", 0) else null,
             capturedAt = prefs.getLong("widget_snapshot_captured_at", 0L),
             lastSuccessAt = prefs.getLong("widget_snapshot_last_success_at", 0L),
             sessionGeneration = prefs.getLong("widget_snapshot_generation", 0L)
@@ -784,6 +802,7 @@ class SessionStore(context: Context) {
             chargingPower = snapshot.chargingPower,
             chargeState = snapshot.chargeState,
             chargeRemainTime = snapshot.chargeRemainTime,
+            chargeSoc = snapshot.chargeSoc,
             capturedAt = snapshot.capturedAt,
             lastSuccessAt = snapshot.lastSuccessAt,
             sessionGeneration = snapshot.sessionGeneration,
@@ -855,6 +874,7 @@ class SessionStore(context: Context) {
             chargingPower = snapshot.chargingPower,
             chargeState = snapshot.chargeState,
             chargeRemainTime = snapshot.chargeRemainTime,
+            chargeSoc = snapshot.chargeSoc,
             capturedAt = snapshot.capturedAt,
             lastSuccessAt = snapshot.lastSuccessAt,
             sessionGeneration = snapshot.sessionGeneration,
@@ -887,6 +907,7 @@ class SessionStore(context: Context) {
             chargingPower = snapshot.chargingPower,
             chargeState = snapshot.chargeState,
             chargeRemainTime = snapshot.chargeRemainTime,
+            chargeSoc = snapshot.chargeSoc,
             capturedAt = snapshot.capturedAt,
             lastSuccessAt = snapshot.lastSuccessAt,
             sessionGeneration = snapshot.sessionGeneration,
@@ -919,6 +940,7 @@ class SessionStore(context: Context) {
             chargingPower = snapshot.chargingPower,
             chargeState = snapshot.chargeState,
             chargeRemainTime = snapshot.chargeRemainTime,
+            chargeSoc = snapshot.chargeSoc,
             capturedAt = snapshot.capturedAt,
             lastSuccessAt = snapshot.lastSuccessAt,
             sessionGeneration = snapshot.sessionGeneration,
@@ -1040,25 +1062,6 @@ class SessionStore(context: Context) {
         appPrefs.edit().putString(HANDLED_UPDATE_VERSION, normalized).apply()
     }
 
-    fun shouldShowAuthorSupportPrompt(): Boolean = AuthorSupportReminder.shouldShow(
-        lastShownEpochDay = appPrefs.getLong(AUTHOR_SUPPORT_LAST_SHOWN_EPOCH_DAY, Long.MIN_VALUE),
-        todayEpochDay = LocalDate.now().toEpochDay(),
-        permanentlyDisabled = isAuthorSupportPromptDisabled()
-    )
-
-    fun isAuthorSupportPromptDisabled(): Boolean =
-        appPrefs.getBoolean(AUTHOR_SUPPORT_PROMPT_DISABLED, false)
-
-    fun disableAuthorSupportPrompt() {
-        appPrefs.edit().putBoolean(AUTHOR_SUPPORT_PROMPT_DISABLED, true).apply()
-    }
-
-    fun recordAuthorSupportPromptShown() {
-        appPrefs.edit()
-            .putLong(AUTHOR_SUPPORT_LAST_SHOWN_EPOCH_DAY, LocalDate.now().toEpochDay())
-            .apply()
-    }
-
     /** Last observed charge state, isolated by vehicle so a switch cannot create a false transition. */
     fun loadLastChargeState(vin: String): Int? =
         vin.takeIf { it.isNotBlank() }?.let { prefs.getString(lastChargeStateKey(it), null)?.toIntOrNull() }
@@ -1118,8 +1121,6 @@ class SessionStore(context: Context) {
         const val WIDGET_BG_STYLE_DEFAULT = WIDGET_BG_STYLE_LANDSCAPE
         const val WIDGET_BACKGROUND_STYLE = "widget_background_style"
         const val SESSION_GENERATION = "session_generation"
-        const val AUTHOR_SUPPORT_LAST_SHOWN_EPOCH_DAY = "author_support_last_shown_epoch_day"
-        const val AUTHOR_SUPPORT_PROMPT_DISABLED = "author_support_prompt_disabled"
         const val QUICK_COMMAND_ORDER_PREFIX = "quick_command_order_"
         const val HANDLED_UPDATE_VERSION = "handled_update_version"
         const val APPEARANCE_MODE = "appearance_mode"

@@ -278,8 +278,8 @@ class Session(
     var deviceId: String,
     var phone: String = "",
     var smDeviceId: String = "",
-    var oldAuth: OldAuth? = null,
-    var newAuth: NewAuth? = null,
+    oldAuth: OldAuth? = null,
+    newAuth: NewAuth? = null,
     var selectedVin: String = "",
     var selectedCarType: String = "",
     var selectedNickname: String = "",
@@ -288,6 +288,14 @@ class Session(
     var hvacCapability: HvacCapability = HvacCapability.fallback(),
     val generation: Long = 0L
 ) {
+    // Credential CAS and legacy API refresh setters use the same short-lived monitor.
+    var oldAuth: OldAuth? = oldAuth
+        @Synchronized get
+        @Synchronized set
+    var newAuth: NewAuth? = newAuth
+        @Synchronized get
+        @Synchronized set
+
     val appVersion = "1.23.00"
     val subVersion = "3.24.5-1"
 }

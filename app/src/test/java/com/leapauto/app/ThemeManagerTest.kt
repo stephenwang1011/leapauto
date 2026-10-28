@@ -260,15 +260,18 @@ class ThemeManagerTest {
             ThemeManager.isCurrentVehicle3DSupported = false
             assertFalse(ThemeManager.isCurrentVehicle3DSupported)
 
-            // 当为 false 时，无论原先传入何种 themeId，均强制回退为浅底 ThemeTone.LIGHT
-            assertEquals(ThemeManager.ThemeTone.LIGHT, ThemeManager.getThemeTone("4"))
+            // 原厂默认跟随外观，其余旧偏好兼容为内置雪景。
+            assertEquals(ThemeManager.ThemeTone.AUTO, ThemeManager.getThemeTone("4"))
+            assertEquals(ThemeManager.ThemeTone.AUTO, ThemeManager.getThemeTone(""))
             assertEquals(ThemeManager.ThemeTone.LIGHT, ThemeManager.getThemeTone("5"))
             assertEquals(ThemeManager.ThemeTone.LIGHT, ThemeManager.getThemeTone("7"))
             assertEquals(ThemeManager.ThemeTone.LIGHT, ThemeManager.getThemeTone("8"))
 
-            // 展台底色判定也强制适配浅底，确保文字高对比度
-            assertFalse(ThemeManager.isHeroBackgroundDark("4", isSystemDark = true))
+            assertTrue(ThemeManager.isHeroBackgroundDark("4", isSystemDark = true))
             assertFalse(ThemeManager.isHeroBackgroundDark("4", isSystemDark = false))
+            assertFalse(ThemeManager.isHeroBackgroundDark("7", isSystemDark = true))
+            assertFalse(ThemeManager.shouldApplyNightMoodFilter("4", isSystemDark = true))
+            assertTrue(ThemeManager.shouldApplyNightMoodFilter("7", isSystemDark = true))
 
             // 3. 支持车型切回 true 时，恢复原有逻辑
             ThemeManager.isCurrentVehicle3DSupported = true
@@ -337,8 +340,8 @@ class ThemeManagerTest {
             lookupBody.contains("SessionStore(context).load()")
         )
         assertTrue(
-            "the 3D support lookup must use the lightweight carType reader",
-            lookupBody.contains("loadSelectedCarType()")
+            "unknown capability must use metadata policy rather than guessing from model names",
+            lookupBody.contains("VehicleThemePolicy.supports3d(null, meta != null, meta?.h5Key)")
         )
         assertFalse(
             "the 3D support lookup must not mutate the global flag",
@@ -357,15 +360,15 @@ class ThemeManagerTest {
             .first { File(it, "app").isDirectory }
 
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
-        val heroToneCalls = screenSource.lines().filter { it.contains("ThemeManager.isHeroBackgroundDark(") }
-
-        assertTrue("hero tone must be resolved", heroToneCalls.isNotEmpty())
-        heroToneCalls.forEach { call ->
-            assertTrue(
-                "hero tone must pass the vehicle context so per-VIN 3D support is honoured: $call",
-                call.contains("context") && call.contains("vehicleVin")
-            )
-        }
+        val hero = screenSource.substringAfter("fun VehicleHero(").substringBefore("private fun HeroControlHudPill(")
+        assertTrue(hero.contains("ThemeManager.isVehicle3DSupported(context, vehicleVin)"))
+        assertTrue(hero.contains("ThemeManager.load3dBgBitmap(context, selectedThemeId, vehicleVin)"))
+        assertTrue(hero.contains("VehicleThemePolicy.background(is3dSupported, selectedThemeId)"))
+        assertTrue(hero.contains("NightThemePolicy.resolve("))
+        assertTrue(hero.contains("VehicleThemePolicy.activeThemeId(false, selectedThemeId)"))
+        assertTrue(hero.contains("themeId = renderedThemeId"))
+        assertTrue(hero.contains("hasThemeBackground = hasThemeBg"))
+        assertFalse(hero.contains("ThemeManager.isCurrentVehicle3DSupported"))
     }
 
     @Test
@@ -421,5 +424,44 @@ class ThemeManagerTest {
 
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
         assertTrue("LeapAutoScreen must route onNavigateToHome to vehicle tab", screenSource.contains("selectedTab = MainNavigationTabs.VEHICLE"))
+    }
+
+    @Test
+    fun `local themes share policy across selector home widgets and background sync`() {
+        val projectDir = generateSequence(File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        fun source(name: String) = File(projectDir, "app/src/main/java/com/leapauto/app/$name.kt").readText()
+
+        val manager = source("ThemeManager")
+        val homeLoader = manager.substringAfter("fun load3dBgBitmap(").substringBefore("/** 安全清理")
+        val widgetLoader = manager.substringAfter("fun loadWidgetBgBitmap(").substringBefore("fun downloadAndUnzipPackage(")
+        listOf(homeLoader, widgetLoader).forEach {
+            assertTrue(it.contains("VehicleThemePolicy.background(supported, themeId)"))
+            assertTrue(it.contains("VehicleThemePolicy.Background.ORIGINAL -> return null"))
+            assertTrue(it.contains("VehicleThemePolicy.Background.BUILT_IN_SNOW -> return loadFallback"))
+        }
+        listOf("ControlWidget", "CompactControlWidget").forEach {
+            assertTrue(source(it).contains("VehicleThemePolicy.background(is3dSupported, activeThemeId)"))
+        }
+
+        val sheet = source("ui/ThemeSelectorBottomSheet")
+        assertTrue(sheet.contains("VehicleThemePolicy.availableThemes(is3dSupported, themes)"))
+        assertTrue(sheet.contains("items(availableThemes, key = { it.themeId })"))
+        assertTrue(sheet.contains("val isReady = !is3dSupported || ThemeManager.isThemeReady"))
+        assertTrue(sheet.contains("if (!is3dSupported) return@LaunchedEffect"))
+        assertTrue(sheet.contains("VehicleThemePolicy.canApplyDownloadResult("))
+        assertFalse(sheet.contains("api.apply"))
+
+        val activity = source("MainActivity")
+        val sync = activity.substringAfter("private fun syncThemesAndEnsureActive()").substringBefore("private fun refreshDownloadedTheme(")
+        assertTrue(sync.indexOf("return@runCatching") in 0 until sync.indexOf("api.listThemeList(vin)"))
+        assertTrue(sync.contains("refreshDownloadedTheme(snapshot, activeThemeId)"))
+        assertFalse(sync.contains("selectedThemeId = activeThemeId"))
+        assertTrue(activity.contains("if (updated || capabilityChanged || currentSupportChanged)"))
+        assertTrue(activity.contains("if (!isCurrentBackground(snapshot)) return@runOnUiThread"))
+
+        val screen = source("ui/LeapAutoScreen")
+        assertTrue(screen.contains("vehicleVin.isNotBlank() && supports3dThemes"))
+        assertTrue(screen.contains("VehicleThemePolicy.displayName(supports3dThemes, selectedThemeId, cachedThemes)"))
     }
 }

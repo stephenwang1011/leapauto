@@ -10,10 +10,10 @@ import org.json.JSONObject
 
 object ThemeManager {
     private const val TAG = "ThemeManager"
-    const val ORIGINAL_SKYBOX_THEME_ID = "4"
-    const val DEFAULT_THEME_ID = "7"
+    const val ORIGINAL_SKYBOX_THEME_ID = VehicleThemePolicy.ORIGINAL_THEME_ID
+    const val DEFAULT_THEME_ID = VehicleThemePolicy.SNOW_THEME_ID
 
-    /** 全局变量：当前车型是否支持 3D 车模及个性化主题 */
+    /** 当前车型是否提供 3D 车模；无 3D 车辆仍支持本地主题。 */
     @Volatile
     var isCurrentVehicle3DSupported: Boolean = true
 
@@ -22,10 +22,10 @@ object ThemeManager {
 
     /**
      * 标记指定车辆是否支持 3D 车模。
-     * 当发现某个车型不支持时，设置 supported = false；同时更新全局变量与持久化存储。
+     * 后台资源任务仅保存 VIN 级结论；当前车辆的全局状态由校验后的主线程回调更新。
      */
-    fun setVehicle3DSupported(context: Context?, vin: String?, supported: Boolean) {
-        isCurrentVehicle3DSupported = supported
+    fun setVehicle3DSupported(context: Context?, vin: String?, supported: Boolean, updateCurrent: Boolean = true) {
+        if (updateCurrent) isCurrentVehicle3DSupported = supported
         if (context != null && !vin.isNullOrBlank()) {
             context.getSharedPreferences(PREFS_3D_SUPPORT, Context.MODE_PRIVATE)
                 .edit()
@@ -36,7 +36,7 @@ object ThemeManager {
 
     /**
      * 查询指定车辆是否支持 3D 车模（只读，无任何写入副作用）。
-     * 优先读取持久化配置；若未配置过，则结合缓存元数据与已知车型判定。
+     * 优先读取同步元数据时持久化的结论；无记录时读取缓存元数据，未知则保留 3D 路径。
      */
     fun isVehicle3DSupported(context: Context?, vin: String?): Boolean {
         if (context == null || vin.isNullOrBlank()) {
@@ -45,14 +45,10 @@ object ThemeManager {
         val sp = context.getSharedPreferences(PREFS_3D_SUPPORT, Context.MODE_PRIVATE)
         val key = "$KEY_3D_SUPPORTED_PREFIX$vin"
         if (sp.contains(key)) {
-            return sp.getBoolean(key, true)
+            return VehicleThemePolicy.supports3d(sp.getBoolean(key, true), false, null)
         }
         val meta = VehicleImageCache.getCachedMeta(context, vin)
-        if (meta != null) {
-            return !meta.h5Key.isNullOrBlank()
-        }
-        val carType = SessionStore(context).loadSelectedCarType()
-        return !(carType.contains("T03", ignoreCase = true) || carType.contains("S01", ignoreCase = true))
+        return VehicleThemePolicy.supports3d(null, meta != null, meta?.h5Key)
     }
 
     /**
@@ -64,7 +60,7 @@ object ThemeManager {
 
     /**
      * 加载内置兜底 3D 展台背景图 (lpcar_pic_3d_bg.webp)。
-     * 当 isCurrentVehicle3DSupported == false 时为主界面展台提供默认背景。
+     * 用于无 3D 车辆选用「雾川雪境」时的首页背景。
      */
     fun loadFallback3dBgBitmap(context: Context): Bitmap? {
         return try {
@@ -83,7 +79,7 @@ object ThemeManager {
 
     /**
      * 加载内置兜底小组件背景图。
-     * 当 isCurrentVehicle3DSupported == false 时，2x2 小组件加载 lpcar_pic_widget_2x2.webp，
+     * 无 3D 车辆选用「雾川雪境」时，2x2 小组件加载 lpcar_pic_widget_2x2.webp，
      * 4x2 小组件加载 lpcar_pic_widget_4x2.webp。
      */
     fun loadFallbackWidgetBgBitmap(context: Context, is4x2: Boolean, darkTheme: Boolean = false): Bitmap? {
@@ -247,10 +243,11 @@ object ThemeManager {
 
     fun load3dBgBitmap(context: Context, themeId: String, vin: String? = null): Bitmap? {
         val supported = if (!vin.isNullOrBlank()) isVehicle3DSupported(context, vin) else isCurrentVehicle3DSupported
-        if (!supported) {
-            return loadFallback3dBgBitmap(context)
+        when (VehicleThemePolicy.background(supported, themeId)) {
+            VehicleThemePolicy.Background.ORIGINAL -> return null
+            VehicleThemePolicy.Background.BUILT_IN_SNOW -> return loadFallback3dBgBitmap(context)
+            VehicleThemePolicy.Background.DOWNLOADED -> Unit
         }
-        if (themeId == ORIGINAL_SKYBOX_THEME_ID || themeId.isBlank()) return null
         val file = get3dBgFile(context, themeId)
         if (file != null && file.exists() && file.length() > 0L) {
             return try {
@@ -319,10 +316,8 @@ object ThemeManager {
         } else {
             isCurrentVehicle3DSupported
         }
-        if (!supported) {
-            return ThemeTone.LIGHT // 兜底素材为高亮雪山，强制使用浅底深色文字
-        }
-        return when (themeId) {
+        val effectiveId = if (supported) themeId else VehicleThemePolicy.activeThemeId(false, themeId)
+        return when (effectiveId) {
             "7" -> ThemeTone.LIGHT // 雾川雪镜：雪山冰河高亮底
             "8" -> ThemeTone.LIGHT // 晴空广场：湛蓝天空留白高光底
             "5" -> ThemeTone.LIGHT // 余晖石筑：浅色暮色原野石筑，高光浅底
@@ -377,8 +372,10 @@ object ThemeManager {
         vin: String? = null
     ): Bitmap? {
         val supported = if (!vin.isNullOrBlank()) isVehicle3DSupported(context, vin) else isCurrentVehicle3DSupported
-        if (!supported) {
-            return loadFallbackWidgetBgBitmap(context, is4x2, darkTheme)
+        when (VehicleThemePolicy.background(supported, themeId)) {
+            VehicleThemePolicy.Background.ORIGINAL -> return null
+            VehicleThemePolicy.Background.BUILT_IN_SNOW -> return loadFallbackWidgetBgBitmap(context, is4x2, darkTheme)
+            VehicleThemePolicy.Background.DOWNLOADED -> Unit
         }
         val file = if (is4x2) getWidget4x2BgFile(context, themeId) else getWidget2x2BgFile(context, themeId)
         val targetFile = if (file != null && file.exists() && file.length() > 0L) {
@@ -517,16 +514,12 @@ object ThemeManager {
     fun getActiveThemeId(context: Context, vin: String, remoteTheme: VehicleTheme? = null): String {
         val store = SessionStore(context)
         val localSelected = store.loadSelectedThemeId(vin)
-        val result = if (!localSelected.isNullOrBlank()) {
-            localSelected
-        } else {
-            remoteTheme?.themeId?.takeIf { it.isNotBlank() } ?: DEFAULT_THEME_ID
-        }
-        Log.i(TAG, "getActiveThemeId: vin='$vin', localSelected='$localSelected' -> result='$result'")
-        return result
+        return VehicleThemePolicy.activeThemeId(
+            isVehicle3DSupported(context, vin), localSelected, remoteTheme?.themeId
+        )
     }
 
-    /** 设置车辆当前主题，若设置为默认或 null 则恢复跟随默认/云端 */
+    /** 显式主题 ID（包括 4/7）均保存；仅 null/空白清除偏好。 */
     fun setActiveThemeId(context: Context, vin: String, themeId: String?) {
         val store = SessionStore(context)
         store.saveSelectedThemeId(vin, themeId)

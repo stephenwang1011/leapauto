@@ -419,8 +419,8 @@ object VehicleImageCache {
     ): Boolean = cachedUrl != url || !fileExists || fileLength == 0L ||
         shadowVersion < CURRENT_SHADOW_VERSION
 
-    fun sync(context: Context, api: LeapmotorApi, vin: String): Boolean {
-        if (vin.isBlank()) return false
+    fun sync(context: Context, api: LeapmotorApi, vin: String, isCurrent: () -> Boolean = { true }): Boolean {
+        if (vin.isBlank() || !isCurrent()) return false
         val diagnostics = mutableListOf<String>()
         val meta = try {
             api.getVehiclePictureMeta(vin, diagnostics)
@@ -436,8 +436,10 @@ object VehicleImageCache {
             return false
         }
 
+        if (!isCurrent()) return false
         val is3dSupported = !meta.h5Key.isNullOrBlank()
-        ThemeManager.setVehicle3DSupported(context, vin, is3dSupported)
+        // VIN-scoped cache writes must never change another vehicle's global presentation.
+        ThemeManager.setVehicle3DSupported(context, vin, is3dSupported, updateCurrent = false)
 
         val rawUrl = meta.shareBindUrl
         val url = if (rawUrl.startsWith("http://", ignoreCase = true)) {
@@ -461,7 +463,7 @@ object VehicleImageCache {
 
         // 1. 优先确保轻量 2D 原厂定妆照（约 290KB）极速立现，让首卡在毫秒级呈现完整爱车
         var imageUpdated = false
-        if (
+        if (isCurrent() &&
             shouldRefreshOfficialImage(
                 cachedUrl = cachedUrl,
                 url = url,
@@ -486,13 +488,18 @@ object VehicleImageCache {
                 if (response != null && response.isSuccessful) {
                     val body = response.body
                     val bytes = body?.bytes()
-                    if (bytes != null && bytes.isNotEmpty()) {
+                    if (bytes != null && bytes.isNotEmpty() && isCurrent()) {
                         val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                         if (decoded != null && decoded.width > 0 && decoded.height > 0) {
                             val stripped = stripGroundShadow(decoded)
                             val tmpFile = File(getCacheDir(context), "${vin}.tmp")
                             FileOutputStream(tmpFile).use { out ->
                                 stripped.compress(Bitmap.CompressFormat.PNG, 100, out)
+                            }
+                            if (!isCurrent()) {
+                                tmpFile.delete()
+                                response.close()
+                                return false
                             }
                             if (file.exists()) file.delete()
                             if (!tmpFile.renameTo(file)) {
@@ -520,7 +527,7 @@ object VehicleImageCache {
         var modelPackageUpdated = false
         meta.h5Key?.let { h5Key ->
             try {
-                if (!CarModel3DManager.isModelReady(context, h5Key, meta.srcKey)) {
+                if (isCurrent() && !CarModel3DManager.isModelReady(context, h5Key, meta.srcKey)) {
                     modelPackageUpdated = CarModel3DManager.syncModelPackage(context, api, h5Key, meta.srcKey)
                 }
             } catch (e: Exception) {

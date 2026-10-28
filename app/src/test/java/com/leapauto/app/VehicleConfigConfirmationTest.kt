@@ -82,34 +82,4 @@ class VehicleConfigConfirmationTest {
             )
         )
     }
-
-    @Test
-    fun `prompt delays match product contract`() {
-        assertEquals(10_000L, PostLoginPromptTiming.AUTHOR_SUPPORT_IDLE_MS)
-    }
-
-    @Test
-    fun `author support idle timer only arms in an unblocked foreground session`() {
-        val eligible = AuthorSupportPromptContext(
-            activityAlive = true,
-            foreground = true,
-            loggedIn = true,
-            busy = false,
-            pinPromptVisible = false,
-            pinSetupInProgress = false,
-            vehicleConfigPromptVisible = false,
-            sessionExpiredPromptVisible = false,
-            authorSupportPromptVisible = false,
-            authorSupportScreenOpening = false,
-            reminderEligibleToday = true
-        )
-        assertTrue(AuthorSupportIdlePolicy.canArm(eligible))
-        assertFalse(AuthorSupportIdlePolicy.canArm(eligible.copy(foreground = false)))
-        assertFalse(AuthorSupportIdlePolicy.canArm(eligible.copy(busy = true)))
-        assertFalse(AuthorSupportIdlePolicy.canArm(eligible.copy(pinPromptVisible = true)))
-        assertFalse(AuthorSupportIdlePolicy.canArm(eligible.copy(pinSetupInProgress = true)))
-        assertFalse(AuthorSupportIdlePolicy.canArm(eligible.copy(vehicleConfigPromptVisible = true)))
-        assertFalse(AuthorSupportIdlePolicy.canArm(eligible.copy(sessionExpiredPromptVisible = true)))
-        assertFalse(AuthorSupportIdlePolicy.canArm(eligible.copy(reminderEligibleToday = false)))
-    }
 }

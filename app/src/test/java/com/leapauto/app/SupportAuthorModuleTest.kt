@@ -12,9 +12,10 @@ class SupportAuthorModuleTest {
     fun `support author card is placed after version update card and before open source card in settings`() {
         val screenSource = readSourceFile("app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt")
 
-        val versionCardIndex = screenSource.indexOf("VersionUpdateCard(")
-        val supportCardIndex = screenSource.indexOf("SupportAuthorCard(")
-        val openSourceCardIndex = screenSource.indexOf("OpenSourceCodeCard()")
+        val settingsSource = screenSource.substringAfter("private fun MyContent(")
+        val versionCardIndex = settingsSource.indexOf("VersionUpdateCard(")
+        val supportCardIndex = settingsSource.indexOf("SupportAuthorCard(")
+        val openSourceCardIndex = settingsSource.indexOf("OpenSourceCodeCard()")
 
         assertTrue("VersionUpdateCard must be present", versionCardIndex >= 0)
         assertTrue("SupportAuthorCard must be present", supportCardIndex >= 0)
@@ -86,6 +87,57 @@ class SupportAuthorModuleTest {
         assertTrue(screenSource.contains("showAuthorSupportScreen -> \"支持作者\""))
         assertTrue(screenSource.contains("ScreenDestination.AUTHOR_SUPPORT -> {"))
         assertTrue(screenSource.contains("AuthorSupportContent()"))
+    }
+
+    @Test
+    fun `login resume and idle work cannot schedule author support prompts`() {
+        val activitySource = readSourceFile("app/src/main/java/com/leapauto/app/MainActivity.kt")
+        val screenSource = readSourceFile("app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt")
+
+        assertTrue(activitySource.contains("private fun beginPostLoginPrompts("))
+        assertTrue(activitySource.contains("PostLoginPinSetupPolicy.shouldPromptPinSetup("))
+        assertTrue(activitySource.contains("checkAndPromptPowerType(session.selectedVin)"))
+        assertFalse("Activity must not own support reminder state or scheduling",
+            activitySource.contains("authorSupport", ignoreCase = true))
+        assertFalse(screenSource.contains("AuthorSupportDialog"))
+        assertFalse(screenSource.contains("onDisableAuthorSupport"))
+        assertFalse(screenSource.contains("onDismissAuthorSupport"))
+    }
+
+    @Test
+    fun `settings card is the only support entry and back returns to settings`() {
+        val screenSource = readSourceFile("app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt")
+        val accountRoute = screenSource.substringAfter("ScreenDestination.ACCOUNT -> {")
+            .substringBefore("ScreenDestination.AUTHOR_SUPPORT -> {")
+        assertTrue(accountRoute.contains("MyContent("))
+        assertTrue(accountRoute.contains("onOpenAuthorSupport = { showAuthorSupportScreen = true }"))
+        assertEquals(1, Regex("showAuthorSupportScreen\\s*=\\s*true").findAll(screenSource).count())
+        assertEquals(1, Regex("onClick\\s*=\\s*onOpenAuthorSupport").findAll(screenSource).count())
+        assertTrue(screenSource.contains("var showAuthorSupportScreen by rememberSaveable { mutableStateOf(false) }"))
+
+        val closeSupport = screenSource.substringAfter("val closeSubpage: () -> Unit = {")
+            .substringBefore("} else if")
+        assertTrue(closeSupport.contains("if (showAuthorSupportScreen)"))
+        assertTrue(closeSupport.contains("showAuthorSupportScreen = false"))
+        assertFalse("Closing support must keep the settings destination", closeSupport.contains("selectedTab ="))
+        assertTrue(screenSource.contains("if (showAuthorSupportScreen) \"返回设置\""))
+
+        val tabsSource = readSourceFile("app/src/main/java/com/leapauto/app/MainNavigationTabs.kt")
+        assertFalse("Support must not be a root tab", tabsSource.contains("SUPPORT", ignoreCase = true))
+    }
+
+    @Test
+    fun `legacy reminder preferences are ignored and cannot gate manual support`() {
+        val sources = listOf(
+            "app/src/main/java/com/leapauto/app/SessionStore.kt",
+            "app/src/main/java/com/leapauto/app/MainActivity.kt",
+            "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt"
+        ).map(::readSourceFile)
+        for (source in sources) {
+            assertFalse(source.contains("author_support_last_shown_epoch_day", ignoreCase = true))
+            assertFalse(source.contains("author_support_prompt_disabled", ignoreCase = true))
+            assertFalse(source.contains("shouldShowAuthorSupportPrompt"))
+        }
     }
 
     @Test
