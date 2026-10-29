@@ -218,6 +218,28 @@ class EnergyAnalyticsTest {
         assertFalse(EnergyWeekPeriodFormatter.isCurrentWeek(monday.minusWeeks(1).toString(), sunday.minusWeeks(1).toString()))
     }
 
+    @Test
+    fun `six week trend labels newest point as previous week`() {
+        assertEquals(
+            "上周",
+            EnergyWeekPeriodFormatter.weeklyTrendLabel(
+                index = 5,
+                lastIndex = 5,
+                start = "2026-08-10",
+                end = "2026-08-16"
+            )
+        )
+        assertEquals(
+            "8/9",
+            EnergyWeekPeriodFormatter.weeklyTrendLabel(
+                index = 4,
+                lastIndex = 5,
+                start = "2026-08-03",
+                end = "2026-08-09"
+            )
+        )
+    }
+
     @Test(expected = EnergyAnalyticsBusinessException::class)
     fun `previous week composition business failure is rejected`() {
         LastWeekEnergyCompositionParser.parse(JSONObject("""{"result":2,"data":{}}"""))

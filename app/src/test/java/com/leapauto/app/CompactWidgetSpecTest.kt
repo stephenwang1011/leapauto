@@ -23,6 +23,7 @@ class CompactWidgetSpecTest {
         assertTrue(manifest.contains("android:name=\".CompactControlWidget\""))
         assertTrue(manifest.contains("android:resource=\"@xml/compact_appwidget_provider_info\""))
         assertTrue(manifest.contains("android:name=\"android.intent.action.CONFIGURATION_CHANGED\""))
+        assertTrue(manifest.contains("android:name=\"android.intent.action.MY_PACKAGE_REPLACED\""))
         assertTrue(provider.contains("android:resizeMode=\"none\""))
         assertTrue(provider.contains("android:initialLayout=\"@layout/widget_compact_layout\""))
         assertTrue(provider31.contains("android:targetCellWidth=\"2\""))
@@ -105,6 +106,26 @@ class CompactWidgetSpecTest {
     }
 
     @Test
+    fun `wide widget marks an open window with a coordinated warning icon and status text`() {
+        val projectDir = projectDirectory()
+        val layout = File(projectDir, "app/src/main/res/layout/widget_layout.xml").readText()
+        val controlWidget = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
+        val badge = File(projectDir, "app/src/main/res/drawable/widget_window_warning_badge.xml").readText()
+
+        assertTrue(layout.contains("android:id=\"@+id/txtWWindowWarning\""))
+        assertTrue(layout.contains("android:layout_width=\"16dp\""))
+        assertTrue(layout.contains("android:layout_height=\"18dp\""))
+        assertTrue(layout.contains("android:textSize=\"12sp\""))
+        assertTrue(layout.contains("android:textStyle=\"bold\""))
+        assertTrue(controlWidget.contains("text == \"车窗未关闭\""))
+        assertTrue(controlWidget.contains("R.id.txtWWindowWarning"))
+        assertTrue(layout.contains("android:text=\"!\""))
+        assertTrue(layout.contains("android:textColor=\"@android:color/white\""))
+        assertTrue(badge.contains("android:shape=\"oval\""))
+        assertTrue(badge.contains("@color/alert_red"))
+    }
+
+    @Test
     fun `both widget providers share one worker and preserve cadence while either remains`() {
         val projectDir = projectDirectory()
         val worker = File(
@@ -149,6 +170,19 @@ class CompactWidgetSpecTest {
         assertTrue(wideWidget.contains("views.setInt(id, \"setBackgroundResource\", actionBackground)"))
         assertTrue(compactWidget.contains("ControlWidget.setImageTint(views, R.id.imgWCAcOff, actionColor)"))
         assertTrue(compactWidget.contains("ControlWidget.setImageTint(views, R.id.imgWCLock, iconColor)"))
+    }
+
+    @Test
+    fun `app replacement refreshes existing widget remote views`() {
+        val projectDir = projectDirectory()
+        val controlWidget = File(
+            projectDir,
+            "app/src/main/java/com/leapauto/app/ControlWidget.kt"
+        ).readText()
+
+        assertTrue(controlWidget.contains("Intent.ACTION_MY_PACKAGE_REPLACED"))
+        assertTrue(controlWidget.contains("refreshData(context)"))
+        assertTrue(controlWidget.contains("enqueueSync(context)"))
     }
 
     @Test

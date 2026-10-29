@@ -600,6 +600,10 @@ class ControlWidget : AppWidgetProvider() {
                 R.id.imgWChargingStatus,
                 if (visible && presentation?.showChargingIcon == true) View.VISIBLE else View.GONE
             )
+            views.setViewVisibility(
+                R.id.txtWWindowWarning,
+                if (visible && text == "车窗未关闭") View.VISIBLE else View.GONE
+            )
             if (visible) {
                 views.setTextViewText(R.id.txtWGeneralStatus, text)
                 views.setTextColor(
@@ -966,6 +970,7 @@ class ControlWidget : AppWidgetProvider() {
             views.setTextColor(R.id.txtWRangeUnit, onSurfaceVariant)
             views.setTextColor(R.id.txtWPureSoc, onSurface)
             views.setTextColor(R.id.txtWGeneralStatus, onSurfaceVariant)
+            views.setViewVisibility(R.id.txtWWindowWarning, View.GONE)
             val slotIds = listOf(R.id.slotW1, R.id.slotW2, R.id.slotW3, R.id.slotW4, R.id.slotW5)
             val btnBgIds = listOf(R.id.btnBgSlot1, R.id.btnBgSlot2, R.id.btnBgSlot3, R.id.btnBgSlot4, R.id.btnBgSlot5)
             val imgIds = listOf(R.id.imgWSlot1, R.id.imgWSlot2, R.id.imgWSlot3, R.id.imgWSlot4, R.id.imgWSlot5)
@@ -1034,9 +1039,18 @@ class ControlWidget : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_CONFIGURATION_CHANGED) {
-            refreshAppearance(context)
-            return
+        when (intent.action) {
+            Intent.ACTION_CONFIGURATION_CHANGED -> {
+                refreshAppearance(context)
+                return
+            }
+            Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                // Existing launcher instances may retain the old RemoteViews after an APK upgrade.
+                // Rebind both providers so newly added layout resources are visible immediately.
+                refreshData(context)
+                enqueueSync(context)
+                return
+            }
         }
         super.onReceive(context, intent)
     }

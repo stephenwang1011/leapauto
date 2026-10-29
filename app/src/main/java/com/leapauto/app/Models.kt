@@ -1056,6 +1056,25 @@ data class ScheduledAcState(
     val plan: ScheduledAcPlan
 )
 
+/** 定时空调入口只在当前 VIN 成功确认预约接口可用后显示。 */
+enum class ScheduledAcCapability {
+    UNKNOWN,
+    SUPPORTED
+}
+
+object ScheduledAcVisibilityPolicy {
+    fun shouldShow(capability: ScheduledAcCapability): Boolean =
+        capability == ScheduledAcCapability.SUPPORTED
+}
+
+/** 动力模式只允许在主界面首次确认，确认后锁定到当前 VIN。 */
+object PowerTypeSelectionPolicy {
+    const val CONFIRMATION_WARNING =
+        "请务必确认自己的动力模式。动力模式一旦确认将锁定，选错会导致续航、能耗等数据全部错误，设置中无法再次更改；如需重新选择，请退出登录后重新登录或清空应用数据。"
+
+    fun canChange(isConfirmed: Boolean): Boolean = !isConfirmed
+}
+
 object Commands {
     const val MIN_AC_TEMPERATURE = 16
     const val MAX_AC_TEMPERATURE = 32

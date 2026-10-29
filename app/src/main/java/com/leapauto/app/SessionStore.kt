@@ -426,6 +426,22 @@ class SessionStore(context: Context) {
         prefs.edit().putBoolean("scheduled_ac_defrost_$vin", defrost).apply()
     }
 
+    fun loadScheduledAcCapability(vin: String): ScheduledAcCapability {
+        if (vin.isBlank()) return ScheduledAcCapability.UNKNOWN
+        return if (appPrefs.getBoolean("scheduled_ac_supported_$vin", false)) {
+            ScheduledAcCapability.SUPPORTED
+        } else {
+            ScheduledAcCapability.UNKNOWN
+        }
+    }
+
+    fun saveScheduledAcCapability(vin: String, capability: ScheduledAcCapability) {
+        if (vin.isBlank()) return
+        appPrefs.edit()
+            .putBoolean("scheduled_ac_supported_$vin", capability == ScheduledAcCapability.SUPPORTED)
+            .apply()
+    }
+
     /** 用户确认的车型配置，按 VIN 隔离保存，避免多车续航规则串用。 */
     fun loadVehicleConfig(
         vin: String,
@@ -510,6 +526,12 @@ class SessionStore(context: Context) {
         if (vin.isBlank()) return false
         val prefix = VehicleConfigStorageKeys.prefix(vin) ?: return false
         return appPrefs.getBoolean(prefix + "power_type_confirmed", false)
+    }
+
+    fun clearVehiclePowerTypeConfirmation(vin: String) {
+        if (vin.isBlank()) return
+        val prefix = VehicleConfigStorageKeys.prefix(vin) ?: return
+        appPrefs.edit().remove(prefix + "power_type_confirmed").apply()
     }
 
     fun isVehicleConfigConfirmed(vin: String): Boolean {

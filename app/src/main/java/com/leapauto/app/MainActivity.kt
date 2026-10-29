@@ -281,6 +281,7 @@ class MainActivity : ComponentActivity() {
     private var scheduledPreheatStartTime by mutableStateOf("23:00")
     private var scheduledPreheatDays by mutableStateOf("1,1,1,1,1,1,1")
     private var scheduledAcPlan by mutableStateOf(ScheduledAcPlan())
+    private var scheduledAcCapability by mutableStateOf(ScheduledAcCapability.UNKNOWN)
     private var versionUpdateState by mutableStateOf<VersionUpdateState>(VersionUpdateState.Idle)
     private var vehicleOtaState by mutableStateOf<VehicleOtaState>(VehicleOtaState.Idle)
     private var showPowerTypeDialog by mutableStateOf(false)
@@ -428,6 +429,7 @@ class MainActivity : ComponentActivity() {
         scheduledPreheatStartTime = sessionStore.loadScheduledPreheatStartTime(session.selectedVin)
         scheduledPreheatDays = sessionStore.loadScheduledPreheatDays(session.selectedVin)
         scheduledAcPlan = loadScheduledAcPlan(session.selectedVin)
+        scheduledAcCapability = sessionStore.loadScheduledAcCapability(session.selectedVin)
         ChargeNotificationManager.ensureChannel(this)
         ParkingAnomalyNotificationManager.ensureChannel(this)
         if (pinSaved) {
@@ -493,6 +495,7 @@ class MainActivity : ComponentActivity() {
                     scheduledPreheatStartTime = scheduledPreheatStartTime,
                     scheduledPreheatDays = scheduledPreheatDays,
                     scheduledAcPlan = scheduledAcPlan,
+                    scheduledAcSupported = ScheduledAcVisibilityPolicy.shouldShow(scheduledAcCapability),
                     onApplyChargingSettings = ::applyHealthyAndScheduledCharging,
                     onApplyScheduledPreheat = ::applyScheduledBatteryPreheat,
                     onApplyScheduledAc = ::applyScheduledAirConditioning,
@@ -563,7 +566,6 @@ class MainActivity : ComponentActivity() {
                     onOpenBluetoothKey = ::openBluetoothKey,
                     onRetryDownload3D = ::retryDownload3DModel,
                     bluetoothSettingsRequestId = bluetoothSettingsRequestId,
-                    onPowerTypeChange = ::savePowerType,
                     chargingControlFeedback = chargingControlFeedback,
                     chargingControlInProgress = chargingControlInProgress
                 )
@@ -974,9 +976,11 @@ class MainActivity : ComponentActivity() {
                     loadScheduledAcPlan(targetVin).copy(enabled = false)
                 }
                 persistScheduledAcPlan(targetVin, merged)
+                sessionStore.saveScheduledAcCapability(targetVin, ScheduledAcCapability.SUPPORTED)
                 mainHandler.post {
                     if (session.selectedVin == targetVin) {
                         scheduledAcPlan = merged
+                        scheduledAcCapability = ScheduledAcCapability.SUPPORTED
                     }
                 }
             }
@@ -1453,6 +1457,8 @@ class MainActivity : ComponentActivity() {
                 sessionStore.save(session)
                 runOnMain(generation) {
                     availableVehicles = vehicles
+                    scheduledAcPlan = loadScheduledAcPlan(session.selectedVin)
+                    scheduledAcCapability = sessionStore.loadScheduledAcCapability(session.selectedVin)
                     selectedThemeId = ThemeManager.getActiveThemeId(this@MainActivity, session.selectedVin)
                     hvacCapability = session.hvacCapability
                     toast("登录成功")
@@ -1464,6 +1470,7 @@ class MainActivity : ComponentActivity() {
                     refreshEnergy(force = true)
                     syncVehicleImage(session.selectedVin)
                     syncThemesAndEnsureActive()
+                    syncScheduledAcFromVehicle(session.selectedVin, force = true)
                 }
             } catch (e: GeetestChallengeRequiredException) {
                 runOnMain(generation) {
@@ -1501,6 +1508,8 @@ class MainActivity : ComponentActivity() {
                 sessionStore.save(session)
                 runOnMain(generation) {
                     availableVehicles = vehicles
+                    scheduledAcPlan = loadScheduledAcPlan(session.selectedVin)
+                    scheduledAcCapability = sessionStore.loadScheduledAcCapability(session.selectedVin)
                     selectedThemeId = ThemeManager.getActiveThemeId(this@MainActivity, session.selectedVin)
                     hvacCapability = session.hvacCapability
                     toast("凭据导入成功，已绑定远控权限")
@@ -1511,6 +1520,7 @@ class MainActivity : ComponentActivity() {
                     refreshEnergy(force = true)
                     syncVehicleImage(session.selectedVin)
                     syncThemesAndEnsureActive()
+                    syncScheduledAcFromVehicle(session.selectedVin, force = true)
                 }
             } catch (e: Exception) {
                 val apiError = e as? ApiException
@@ -1540,9 +1550,15 @@ class MainActivity : ComponentActivity() {
         ErrorLogs.repository.clear()
         energyCacheStore.clearAll()
         operationGeneration += 1L
+        (availableVehicles.map { it.vin } + session.selectedVin)
+            .filter(String::isNotBlank)
+            .distinct()
+            .forEach(sessionStore::clearVehiclePowerTypeConfirmation)
         sessionStore.clear()
         sessionStore.saveOpPassword("")
         session = sessionStore.load()
+        scheduledAcPlan = ScheduledAcPlan()
+        scheduledAcCapability = ScheduledAcCapability.UNKNOWN
         hvacCapability = session.hvacCapability
         vehicleConfig = SessionStore.VehicleConfig()
         availableVehicles = emptyList()
@@ -2135,6 +2151,8 @@ class MainActivity : ComponentActivity() {
         check(loggedIn && session.selectedVin == vin && session.generation == generation)
         val plan = state.editorPlan(loadScheduledAcPlan(vin))
         persistScheduledAcPlan(vin, plan)
+        sessionStore.saveScheduledAcCapability(vin, ScheduledAcCapability.SUPPORTED)
+        scheduledAcCapability = ScheduledAcCapability.SUPPORTED
         scheduledAcPlan = plan
         return plan
     }
@@ -2263,6 +2281,13 @@ class MainActivity : ComponentActivity() {
         color: String,
         nickname: String
     ) {
+        if (
+            sessionStore.isVehiclePowerTypeConfirmed(session.selectedVin) &&
+            powerType != vehicleConfig.powerType
+        ) {
+            toast("动力模式已确认，无法更改；请退出登录后重新登录")
+            return
+        }
         val normalizedModel = VehicleConfigConfirmationPolicy.normalizeModel(model)
         if (
             normalizedModel == null ||
@@ -2287,6 +2312,10 @@ class MainActivity : ComponentActivity() {
 
     private fun savePowerType(powerType: SessionStore.VehiclePowerType) {
         val currentVin = session.selectedVin
+        if (!PowerTypeSelectionPolicy.canChange(sessionStore.isVehiclePowerTypeConfirmed(currentVin))) {
+            toast("动力模式已确认，无法更改；请退出登录后重新登录")
+            return
+        }
         val typeChanged = vehicleConfig.powerType != powerType
         if (typeChanged) {
             vehicleConfig = vehicleConfig.copy(powerType = powerType)
@@ -3142,6 +3171,7 @@ class MainActivity : ComponentActivity() {
         scheduledPreheatStartTime = sessionStore.loadScheduledPreheatStartTime(target.vin)
         scheduledPreheatDays = sessionStore.loadScheduledPreheatDays(target.vin)
         scheduledAcPlan = loadScheduledAcPlan(target.vin)
+        scheduledAcCapability = sessionStore.loadScheduledAcCapability(target.vin)
         ThemeManager.updateCurrentVehicle3DSupported(this, target.vin)
         selectedThemeId = ThemeManager.getActiveThemeId(this, target.vin)
 

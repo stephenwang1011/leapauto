@@ -108,6 +108,12 @@ object EnergyWeekPeriodFormatter {
         }.getOrDefault(false)
     }
 
+    /** Compact labels used by the six-week home chart. The newest point is the previous week. */
+    fun weeklyTrendLabel(index: Int, lastIndex: Int, start: String, end: String?): String {
+        if (index == lastIndex) return "上周"
+        return if (isCurrentWeek(start, end)) "本周" else weekEndDate(start, end)
+    }
+
     fun monthDay(value: String): String {
         val match = isoDatePrefix.find(value) ?: return value.trim()
         val month = match.groupValues[2].toIntOrNull() ?: return value.trim()

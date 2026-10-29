@@ -209,8 +209,12 @@ implementation work when an owned specialist already covers it.
   or equivalent delivery artifact. Completing an implementation, test, product
   acceptance, or documentation task does not by itself authorize or trigger a
   package.
-- Release packaging requires implementation evidence, test evidence (including a mandatory full pass of all unit tests via `.\gradlew.bat :app:testDebugUnitTest`), and product
-  acceptance. External PGYER publication still requires explicit user authorization.
+- Release packaging requires implementation evidence, passing tests for the affected
+  modules, and product acceptance. Reuse applicable completed test results; packaging
+  does not trigger the full suite. Run the full unit-test suite only when the user
+  requests committing or pushing code to a repository, and require it to pass before
+  committing or pushing, as defined below.
+  External PGYER publication still requires explicit user authorization.
 - Handoff order is: product requirements/acceptance criteria -> specialist
   implementation -> testing evidence -> product acceptance -> release packaging or
   publishing when requested -> project-manager consolidated report.
@@ -246,7 +250,7 @@ Run commands from `D:\young\work\leapauto` in PowerShell:
 
 ```powershell
 .\gradlew.bat :app:assembleRelease       # Compile/validation build
-.\gradlew.bat :app:testDebugUnitTest     # JVM unit tests
+.\gradlew.bat :app:testDebugUnitTest     # Full suite before user-requested code commit/push
 .\gradlew.bat :app:lintRelease           # UI/resource/manifest/config checks
 .\scripts\package-release.ps1            # Signed 3D Release delivery APK
 ```
@@ -258,10 +262,12 @@ There is currently no checked-in `app/src/androidTest/` source set. A build pass
 does not replace device/emulator inspection for Compose, widgets, notifications,
 biometric prompts, map rendering, login, or real vehicle behavior.
 
-For a UI or configuration change, normally run `:app:testDebugUnitTest`,
-`:app:assembleRelease`, and `:app:lintRelease`. For parser/model-only changes, run the
-relevant unit tests and `:app:assembleRelease`. Record commands, results, unavailable
-device coverage, and residual risk in the handoff.
+For a UI or configuration change, run only the relevant module tests using
+`:app:testDebugUnitTest --tests '<relevant test class or pattern>'`, plus
+`:app:assembleRelease` and `:app:lintRelease` as appropriate. For parser/model-only
+changes, run the relevant unit tests and `:app:assembleRelease`. Routine code changes
+and packaging do not require a full-suite run. Record the selected test scope,
+commands, results, unavailable device coverage, and residual risk in the handoff.
 
 ### Unit Testing Constraints (单元测试强制约束)
 
@@ -269,12 +275,18 @@ device coverage, and residual risk in the handoff.
   凡是新增功能、数据模型、信号解析、控制指令或业务逻辑，必须在 `app/src/test/` 下同步编写对应的单元测试，覆盖正常路径、边界条件与异常处理分支。
 - **修改功能必须同步修改测试 (Modified Features Require Test Updates)**:
   凡是修改既有功能、调整业务逻辑、重构模型或修改 UI 展示映射，必须同步检查、修改并补充现有的单元测试，确保测试用例准确反映最新行为且无任何回归。
-- **打包前必须全量执行单元测试 (Full Test Suite Must Pass Before Packaging)**:
-  在执行任何打包流程（包括运行 `.\scripts\package-release.ps1`、`.\scripts\publish-pgyer.ps1` 或生成 Release 交付 APK）之前，必须**全量执行并通过全部单元测试**：
+- **日常改动只执行相关模块测试**:
+  每次代码改动按实际影响范围选择相关模块的测试，通过 `--tests` 指定测试类或模式；不要默认执行全量测试。涉及共享逻辑时覆盖受影响的相关模块。文档修改仅做内容与差异检查。
+- **用户要求提交代码时才执行全量测试 (Full Suite Before Code Commit/Push)**:
+  只有用户明确要求将代码提交到仓库（包括本地代码提交或推送远程仓库）时，才执行以下全量测试，并在全部通过后进行提交或推送：
   ```powershell
   .\gradlew.bat :app:testDebugUnitTest
   ```
-  全量单元测试 100% 通过是打包与发布的前置硬性门禁。严禁在测试未执行或存在任何测试失败的情况下进行打包或发布。
+  全量单元测试 100% 通过是代码提交与推送的硬性门禁。测试失败时先修复并重新验证，未通过不得提交或推送。提交前若功能代码、测试、依赖或影响行为的配置又有改动，须取得覆盖最终提交内容的全量通过结果。
+- **复用已通过的测试结果，避免重复执行**:
+  修改完成后相关模块测试已经通过，且后续代码未变，或仅修改 `apkVersionName`、`versionCode` 和 `AppReleaseInfo.currentReleaseNotes` 时，打包直接复用该结果。打包、安装或发布本身不触发全量测试。
+  后续功能代码、测试、依赖或影响行为的配置有改动时，只补跑受影响模块的测试；用户同时要求代码提交时，适用上述全量门禁。
+  复用时核对后续差异，并记录所复用的测试命令、结果和覆盖的代码状态；结果缺失或无法确认覆盖当前代码时，补跑相关模块测试。此规则不免除必要的 Release 构建、签名校验和安装验证，也不自动修改现有 CI 流程。
 
 Never use a Debug APK as a deliverable. A user-requested package delivery builds
 the signed Release variant and copies it to:
@@ -356,8 +368,9 @@ Required repository secrets:
 
 The publish step only runs for a signed build, skips silently when the same
 version is already published, and fails the job on upload errors so the run can
-be retried safely. CI publishes are still subject to the same unit-test gate
-and release-note independence rules as local publishing.
+be retried safely. CI retains its configured full-suite gate; local packaging and
+publishing use the affected-module test rule above. Release-note independence
+applies to both workflows.
 
 ## Security and Data Boundaries
 
@@ -443,7 +456,7 @@ user authorization. Do not reset or discard unrelated user changes.
 - 审核本次交付包含的所有累计改动，包括已暂存、未暂存、新增未跟踪文件和删除文件，不能只审核最后一个功能。
 - 核查越界修改、旧行为变化、会话隔离、权限校验、错误处理、回写时序、生命周期、资源释放及测试缺口。
 - 逐项核对修改前的影响清单，记录受影响旧功能的回归结果；新增功能通过不等于旧功能通过。
-- 审核发现问题后，修复并重跑受影响检查；交付打包前仍必须按现有规则全量执行单测。
+- 审核发现问题后，修复并重跑受影响模块的检查；打包复用有效的相关模块测试结果。只有用户要求代码提交或推送时，才执行全量测试门禁。
 - 审核以问题和证据为先，发现项需包含严重性、文件位置、触发条件和影响；未发现问题也须列明验证边界。
 - 不得把请求委派、工具调用失败或尚未返回结果的检查记为已审核、已通过；独立审核不可用时明确实际审核方式。
 
@@ -476,7 +489,7 @@ user authorization. Do not reset or discard unrelated user changes.
 - 用户说“发布”时，默认指将最新签名 Release APK 发布到蒲公英；除非用户明确指定其他平台或仅要求打包。
 - 用户说“打包”或“3D 包”时，生成唯一受支持的 3D 签名 Release APK。Lite 构建已移除。
 - 用户说“发布”时，默认发布最新 3D 签名 Release APK 到蒲公英。
-- **打包与发布前测试门禁**：在执行打包（`.\scripts\package-release.ps1`）或发布（`.\scripts\publish-pgyer.ps1`）前，必须**全量执行并通过全部单元测试**（`.\gradlew.bat :app:testDebugUnitTest`），确保测试全部通过（100% SUCCESS）；严禁在测试未执行或有任何测试失败的情况下进行打包或发布。
+- **打包与发布前测试门禁**：打包或发布前要求受影响模块测试通过，并按“复用已通过的测试结果”规则复用；不得仅因打包或发布执行全量测试。只有用户要求代码提交到仓库时，才执行全量单测并在全部通过后提交或推送。已知测试失败须先处理，不能以缩小测试范围掩盖失败。
 - **CI 自动发布到蒲公英**：`.github/workflows/release.yml` 在单测门禁、签名打包、签名校验与 GitHub Release 全部成功后，会自动将签名 Release APK 发布到蒲公英（需在仓库 Secrets 配置 `PGYER_API_KEY`）。仅签名包可发布；线上已是同版本时自动跳过；发布失败会让流水线标红以便重跑。
 - **功能与测试同步约束**：
   - 新增功能必须同步添加对应的单元测试；

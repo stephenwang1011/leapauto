@@ -79,6 +79,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
@@ -232,6 +233,7 @@ import com.leapauto.app.TrunkState
 import com.leapauto.app.VehicleAppearance
 import com.leapauto.app.VehicleAppearanceCatalog
 import com.leapauto.app.VehicleConfigConfirmationPolicy
+import com.leapauto.app.PowerTypeSelectionPolicy
 import com.leapauto.app.VehicleHomeStatus
 import com.leapauto.app.VehicleImageCache
 import com.leapauto.app.Vehicle
@@ -335,6 +337,7 @@ fun LeapAutoScreen(
     scheduledPreheatStartTime: String = "23:00",
     scheduledPreheatDays: String = "1,1,1,1,1,1,1",
     scheduledAcPlan: ScheduledAcPlan = ScheduledAcPlan(),
+    scheduledAcSupported: Boolean = false,
     onApplyChargingSettings: (Boolean, Int, Boolean, String, String, Boolean, Int, String) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onApplyScheduledPreheat: (Boolean, String, String) -> Unit = { _, _, _ -> },
     onApplyScheduledAc: (ScheduledAcPlan) -> Unit = {},
@@ -396,7 +399,6 @@ fun LeapAutoScreen(
     onResetCustomVehicleImage: () -> Unit = {},
     onUpdateNickname: (String) -> Unit = {},
     bluetoothSettingsRequestId: Long = 0,
-    onPowerTypeChange: (SessionStore.VehiclePowerType) -> Unit = {},
     onOpenBluetoothKey: () -> Unit = {},
     onRetryDownload3D: () -> Unit = {},
     onFetchParkingPhoto: ((ChassisParkingPhoto?, Bitmap?) -> Unit) -> Unit = {},
@@ -404,6 +406,11 @@ fun LeapAutoScreen(
     chargingControlInProgress: Boolean = false
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
+    val amapContext = LocalContext.current
+    var hasConfiguredAmapKey by remember(amapContext) {
+        mutableStateOf(com.leapauto.app.AmapApiKeyManager.hasConfiguredKey(amapContext))
+    }
+    var openAmapConfiguration by rememberSaveable { mutableStateOf(false) }
     var settingsTitleTapCount by remember(loggedIn, selectedTab) { mutableIntStateOf(0) }
     var showVehicleLocation by rememberSaveable { mutableStateOf(false) }
     var showClimateControl by rememberSaveable { mutableStateOf(false) }
@@ -894,6 +901,14 @@ fun LeapAutoScreen(
                             showClimateControl = false
                             showAuthorSupportScreen = false
                         },
+                        hasConfiguredAmapKey = hasConfiguredAmapKey,
+                        onOpenAmapConfiguration = {
+                            openAmapConfiguration = true
+                            selectedTab = MainNavigationTabs.ACCOUNT
+                            showVehicleLocation = false
+                            showClimateControl = false
+                            showAuthorSupportScreen = false
+                        },
                         vehicleImageVersion = vehicleImageVersion,
                         availableVehicles = availableVehicles,
                         onSwitchVehicle = onSwitchVehicle,
@@ -912,6 +927,7 @@ fun LeapAutoScreen(
                         selectedThemeId = selectedThemeId,
                         onOpenBluetoothKey = onOpenBluetoothKey,
                         scheduledAcPlan = scheduledAcPlan,
+                        scheduledAcSupported = scheduledAcSupported,
                         onApplyScheduledAc = onApplyScheduledAc,
                         onLoadScheduledAc = onLoadScheduledAc
                     )
@@ -956,12 +972,18 @@ fun LeapAutoScreen(
                                 onControl = onControl,
                                 onApplyClimateSettings = onApplyClimateSettings,
                                 scheduledAcPlan = scheduledAcPlan,
+                                scheduledAcSupported = scheduledAcSupported,
                                 onApplyScheduledAc = onApplyScheduledAc,
                                 onLoadScheduledAc = onLoadScheduledAc
                             )
                         }
                         ScreenDestination.ACCOUNT -> {
                             MyContent(
+                                openAmapConfiguration = openAmapConfiguration,
+                                onAmapConfigurationOpened = { openAmapConfiguration = false },
+                                onAmapConfigurationChanged = {
+                                    hasConfiguredAmapKey = com.leapauto.app.AmapApiKeyManager.hasConfiguredKey(amapContext)
+                                },
                                 phone = phone,
                                 pinSaved = pinSaved,
                                 pin = pin,
@@ -1004,7 +1026,6 @@ fun LeapAutoScreen(
                                 bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled,
                                 onBluetoothKeyFeatureEnabledChange = onBluetoothKeyFeatureEnabledChange,
                                 onOpenBluetoothKey = onOpenBluetoothKey,
-                                onPowerTypeChange = onPowerTypeChange,
                                 onOpenAuthorSupport = { showAuthorSupportScreen = true },
                                 onLogout = { showLogoutConfirmationDialog = true }
                             )
@@ -1298,6 +1319,8 @@ private fun HomeContent(
     onOpenClimateControl: () -> Unit,
     onOpenHealthyCharging: () -> Unit = {},
     onOpenAccount: () -> Unit,
+    hasConfiguredAmapKey: Boolean,
+    onOpenAmapConfiguration: () -> Unit,
     vehicleImageVersion: Int = 0,
     availableVehicles: List<Vehicle> = emptyList(),
     onSwitchVehicle: (String) -> Unit = {},
@@ -1314,6 +1337,7 @@ private fun HomeContent(
     selectedThemeId: String = ThemeManager.DEFAULT_THEME_ID,
     onOpenBluetoothKey: (() -> Unit)? = null,
     scheduledAcPlan: ScheduledAcPlan = ScheduledAcPlan(),
+    scheduledAcSupported: Boolean = false,
     onApplyScheduledAc: (ScheduledAcPlan) -> Unit = {},
     onLoadScheduledAc: suspend () -> ScheduledAcPlan = { error("预约查询不可用") }
 ) {
@@ -1389,6 +1413,8 @@ private fun HomeContent(
                         onUpdateNickname = onUpdateNickname,
                         onRetryDownload3D = onRetryDownload3D,
                         onParkingClick = { showParkingDetailDialog = true },
+                        hasConfiguredAmapKey = hasConfiguredAmapKey,
+                        onOpenAmapConfiguration = onOpenAmapConfiguration,
                         locationSnapshot = locationSnapshot,
                         activeControlCommand = activeControlCommand,
                         controlFeedback = controlFeedback,
@@ -1549,6 +1575,7 @@ private fun HomeContent(
             controlFeedback = controlFeedback,
             onDismissControlFeedback = onDismissControlFeedback,
             scheduledAcPlan = scheduledAcPlan,
+            scheduledAcSupported = scheduledAcSupported,
             onApplyScheduledAc = onApplyScheduledAc,
             onLoadScheduledAc = onLoadScheduledAc
         )
@@ -1557,6 +1584,9 @@ private fun HomeContent(
 
 @Composable
 private fun MyContent(
+    openAmapConfiguration: Boolean = false,
+    onAmapConfigurationOpened: () -> Unit = {},
+    onAmapConfigurationChanged: () -> Unit = {},
     phone: String = "",
     pinSaved: Boolean,
     pin: String,
@@ -1596,7 +1626,6 @@ private fun MyContent(
     bluetoothKeyFeatureEnabled: Boolean = false,
     onBluetoothKeyFeatureEnabledChange: (Boolean) -> Unit = {},
     onOpenBluetoothKey: (() -> Unit)? = null,
-    onPowerTypeChange: (SessionStore.VehiclePowerType) -> Unit = {},
     selectedThemeId: String = ThemeManager.DEFAULT_THEME_ID,
     onSelectedThemeChange: (String) -> Unit = {},
     onNavigateToHome: () -> Unit = {},
@@ -1605,6 +1634,15 @@ private fun MyContent(
 ) {
     val context = LocalContext.current
     var showVehicleSelectorInAccount by remember { mutableStateOf(false) }
+    val accountScrollState = rememberScrollState()
+    var amapConfigurationTop by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(openAmapConfiguration, amapConfigurationTop) {
+        val top = amapConfigurationTop
+        if (openAmapConfiguration && top != null) {
+            accountScrollState.scrollTo(top)
+            onAmapConfigurationOpened()
+        }
+    }
     var showBluetoothEnableWarningDialog by remember { mutableStateOf(false) }
     var showProfileThemeDialog by remember(vehicleVin) { mutableStateOf(false) }
     val supports3dThemes = remember(vehicleVin, vehicleImageVersion) {
@@ -1644,15 +1682,15 @@ private fun MyContent(
     Column(
         Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(accountScrollState)
             .padding(horizontal = 20.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (availableVehicles.size > 1) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .frostedGlassCard(shape = RoundedCornerShape(16.dp))
+                    .settingsGlassCard()
                     .clickable { showVehicleSelectorInAccount = true },
                 shape = RoundedCornerShape(16.dp),
                 color = Color.Transparent,
@@ -1661,7 +1699,7 @@ private fun MyContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                        .padding(horizontal = 16.dp, vertical = 11.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -1740,20 +1778,20 @@ private fun MyContent(
             }
         }
 
-        // 5. 动力模式设置卡片 (纯电 / 增程，置于高德服务上方)
-        PowerTypeConfigCard(
-            currentPowerType = vehicleConfig.powerType ?: SessionStore.VehiclePowerType.PURE_ELECTRIC,
-            onPowerTypeChange = onPowerTypeChange
-        )
-
         // 5. 高德地图 Web Key 配置
-        AmapWebKeyConfigCard()
+        AmapWebKeyConfigCard(
+            initiallyExpanded = openAmapConfiguration,
+            onConfigurationChanged = onAmapConfigurationChanged,
+            modifier = Modifier.onGloballyPositioned {
+                amapConfigurationTop = it.positionInParent().y.toInt().coerceAtLeast(0)
+            }
+        )
 
         // 6. 蓝牙数字钥匙
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+                .settingsGlassCard(),
             shape = RoundedCornerShape(16.dp),
             color = Color.Transparent,
             contentColor = MaterialTheme.colorScheme.onSurface,
@@ -1761,7 +1799,7 @@ private fun MyContent(
             shadowElevation = 0.dp
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
@@ -1955,7 +1993,7 @@ private fun PowerTypeConfirmationDialog(
         shape = RoundedCornerShape(24.dp),
         title = {
             Text(
-                text = "请确认车辆动力类型",
+                text = "请确认自己的动力模式",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -1970,6 +2008,14 @@ private fun PowerTypeConfirmationDialog(
                     text = "系统根据车况信号已自动预选，请确认您的「${vehicleName}」动力类型：",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Text(
+                    text = PowerTypeSelectionPolicy.CONFIRMATION_WARNING,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 18.sp
                 )
 
                 Row(
@@ -2029,92 +2075,12 @@ private fun PowerTypeConfirmationDialog(
 }
 
 @Composable
-private fun PowerTypeConfigCard(
-    currentPowerType: SessionStore.VehiclePowerType,
-    onPowerTypeChange: (SessionStore.VehiclePowerType) -> Unit
-) {
-    val options = listOf(
-        SessionStore.VehiclePowerType.PURE_ELECTRIC to "纯电",
-        SessionStore.VehiclePowerType.RANGE_EXTENDER to "增程"
-    )
-    val currentLabel = if (currentPowerType == SessionStore.VehiclePowerType.RANGE_EXTENDER) "增程" else "纯电"
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        color = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = glassCardBorder(),
-        shadowElevation = 0.dp
-    ) {
-        Column(
-            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = "动力模式",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = if (currentPowerType == SessionStore.VehiclePowerType.RANGE_EXTENDER) "当前为：增程模式" else "当前为：纯电模式",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Text(
-                    text = currentLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                options.forEachIndexed { index, option ->
-                    val isSelected = currentPowerType == option.first
-                    SegmentedButton(
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                        onClick = { if (currentPowerType != option.first) onPowerTypeChange(option.first) },
-                        selected = isSelected,
-                        icon = {},
-                        colors = SegmentedButtonDefaults.colors(
-                            activeContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                            activeContentColor = MaterialTheme.colorScheme.primary,
-                            activeBorderColor = MaterialTheme.colorScheme.primary,
-                            inactiveContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.50f),
-                            inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
-                        ),
-                        label = {
-                            Text(
-                                text = option.second,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun LogoutButtonCard(onClick: () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+            .settingsGlassCard(auraColor = MaterialTheme.colorScheme.error.copy(alpha = 0.08f)),
         shape = RoundedCornerShape(16.dp),
         color = Color.Transparent,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f)),
@@ -2123,7 +2089,7 @@ private fun LogoutButtonCard(onClick: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 14.dp),
+                .padding(vertical = 11.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -2158,7 +2124,7 @@ private fun OpenSourceCodeCard() {
                     Toast.makeText(context, "未找到可用浏览器", Toast.LENGTH_SHORT).show()
                 }
             }
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+            .settingsGlassCard(),
         shape = RoundedCornerShape(16.dp),
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -2166,7 +2132,7 @@ private fun OpenSourceCodeCard() {
         shadowElevation = 0.dp
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
@@ -2306,7 +2272,7 @@ private fun SupportAuthorCard(onClick: () -> Unit) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+            .settingsGlassCard(),
         shape = RoundedCornerShape(16.dp),
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -2314,7 +2280,7 @@ private fun SupportAuthorCard(onClick: () -> Unit) {
         shadowElevation = 0.dp
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
@@ -2587,14 +2553,14 @@ private fun VersionUpdateCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+            .settingsGlassCard(),
         shape = RoundedCornerShape(16.dp),
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
                 verticalAlignment = Alignment.CenterVertically
@@ -2726,10 +2692,17 @@ private fun VersionUpdateCard(
 }
 
 @Composable
-private fun AmapWebKeyConfigCard() {
+private fun AmapWebKeyConfigCard(
+    modifier: Modifier = Modifier,
+    initiallyExpanded: Boolean = false,
+    onConfigurationChanged: () -> Unit = {}
+) {
     val context = LocalContext.current
     val sessionStore = remember { SessionStore(context) }
-    var expanded by rememberSaveable { mutableStateOf(false) }
+    var expanded by rememberSaveable { mutableStateOf(initiallyExpanded) }
+    LaunchedEffect(initiallyExpanded) {
+        if (initiallyExpanded) expanded = true
+    }
     val arrowRotation by animateFloatAsState(
         targetValue = if (expanded) 90f else 0f,
         animationSpec = tween(220),
@@ -2748,9 +2721,9 @@ private fun AmapWebKeyConfigCard() {
     val activeStatusText = if (hasCustomKey) "已启用专属 Key" else "未配置专属 Key (点击配置)"
 
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+            .settingsGlassCard(),
         shape = RoundedCornerShape(16.dp),
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -2758,8 +2731,8 @@ private fun AmapWebKeyConfigCard() {
         shadowElevation = 0.dp
     ) {
         Column(
-            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -2867,10 +2840,12 @@ private fun AmapWebKeyConfigCard() {
                         OutlinedButton(
                             onClick = {
                                 sessionStore.saveCustomAmapWebKey(null)
+                                onConfigurationChanged()
                                 customKeyInput = ""
                                 savedCustomKey = null
                                 com.leapauto.app.AmapApiKeyManager.resetExhaustedState()
                                 saveSuccessMessage = "已清除专属 Key"
+                                Toast.makeText(context, "配置已清除", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.weight(1f).height(42.dp),
                             shape = RoundedCornerShape(12.dp)
@@ -2884,14 +2859,20 @@ private fun AmapWebKeyConfigCard() {
                             val trimmed = customKeyInput.trim()
                             if (trimmed.isEmpty()) {
                                 sessionStore.saveCustomAmapWebKey(null)
+                                onConfigurationChanged()
                                 savedCustomKey = null
                                 com.leapauto.app.AmapApiKeyManager.resetExhaustedState()
                                 saveSuccessMessage = "已清除 Key"
+                                Toast.makeText(context, "配置已清除", Toast.LENGTH_SHORT).show()
+                                expanded = false
                             } else if (trimmed.length == 32) {
                                 sessionStore.saveCustomAmapWebKey(trimmed)
+                                onConfigurationChanged()
                                 savedCustomKey = trimmed
                                 com.leapauto.app.AmapApiKeyManager.resetExhaustedState()
                                 saveSuccessMessage = "专属 Key 保存成功并已生效"
+                                Toast.makeText(context, "配置已保存", Toast.LENGTH_SHORT).show()
+                                expanded = false
                             } else {
                                 saveSuccessMessage = "Key 格式错误：需为 32 位高德 Web 服务 Key"
                             }
@@ -2976,15 +2957,15 @@ private fun VehicleCustomImageCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp)),
+            .settingsGlassCard(),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.glassSurface,
+        color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // 第一行：标题 + 右侧无轮廓文字操作按钮
@@ -3259,7 +3240,7 @@ private fun Widget4x2ActionsCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+            .settingsGlassCard(),
         shape = RoundedCornerShape(16.dp),
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -3267,8 +3248,8 @@ private fun Widget4x2ActionsCard(
         shadowElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -3357,7 +3338,7 @@ private fun ThemeConfigCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp))
+            .settingsGlassCard()
             .clickable { onOpenThemeDialog() },
         shape = RoundedCornerShape(16.dp),
         color = Color.Transparent,
@@ -3366,7 +3347,7 @@ private fun ThemeConfigCard(
         shadowElevation = 0.dp
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
@@ -3435,7 +3416,7 @@ private fun WidgetBackgroundStyleCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+            .settingsGlassCard(),
         shape = RoundedCornerShape(16.dp),
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -3443,8 +3424,8 @@ private fun WidgetBackgroundStyleCard(
         shadowElevation = 0.dp
     ) {
         Column(
-            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -3512,7 +3493,7 @@ private fun WidgetOpacityCard(opacity: Int, onOpacityChange: (Int) -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+            .settingsGlassCard(),
         shape = RoundedCornerShape(16.dp),
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -3520,8 +3501,8 @@ private fun WidgetOpacityCard(opacity: Int, onOpacityChange: (Int) -> Unit) {
         shadowElevation = 0.dp
     ) {
         Column(
-            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -3583,7 +3564,7 @@ private fun QuickSettingsTileCard() {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+            .settingsGlassCard(),
         shape = RoundedCornerShape(16.dp),
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -3591,8 +3572,8 @@ private fun QuickSettingsTileCard() {
         shadowElevation = 0.dp
     ) {
         Column(
-            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -3966,6 +3947,23 @@ internal fun glassInsetBorder(warning: Boolean = false): BorderStroke {
     )
 }
 
+/** 设置页卡片的轻量环境底色，保持 OTA 卡片的层次感但不干扰文字阅读。 */
+@Composable
+private fun Modifier.settingsGlassCard(
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(16.dp),
+    auraColor: Color? = null
+): Modifier {
+    val resolvedAura = auraColor ?: MaterialTheme.colorScheme.primary.copy(
+        alpha = if (LocalAppDarkTheme.current) 0.08f else 0.055f
+    )
+    return frostedGlassCard(
+        shape = shape,
+        auraColor = resolvedAura,
+        auraCenter = Offset(0.84f, 0.16f),
+        auraRadiusRatio = 0.62f
+    )
+}
+
 @Composable
 internal fun Modifier.frostedGlassCard(
     shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(16.dp),
@@ -4086,6 +4084,8 @@ fun VehicleHero(
     onUpdateNickname: (String) -> Unit = {},
     onRetryDownload3D: () -> Unit = {},
     onParkingClick: () -> Unit = {},
+    hasConfiguredAmapKey: Boolean = true,
+    onOpenAmapConfiguration: () -> Unit = {},
     locationSnapshot: VehicleLocationSnapshot? = null,
     activeControlCommand: String? = null,
     controlFeedback: ControlFeedback? = null,
@@ -4809,15 +4809,15 @@ fun VehicleHero(
                     val isMoving = detailedDrivingState?.isMoving == true
                     val stateLabel = detailedDrivingState?.label ?: "已驻车"
                     val address = vehicleAddress?.takeIf { it.isNotBlank() }
-                    val displayAddress = address
+                    val locationPill = homeLocationPill(hasConfiguredAmapKey, address)
 
                     // 1. 位置信息胶囊 (在上面)
-                    if (displayAddress != null) {
+                    if (locationPill != null) {
                         Spacer(Modifier.height(2.dp))
                         Surface(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(percent = 50))
-                                .clickable(onClick = onParkingClick),
+                                .clickable(onClick = if (locationPill.opensConfiguration) onOpenAmapConfiguration else onParkingClick),
                             shape = RoundedCornerShape(percent = 50),
                             color = statusPillBg,
                             contentColor = pillContentColor,
@@ -4839,7 +4839,7 @@ fun VehicleHero(
                                     tint = pillContentColor
                                 )
                                 Text(
-                                    text = displayAddress,
+                                    text = locationPill.label,
                                     modifier = Modifier.weight(1f, fill = false),
                                     style = MaterialTheme.typography.labelSmall.copy(lineHeight = HomeStatusPillStyle.lineHeight),
                                     fontSize = HomeStatusPillStyle.fontSize,
@@ -9097,11 +9097,12 @@ private fun EnergyHomeBars(
                         )
                     )
                 }
-                val dateLabel = if (EnergyWeekPeriodFormatter.isCurrentWeek(point.label, point.endLabel)) {
-                    "本周"
-                } else {
-                    EnergyWeekPeriodFormatter.weekEndDate(point.label, point.endLabel)
-                }
+                val dateLabel = EnergyWeekPeriodFormatter.weeklyTrendLabel(
+                    index = index,
+                    lastIndex = points.lastIndex,
+                    start = point.label,
+                    end = point.endLabel
+                )
 
                 Column(
                     modifier = Modifier
@@ -9787,6 +9788,7 @@ fun ClimateControlBottomSheet(
     controlFeedback: ControlFeedback? = null,
     onDismissControlFeedback: () -> Unit = {},
     scheduledAcPlan: ScheduledAcPlan = ScheduledAcPlan(),
+    scheduledAcSupported: Boolean = false,
     onApplyScheduledAc: (ScheduledAcPlan) -> Unit = {},
     onLoadScheduledAc: suspend () -> ScheduledAcPlan = { error("预约查询不可用") }
 ) {
@@ -10363,18 +10365,20 @@ fun ClimateControlBottomSheet(
                     modifier = Modifier.weight(1f)
                 )
 
-                QuickClimateCircleAction(
-                    icon = R.drawable.ic_phosphor_alarm,
-                    label = "定时空调",
-                    isActive = scheduledAcPlan.enabled,
-                    activeColor = MaterialTheme.colorScheme.primary,
-                    enabled = actionsEnabled,
-                    onClick = {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                        showScheduledAcSheet = true
-                    },
-                    modifier = Modifier.weight(1f)
-                )
+                if (scheduledAcSupported) {
+                    QuickClimateCircleAction(
+                        icon = R.drawable.ic_phosphor_alarm,
+                        label = "定时空调",
+                        isActive = scheduledAcPlan.enabled,
+                        activeColor = MaterialTheme.colorScheme.primary,
+                        enabled = actionsEnabled,
+                        onClick = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            showScheduledAcSheet = true
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             // 4. 完整空调设置界面 (风量滑块 / 出风方向 / 座椅舒适度)
@@ -10624,6 +10628,7 @@ fun ClimateControlContent(
     onControl: (String) -> Unit,
     onApplyClimateSettings: (AirConditioningCommand) -> Unit,
     scheduledAcPlan: ScheduledAcPlan = ScheduledAcPlan(),
+    scheduledAcSupported: Boolean = false,
     onApplyScheduledAc: (ScheduledAcPlan) -> Unit = {},
     onLoadScheduledAc: suspend () -> ScheduledAcPlan = { error("预约查询不可用") }
 ) {
@@ -10638,6 +10643,7 @@ fun ClimateControlContent(
         controlFeedback = controlFeedback,
         onDismissControlFeedback = onDismissControlFeedback,
         scheduledAcPlan = scheduledAcPlan,
+        scheduledAcSupported = scheduledAcSupported,
         onApplyScheduledAc = onApplyScheduledAc,
         onLoadScheduledAc = onLoadScheduledAc
     )

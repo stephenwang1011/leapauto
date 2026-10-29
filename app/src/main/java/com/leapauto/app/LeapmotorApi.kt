@@ -2310,7 +2310,9 @@ class LeapmotorApi internal constructor(
                 if (result != null && result != JSONObject.NULL && result.toString() != "0") {
                     return null
                 }
-                return Commands.parseScheduledAc(resp.opt("data"))
+                val parsed = Commands.parseScheduledAc(resp.opt("data"))
+                if (parsed != null) return parsed
+                lastException = ApiException("预约数据结构无效")
             } catch (e: Exception) {
                 lastException = e
             }
