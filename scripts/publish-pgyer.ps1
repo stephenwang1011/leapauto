@@ -240,7 +240,10 @@ try {
 
     $uploadArguments = @("upload", $releaseApk)
     if (-not [string]::IsNullOrWhiteSpace($UpdateDescription)) {
-        $uploadArguments += @("--build-update-description", $UpdateDescription)
+        # PGYER's upload endpoint truncates multiline form values after the first line.
+        # Keep multiline notes in the app and GitHub Release, but send one readable value to PGYER.
+        $pgyerUpdateDescription = $UpdateDescription -replace "`r?`n", "；"
+        $uploadArguments += @("--build-update-description", $pgyerUpdateDescription)
     }
 
     Write-Host "Uploading $releaseApk (version $versionName) to PGYER..."
