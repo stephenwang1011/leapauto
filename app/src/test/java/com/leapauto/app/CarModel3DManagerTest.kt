@@ -411,10 +411,10 @@ class CarModel3DManagerTest {
             .first { File(it, "app").isDirectory }
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
-        assertTrue(screenSource.contains("val mileageDisplayColor = heroPrimaryTextColor"))
+        assertTrue(screenSource.contains("val mileageDisplayColor = heroTextColors.mileage"))
         assertTrue(screenSource.contains("electricGradientColors"))
         assertTrue(screenSource.contains("fuelGradientColors"))
-        assertTrue(screenSource.contains("Color(0xFF0066FF), Color(0xFF00E676)"))
+        assertTrue(screenSource.contains("Color(0xFF159447), Color(0xFF00E676)"))
         assertTrue(screenSource.contains("slotBaseColor = if (isDark) Color.White.copy(alpha = 0.12f)"))
     }
 
@@ -444,7 +444,7 @@ class CarModel3DManagerTest {
         assertTrue("充电中心胶囊必须使用共享灰色半透明背景", chargingPill.contains("val backgroundColor = homeStatusPillBackground(isHeroDark)"))
         assertTrue("地址和驻车胶囊背景必须沿用实际首卡深浅判定", screenSource.contains("val statusPillBg = homeStatusPillBackground(isHeroDark)"))
         assertTrue("充电强调边框必须保留", chargingPill.contains("val border = if (isChargingActive) chargingActiveBorder else pillBorderStroke"))
-        assertTrue("哨兵背景必须保留旧色值", screenSource.contains("val defaultPillBg = if (isHeroDark) Color(0xFF131722).copy(alpha = 0.68f) else Color.White.copy(alpha = 0.90f)"))
+        assertTrue("哨兵背景必须使用中性灰并保留透明度", screenSource.contains("val defaultPillBg = if (isHeroDark) Color(0xFF181818).copy(alpha = 0.68f) else Color.White.copy(alpha = 0.90f)"))
         assertTrue("充电中心胶囊内边距必须使用放大后的共享尺寸", chargingPill.contains("horizontal = HomeStatusPillStyle.horizontalPadding"))
         assertTrue(chargingPill.contains("vertical = HomeStatusPillStyle.verticalPadding"))
         assertTrue("哨兵胶囊必须统一使用 50% 药丸圆角与 defaultPillBg", screenSource.contains("status?.sentryMode == true) {\n                            Surface(\n                                shape = RoundedCornerShape(percent = 50),\n                                color = defaultPillBg"))
@@ -455,15 +455,16 @@ class CarModel3DManagerTest {
     }
 
     @Test
-    fun `mileage and unit follow resolved artwork tone including stone and missing artwork`() {
+    fun `mileage and unit use scoped hero text colors without changing pill contrast`() {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
             .first { File(it, "app").isDirectory }
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
         assertTrue(screenSource.contains("val isHeroDark = heroNight.isHeroDark"))
-        assertTrue(screenSource.contains("val mileageDisplayColor = heroPrimaryTextColor"))
-        assertTrue(screenSource.contains("val unitDisplayColor = heroSecondaryTextColor"))
+        assertTrue(screenSource.contains("val mileageDisplayColor = heroTextColors.mileage"))
+        assertTrue(screenSource.contains("val unitDisplayColor = heroTextColors.unit"))
+        assertTrue(screenSource.contains("val statusPillBg = homeStatusPillBackground(isHeroDark)"))
         assertFalse(screenSource.contains("val isYuhuiStoneTheme = selectedThemeId == \"5\""))
     }
 
@@ -682,12 +683,13 @@ class CarModel3DManagerTest {
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
         // 验证车模上方文字对比度绑定 isHeroDark
-        assertTrue(screenSource.contains("heroPrimaryTextColor = if (isHeroDark) Color.White else Color(0xFF141923)"))
-        assertTrue(screenSource.contains("heroSecondaryTextColor = if (isHeroDark) Color.White.copy(alpha = 0.90f) else Color(0xFF4A5568)"))
+        assertTrue(screenSource.contains("val heroTextColors = HomeHeroTextStyle.resolve("))
+        assertTrue(screenSource.contains("heroPrimaryTextColor = heroTextColors.primary"))
+        assertTrue(screenSource.contains("heroSecondaryTextColor = heroTextColors.secondary"))
 
         // 验证快捷操作按钮文字注入微柔光阴影与 isHeroDark 贯穿
         assertTrue(screenSource.contains("isHeroDark: Boolean = false"))
-        assertTrue(screenSource.contains("normalActionContentColor = if (isHeroDark) Color.White else Color(0xFF141923)"))
+        assertTrue(screenSource.contains("normalActionContentColor = if (isHeroDark) Color.White else Color(0xFF202020)"))
         assertTrue(screenSource.contains("blurRadius = 3f"))
     }
 

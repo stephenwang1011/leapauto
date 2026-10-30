@@ -108,7 +108,7 @@ fun ThemeSelectorBottomSheet(
         }
     }
 
-    val pageBgColor = if (isDark) Color(0xFF161A23) else Color(0xFFF7F8FA)
+    val pageBgColor = MaterialTheme.colorScheme.surface
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -360,7 +360,7 @@ fun ThemeSelectorBottomSheet(
                                         Icon(
                                             painter = painterResource(R.drawable.ic_phosphor_check),
                                             contentDescription = "已选用",
-                                            tint = Color.White,
+                                            tint = MaterialTheme.colorScheme.onPrimary,
                                             modifier = Modifier.size(14.dp)
                                         )
                                     }

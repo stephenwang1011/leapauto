@@ -5,6 +5,8 @@ import androidx.compose.ui.graphics.Color
 import com.leapauto.app.BuildConfig
 import com.leapauto.app.ObfuscatedSecrets
 import com.leapauto.app.R
+import com.leapauto.app.ui.theme.OnSurfaceVariantDark
+import com.leapauto.app.ui.theme.OnSurfaceVariantLight
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -93,12 +95,11 @@ object WeatherVisualResolver {
         val w = weather.orEmpty()
         return when {
             w.contains("雷") -> Color(0xFFFFD600) // 闪电黄
-            w.contains("雪") -> Color(0xFF80D8FF) // 浅霜雪蓝
-            w.contains("雨") -> Color(0xFF00B0FF) // 冰蓝
-            w.contains("风") -> Color(0xFF40C4FF) // 微风浅蓝
+            w.contains("雪") || w.contains("雨") || w.contains("风") ->
+                if (isDark) OnSurfaceVariantDark else OnSurfaceVariantLight
             w.contains("晴") && !w.contains("云") -> Color(0xFFFFB300) // 暖金
             w.contains("多云") || w.contains("晴") -> Color(0xFFFFCA28) // 暖阳微光
-            else -> if (isDark) Color(0xFFB0BEC5) else Color(0xFF78909C) // 柔灰云
+            else -> if (isDark) OnSurfaceVariantDark else OnSurfaceVariantLight
         }
     }
 }

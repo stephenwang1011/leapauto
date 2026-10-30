@@ -14,7 +14,7 @@ import com.leapauto.app.R
 import com.leapauto.app.SessionStore
 
 /**
- * 下拉控制中心快捷磁贴：寻车（鸣笛闪灯）。
+ * 下拉控制中心快捷磁贴：鸣笛寻车（鸣笛闪灯）。
  * 具备极高实用价值：支持锁屏状态下免解锁直接盲按，快速在地库寻找车辆。
  */
 class HornTileService : TileService() {
@@ -85,7 +85,7 @@ class HornTileService : TileService() {
     private fun updateTileState(inProgress: Boolean, customSubtitle: String? = null) {
         val tile = qsTile ?: return
         tile.state = if (inProgress) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = "寻车"
+        tile.label = TilePromptHelper.TileType.HORN.title
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             tile.subtitle = customSubtitle ?: if (inProgress) "正在鸣笛..." else "鸣笛闪灯"
         }

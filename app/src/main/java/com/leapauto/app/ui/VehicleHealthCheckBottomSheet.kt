@@ -76,8 +76,6 @@ import com.leapauto.app.VehicleAppearance
 import com.leapauto.app.VehicleHealthDiagnostics
 import com.leapauto.app.VehicleImageCache
 import com.leapauto.app.VehicleStatus
-import com.leapauto.app.ui.theme.LeapBlue
-import com.leapauto.app.ui.theme.LocalAppDarkTheme
 import com.leapauto.app.ui.theme.glassInsetSurface
 import com.leapauto.app.ui.theme.statusGood
 import com.leapauto.app.ui.theme.statusWarn
@@ -100,8 +98,8 @@ fun VehicleHealthCheckBottomSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val isDark = LocalAppDarkTheme.current
-    val pageBgColor = if (isDark) Color(0xFF131822) else Color(0xFFF3F5F9)
+    val pageBgColor = MaterialTheme.colorScheme.surface
+    val scanColor = MaterialTheme.colorScheme.primary
 
     val carBitmap = remoteBitmap ?: remember(vehicleVin, vehicleImageVersion) {
         if (vehicleVin.isNotBlank()) VehicleImageCache.loadWidgetBitmap(context, vehicleVin) else null
@@ -249,8 +247,8 @@ fun VehicleHealthCheckBottomSheet(
                                     brush = Brush.radialGradient(
                                         colors = listOf(
                                             Color.White.copy(alpha = 0.35f),
-                                            LeapBlue.copy(alpha = 0.20f),
-                                            LeapBlue.copy(alpha = 0.04f),
+                                            scanColor.copy(alpha = 0.20f),
+                                            scanColor.copy(alpha = 0.04f),
                                             Color.Transparent
                                         ),
                                         center = Offset(laserX, h * 0.5f),
@@ -260,14 +258,14 @@ fun VehicleHealthCheckBottomSheet(
                                     size = androidx.compose.ui.geometry.Size(20.dp.toPx(), h)
                                 )
 
-                                // 2. 伴生微光柔边 (2.5 dp 柔和淡蓝光晕)
+                                // 2. 伴生微光柔边
                                 drawLine(
                                     brush = Brush.verticalGradient(
                                         colors = listOf(
                                             Color.Transparent,
-                                            LeapBlue.copy(alpha = 0.35f),
-                                            LeapBlue.copy(alpha = 0.60f),
-                                            LeapBlue.copy(alpha = 0.35f),
+                                            scanColor.copy(alpha = 0.35f),
+                                            scanColor.copy(alpha = 0.60f),
+                                            scanColor.copy(alpha = 0.35f),
                                             Color.Transparent
                                         ),
                                         startY = 0f,
@@ -313,7 +311,7 @@ fun VehicleHealthCheckBottomSheet(
                                         style = Stroke(width = 1.dp.toPx())
                                     )
                                     drawCircle(
-                                        color = LeapBlue,
+                                        color = scanColor,
                                         radius = 1.2.dp.toPx(),
                                         center = Offset(laserX, markerY)
                                     )
@@ -336,7 +334,7 @@ fun VehicleHealthCheckBottomSheet(
                                     val py = h * yRatio + sin((sweepFraction * 8f + yRatio * 12f)) * 2.5.dp.toPx()
                                     val alpha = (1f - (abs(dxDp) / 32f)).coerceIn(0f, 1f) * 0.70f
                                     drawCircle(
-                                        color = LeapBlue.copy(alpha = alpha),
+                                        color = scanColor.copy(alpha = alpha),
                                         radius = rDp.dp.toPx(),
                                         center = Offset(px, py)
                                     )
@@ -475,7 +473,8 @@ private fun HealthIssueCard(
                     onClick = { onFix(issue.fixCommand) },
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (issue.level == HealthCheckLevel.CRITICAL) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        containerColor = if (issue.level == HealthCheckLevel.CRITICAL) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        contentColor = if (issue.level == HealthCheckLevel.CRITICAL) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
                     ),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {

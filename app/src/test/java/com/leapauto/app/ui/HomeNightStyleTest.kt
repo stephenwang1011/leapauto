@@ -17,6 +17,16 @@ import org.junit.Test
 
 class HomeNightStyleTest {
     @Test
+    fun `quick controls follow page appearance even when stone hero uses light foreground`() {
+        val hero = source("ui/LeapAutoScreen").substringAfter("fun VehicleHero(")
+            .substringBefore("private fun HeroControlHudPill(")
+        val quickControls = hero.substringAfter("QuickVehicleActions(").substringBefore("\n                )")
+        assertTrue("Quick controls must use page appearance", Regex("isHeroDark = isDark\\s*$").containsMatchIn(quickControls))
+        assertTrue("Upper hero must keep its independent contrast", hero.contains("val isHeroDark = heroNight.isHeroDark"))
+        assertTrue("Lower transition must match the same page appearance", hero.contains("HomeHeroTransition(heroNight.transitionHeightDp, isDark)"))
+    }
+
+    @Test
     fun `home warning foreground is scoped and does not recolor dialogs or warning materials`() {
         val screen = source("ui/LeapAutoScreen")
         val quick = screen.substringAfter("private fun QuickVehicleButton(").substringBefore("private fun showUpperToast")
@@ -86,14 +96,13 @@ class HomeNightStyleTest {
     }
 
     @Test
-    fun `warning label has no rectangular backing and bottom controls follow the page horizon`() {
+    fun `warning label has no rectangular backing and retains contrast on the page horizon`() {
         val screen = source("ui/LeapAutoScreen")
         val quick = screen.substringAfter("private fun QuickVehicleButton(").substringBefore("private fun showUpperToast")
         assertFalse(quick.contains("isWarning && isHeroDark"))
         val warningLabel = Regex("Text\\(\\s*label,[\\s\\S]*?\\n\\s*\\)").find(quick)?.value.orEmpty()
         assertTrue(warningLabel.isNotEmpty())
         assertFalse(warningLabel.contains("background"))
-        assertTrue(screen.contains("isHeroDark = isDark || isHeroDark"))
         assertTrue((ErrorDark.luminance() + 0.05f) / (HomeNightStyle.page.luminance() + 0.05f) >= 4.5f)
     }
 
@@ -122,9 +131,9 @@ class HomeNightStyleTest {
         assertTrue(hero.contains("heroNight.useNightSkybox"))
         assertTrue(hero.contains("originalHeroDark = ThemeManager.isHeroBackgroundDark(renderedThemeId, isDark, context, vehicleVin)"))
         assertTrue(hero.contains("0.0f to hudGradientColor.copy("))
-        assertTrue(hero.contains("neutralContentColor = heroSecondaryTextColor"))
-        assertTrue(hero.contains("val mileageDisplayColor = heroPrimaryTextColor"))
-        assertTrue(hero.contains("val unitDisplayColor = heroSecondaryTextColor"))
+        assertTrue(hero.contains("neutralContentColor = heroBluetoothNeutralColor"))
+        assertTrue(hero.contains("val mileageDisplayColor = heroTextColors.mileage"))
+        assertTrue(hero.contains("val unitDisplayColor = heroTextColors.unit"))
         val home = screen.substringAfter("private fun HomeContent(").substringBefore("private fun MyContent(")
         assertEquals(1, Regex("LocalHomeNightCards provides homeNight").findAll(home).count())
         assertFalse(home.substringAfter("if (showParkingDetailDialog").contains("LocalHomeNightCards"))
@@ -150,6 +159,17 @@ class HomeNightStyleTest {
         assertTrue(updateText.contains("color = if (isDark && renderedThemeId == VehicleThemePolicy.SNOW_THEME_ID)"))
         assertTrue(updateText.contains("Color.Black"))
         assertTrue(updateText.contains("else heroSecondaryTextColor"))
+    }
+
+    @Test
+    fun `parking photo page keeps weather but does not render wash recommendation`() {
+        val screen = source("ui/LeapAutoScreen")
+        val parkingDetail = screen.substringAfter("private fun ParkingDetailDialog(")
+            .substringBefore("private fun FullScreenImagePreviewDialog(")
+        assertTrue(parkingDetail.contains("驻车实景下仅保留天气信息"))
+        assertTrue(parkingDetail.contains("WeatherVisualResolver.iconRes"))
+        assertFalse(parkingDetail.contains("CarWashRecommendationPolicy.evaluate"))
+        assertFalse(parkingDetail.contains("爱车洗车建议"))
     }
 
     @Test

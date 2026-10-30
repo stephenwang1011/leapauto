@@ -46,7 +46,7 @@ object CarWashRecommendationPolicy {
             w.contains("阴") || humidity in 70..84 -> CarWashAdvice(
                 levelLabel = "较适宜",
                 reason = "无降水天气，湿度适中，洗车后建议及时擦干水渍以防留痕。",
-                tagColor = Color(0xFF0066FF),
+                tagColor = Color(0xFF00C853),
                 isFavorable = true
             )
             // 5. 晴朗干燥 (晴/多云且湿度 < 70%)

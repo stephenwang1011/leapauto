@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
-import com.leapauto.app.ui.theme.LeapBlue
+import com.leapauto.app.ui.theme.statusGood
 
 enum class ClimateToggleGlyph {
     CHECK,
@@ -85,17 +85,17 @@ fun ClimateToggle(
         ),
         label = "climateToggleThumbOffset"
     )
-    // 轨道：开启使用零跑 Leap Blue，关闭和禁用状态保持中性弱化。
+    // 轨道通过语义绿色表达已开启状态。
     val trackColor by animateColorAsState(
         targetValue = when {
-            checked -> LeapBlue
+            checked -> MaterialTheme.statusGood
             enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
             else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.20f)
         },
         animationSpec = animationSpec,
         label = "climateToggleTrackColor"
     )
-    // 滑块：开启时使用白色，与蓝色轨道形成清晰对比。
+    // 滑块保持白色，沿用既有位置与禁用状态反馈。
     val thumbColor by animateColorAsState(
         targetValue = when {
             checked -> Color.White

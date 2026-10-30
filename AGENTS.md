@@ -226,15 +226,19 @@ implementation work when an owned specialist already covers it.
 ### 核心执行细则：
 - **微晶毛玻璃材质与环境极光**：所有卡片容器必须使用 `Modifier.frostedGlassCard(...)`（内置双对角微晶磨砂渐变、0.5dp 顶层折射晶线与底层环境极光），边框统一使用三阶高光切边 `glassCardBorder()`；弹窗与半屏抽屉必须使用高对比度纯实色背景（`solidDialogModifier()` / `pageBgColor`），严禁透明化以杜绝背景杂光干扰文字阅读；
 - **排版与尺寸统一对齐**：核心续航大字 `26sp Bold`、单位 `12sp Bold`、电量百分比 `13sp Bold`（间距 `2~3dp`），纯电续航能量槽统一为 `110dp × 4.5dp`（圆角 `2dp`）；
-- **座舱三原色约束**：严格使用 `MaterialTheme.colorScheme.primary`（零跑蓝 `#0066FF`）、`MaterialTheme.statusGood`（能量绿 `#00C853`）和警告红（`#FF3B30`），严禁在界面 Compose 代码中硬编码 `"LeapBlue"` 或 `"EnergyGreen"` 字符串，确保 100% 通过 `GlassSurfaceStyleTest` 门禁；
+- **中性色与状态色约束**：基础界面使用黑白灰，`MaterialTheme.colorScheme.primary` 在浅色模式为 `#303030`、深色模式为 `#E4E4E4`，对应 `onPrimary` 分别为白色和 `#202020`；背景、卡片与选中底色采用中性灰白，不再使用蓝色强调、蓝色渐变或蓝色光晕。`MaterialTheme.statusGood`（能量绿 `#00C853`）用于已确认开启、正常和成功状态，警告红（`#FF3B30`）用于异常，橙色用于提醒。状态未确认、发送中、等待回包或仅本地选中时不得标为已生效。使用主题语义令牌并保持 `GlassSurfaceStyleTest` 通过；
 - **严禁脏黑阴影与厚重色块**：保持 `shadowElevation = 0.dp`，不使用纯色无渐变大灰块或未羽化的生硬遮罩；
 - **性能与轻量化底线**：严禁引入外部重度实时高斯模糊库，100% 采用纯 Compose Canvas/Brush 硬件加速高效渲染，保持 10 MiB 包体限制与老设备 60/120 FPS 流畅度。
 
-The current baseline is a warm neutral-grey background, restrained translucent information surfaces,
-Leap Blue `#0066FF` for brand and primary actions, Energy Green `#00C853` for energy,
-healthy, and success states, and Alert Red `#FF3B30` for faults and security
-warnings. Use linear icons, restrained borders, stable touch targets, and text plus
-icon/color for safety states. Keep light and dark theme behavior intact.
+The current baseline is a neutral-grey background and restrained translucent information surfaces.
+Primary actions use neutral `#303030` with white content in light mode and
+`#E4E4E4` with `#202020` content in dark mode. Use Energy Green `#00C853` for
+confirmed enabled, healthy, and success states, Alert Red `#FF3B30` for faults
+and security warnings, and amber for reminders. Pending, unknown, and locally
+selected states must remain distinguishable from confirmed active states.
+Use linear icons, restrained borders, stable touch targets, and text plus icon/color
+for safety states. Keep light and dark theme behavior intact. Remove blue UI accents
+without recoloring authorized vehicle photos, theme backgrounds, or 3D assets.
 
 Do not introduce saturated gradients, orange as a primary color, heavy real-time
 background blur, neon effects, copied screenshots/branding, unlicensed vehicle

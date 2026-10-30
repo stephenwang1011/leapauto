@@ -13,7 +13,7 @@ import com.leapauto.app.R
 /**
  * 快捷设置磁贴系统级引导助手。
  * 在 Android 13 (API 33) 及以上系统上，支持在应用内直接弹出系统级底部弹窗，
- * 引导用户一键将「寻车」、「车锁」、「空调」添加至下拉通知栏控制中心。
+ * 引导用户一键将「鸣笛寻车」、「车辆门锁」、「车辆空调」添加至下拉通知栏控制中心。
  */
 object TilePromptHelper {
 
@@ -22,9 +22,9 @@ object TilePromptHelper {
         val iconRes: Int,
         val serviceClass: Class<*>
     ) {
-        HORN("寻车", R.drawable.ic_location_horn, HornTileService::class.java),
-        LOCK("车锁", R.drawable.ic_phosphor_lock, LockToggleTileService::class.java),
-        CLIMATE("空调", R.drawable.ic_phosphor_fan, ClimateTileService::class.java)
+        HORN("鸣笛寻车", R.drawable.ic_location_horn, HornTileService::class.java),
+        LOCK("车辆门锁", R.drawable.ic_phosphor_lock, LockToggleTileService::class.java),
+        CLIMATE("车辆空调", R.drawable.ic_phosphor_fan, ClimateTileService::class.java)
     }
 
     private const val PREFS_NAME = "quick_tiles_state"

@@ -1,7 +1,12 @@
 package com.leapauto.app.weather
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import com.leapauto.app.R
+import com.leapauto.app.ui.theme.OnSurfaceVariantDark
+import com.leapauto.app.ui.theme.OnSurfaceVariantLight
+import com.leapauto.app.ui.theme.SurfaceDark
+import com.leapauto.app.ui.theme.SurfaceLight
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -70,8 +75,24 @@ class AmapWeatherTest {
 
         assertEquals(Color(0xFFFFB300), WeatherVisualResolver.iconTint("晴", isDark = true))
         assertEquals(Color(0xFFFFCA28), WeatherVisualResolver.iconTint("多云", isDark = true))
-        assertEquals(Color(0xFF00B0FF), WeatherVisualResolver.iconTint("阵雨", isDark = true))
+        assertEquals(OnSurfaceVariantDark, WeatherVisualResolver.iconTint("阵雨", isDark = true))
         assertEquals(Color(0xFFFFD600), WeatherVisualResolver.iconTint("雷阵雨", isDark = true))
+    }
+
+    @Test
+    fun `neutral weather icons remain readable in both themes including unknown conditions`() {
+        for (weather in listOf("阵雨", "雪", "大风", "阴", "雾", "未知天气", "", null)) {
+            for (isDark in listOf(false, true)) {
+                val tint = WeatherVisualResolver.iconTint(weather, isDark)
+                val background = if (isDark) SurfaceDark else SurfaceLight
+                assertEquals(if (isDark) OnSurfaceVariantDark else OnSurfaceVariantLight, tint)
+                assertEquals(tint.red, tint.green, 0.001f)
+                assertEquals(tint.green, tint.blue, 0.001f)
+                val luminances = listOf(tint.luminance(), background.luminance())
+                val contrast = (luminances.max() + 0.05f) / (luminances.min() + 0.05f)
+                assertTrue("weather=$weather isDark=$isDark contrast=$contrast", contrast >= 3f)
+            }
+        }
     }
 
     @Test

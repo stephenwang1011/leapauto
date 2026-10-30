@@ -105,7 +105,7 @@
         <!-- 下拉控制中心快捷磁贴 (Quick Settings Tiles) -->
         <service
             android:name=".tiles.HornTileService"
-            android:label="寻车"
+            android:label="鸣笛寻车"
             android:icon="@drawable/ic_location_horn"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
             android:exported="true">
@@ -116,7 +116,7 @@
 
         <service
             android:name=".tiles.LockToggleTileService"
-            android:label="车锁"
+            android:label="车辆门锁"
             android:icon="@drawable/ic_phosphor_lock"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
             android:exported="true">
@@ -127,7 +127,7 @@
 
         <service
             android:name=".tiles.ClimateTileService"
-            android:label="空调"
+            android:label="车辆空调"
             android:icon="@drawable/ic_phosphor_fan"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
             android:exported="true">

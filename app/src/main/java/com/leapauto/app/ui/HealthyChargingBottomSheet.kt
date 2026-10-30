@@ -249,9 +249,9 @@ fun HealthyChargingBottomSheet(
     }
 
     val isDark = LocalAppDarkTheme.current
-    val pageBgColor = if (isDark) Color(0xFF141416) else Color(0xFFF7F8FA)
-    val cardBgColor = if (isDark) Color(0xFF1E1E22) else Color.White
-    val cardBorderColor = if (isDark) Color(0xFF2C2C30) else Color(0xFFEBECEF)
+    val pageBgColor = if (isDark) Color(0xFF161616) else Color(0xFFF8F8F8)
+    val cardBgColor = if (isDark) Color(0xFF202020) else Color.White
+    val cardBorderColor = if (isDark) Color(0xFF2E2E2E) else Color(0xFFECECEC)
 
     // 图 1: 充电中心主界面
     ModalBottomSheet(
@@ -433,10 +433,10 @@ fun HealthyChargingBottomSheet(
             val isCharging = status?.chargeState == 1
 
             if (isGunConnected) {
-                val outlineBtnBg = if (isDark) Color(0xFF222226) else Color.White
-                val outlineBtnBorder = if (isDark) Color(0xFF48484C) else Color(0xFF8E8E93)
+                val outlineBtnBg = if (isDark) Color(0xFF242424) else Color.White
+                val outlineBtnBorder = if (isDark) Color(0xFF4A4A4A) else Color(0xFF909090)
                 val outlineBtnText = if (isDark) Color(0xFFEDEDED) else Color(0xFF222222)
-                val solidBtnBg = if (isDark) Color(0xFF38383A) else Color(0xFF2B2B2B)
+                val solidBtnBg = if (isDark) Color(0xFF393939) else Color(0xFF2B2B2B)
 
                 val mainActionText = if (isCharging) "结束充电" else "开始充电"
                 val mainActionCmd = if (isCharging) "stopCharging" else "startCharging"
@@ -601,7 +601,7 @@ fun HealthyChargingBottomSheet(
                             Text(
                                 text = "50%",
                                 fontSize = 13.sp,
-                                color = if (isDark) Color(0xFF8E8E93) else Color(0xFF6E6E73),
+                                color = if (isDark) Color(0xFF909090) else Color(0xFF707070),
                                 modifier = Modifier.padding(end = 8.dp)
                             )
                             Slider(
@@ -626,14 +626,14 @@ fun HealthyChargingBottomSheet(
                                         shape = CircleShape,
                                         color = Color.White,
                                         shadowElevation = 3.dp,
-                                        border = BorderStroke(0.6.dp, Color(0xFFD8D8DC)),
+                                        border = BorderStroke(0.6.dp, Color(0xFFDADADA)),
                                         modifier = Modifier.size(20.dp)
                                     ) {}
                                 },
                                 track = { sliderState ->
                                     val activeRatio = ((sliderState.value - 50f) / 50f).coerceIn(0f, 1f)
                                     val activeTrackColor = if (isDark) Color(0xFF234B32) else Color(0xFFD0E8D6)
-                                    val inactiveTrackColor = if (isDark) Color(0xFF2C2C30) else Color(0xFFECECF0)
+                                    val inactiveTrackColor = if (isDark) Color(0xFF2E2E2E) else Color(0xFFEEEEEE)
                                     val tickColor = Color.White
 
                                     Canvas(
@@ -683,7 +683,7 @@ fun HealthyChargingBottomSheet(
                             Text(
                                 text = "100%",
                                 fontSize = 13.sp,
-                                color = if (isDark) Color(0xFF8E8E93) else Color(0xFF6E6E73),
+                                color = if (isDark) Color(0xFF909090) else Color(0xFF707070),
                                 modifier = Modifier.padding(start = 8.dp)
                             )
                         }
@@ -707,8 +707,8 @@ fun HealthyChargingBottomSheet(
                             Box(
                                 modifier = Modifier.weight(1f)
                             ) {
-                                val triangleColor = if (isDark) Color(0xFF8E8E93) else Color(0xFFA0A0A5)
-                                val labelColor = if (isDark) Color(0xFF8E8E93) else Color(0xFF7A7A80)
+                                val triangleColor = if (isDark) Color(0xFF909090) else Color(0xFFA2A2A2)
+                                val labelColor = if (isDark) Color(0xFF909090) else Color(0xFF7D7D7D)
 
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -981,7 +981,7 @@ fun HealthyChargingBottomSheet(
                 },
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isDark) Color(0xFF2C2C30) else Color(0xFF1E1E20)
+                    containerColor = if (isDark) Color(0xFF2E2E2E) else Color(0xFF202020)
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1521,7 +1521,7 @@ internal fun OfficialDayPill(
     val bgColor = if (selected) {
         if (isDark) Color(0xFF1E3A2B) else Color(0xFFEAF7EE)
     } else {
-        if (isDark) Color(0xFF26262A) else Color(0xFFF5F6F8)
+        if (isDark) Color(0xFF282828) else Color(0xFFF6F6F6)
     }
     val contentColor = if (selected) {
         MaterialTheme.statusGood

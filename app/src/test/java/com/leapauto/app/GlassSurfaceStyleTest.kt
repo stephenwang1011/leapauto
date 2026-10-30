@@ -24,9 +24,9 @@ class GlassSurfaceStyleTest {
         ).readText()
 
         assertTrue(colors.contains("GlassSurfaceLight = Color(0xFFFFFFFF)"))
-        assertTrue(colors.contains("GlassInsetSurfaceLight = Color(0xFFF5F7F8)"))
-        assertTrue(colors.contains("GlassSurfaceDark = Color(0xFF1A1F28)"))
-        assertTrue(colors.contains("GlassInsetSurfaceDark = Color(0xFF28303B)"))
+        assertTrue(colors.contains("GlassInsetSurfaceLight = Color(0xFFF6F6F6)"))
+        assertTrue(colors.contains("GlassSurfaceDark = Color(0xFF202020)"))
+        assertTrue(colors.contains("GlassInsetSurfaceDark = Color(0xFF303030)"))
         assertFalse(colors.contains("GlassBorderLight"))
         assertFalse(colors.contains("GlassBorderDark"))
         assertTrue(screen.contains("MaterialTheme.glassSurface"))

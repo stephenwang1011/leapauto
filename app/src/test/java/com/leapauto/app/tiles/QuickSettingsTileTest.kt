@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
+import org.w3c.dom.Element
 
 class QuickSettingsTileTest {
 
@@ -19,15 +21,15 @@ class QuickSettingsTileTest {
         assertEquals(3, types.size)
 
         val horn = types.first { it == TilePromptHelper.TileType.HORN }
-        assertEquals("寻车", horn.title)
+        assertEquals("鸣笛寻车", horn.title)
         assertEquals(HornTileService::class.java, horn.serviceClass)
 
         val lock = types.first { it == TilePromptHelper.TileType.LOCK }
-        assertEquals("车锁", lock.title)
+        assertEquals("车辆门锁", lock.title)
         assertEquals(LockToggleTileService::class.java, lock.serviceClass)
 
         val climate = types.first { it == TilePromptHelper.TileType.CLIMATE }
-        assertEquals("空调", climate.title)
+        assertEquals("车辆空调", climate.title)
         assertEquals(ClimateTileService::class.java, climate.serviceClass)
     }
 
@@ -46,6 +48,17 @@ class QuickSettingsTileTest {
 
         assertTrue(manifest.contains("android:permission=\"android.permission.BIND_QUICK_SETTINGS_TILE\""))
         assertTrue(manifest.contains("<action android:name=\"android.service.quicksettings.action.QS_TILE\" />"))
+
+        val document = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+            .newDocumentBuilder().parse(File(projectDir, "app/src/main/AndroidManifest.xml"))
+        val services = document.getElementsByTagName("service")
+        val androidNamespace = "http://schemas.android.com/apk/res/android"
+        for (type in TilePromptHelper.TileType.values()) {
+            val serviceName = type.serviceClass.name.removePrefix("com.leapauto.app")
+            val service = (0 until services.length).map { services.item(it) as Element }
+                .single { it.getAttributeNS(androidNamespace, "name") == serviceName }
+            assertEquals(type.title, service.getAttributeNS(androidNamespace, "label"))
+        }
     }
 
     @Test

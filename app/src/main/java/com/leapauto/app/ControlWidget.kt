@@ -770,7 +770,7 @@ class ControlWidget : AppWidgetProvider() {
 
         private fun widgetStatusColorResource(text: String?): Int = when {
             text?.startsWith("剩余") == true -> R.color.energy_green
-            text == "行驶中" -> R.color.leap_blue
+            text == "行驶中" -> R.color.action_neutral
             text == "充电中" || text == "充电完成" -> R.color.energy_green
             text == "车窗未关闭" -> R.color.alert_red
             else -> R.color.widget_on_surface_variant

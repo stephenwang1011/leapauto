@@ -1,5 +1,6 @@
 package com.leapauto.app.weather
 
+import com.leapauto.app.ui.theme.EnergyGreen
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -67,6 +68,7 @@ class CarWashTest {
         assertNotNull(advice)
         assertEquals("较适宜", advice!!.levelLabel)
         assertTrue(advice.isFavorable)
+        assertEquals(EnergyGreen, advice.tagColor)
     }
 
     @Test

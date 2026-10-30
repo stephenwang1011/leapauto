@@ -90,10 +90,10 @@ fun VehicleOtaCard(
     val statusBadgeColor = when {
         isSubAccount -> MaterialTheme.statusWarn
         otaStatus == OtaStatus.UP_TO_DATE -> MaterialTheme.statusGood
-        otaStatus == OtaStatus.UPDATE_AVAILABLE || otaStatus == OtaStatus.DOWNLOADED -> MaterialTheme.colorScheme.primary
+        otaStatus == OtaStatus.UPDATE_AVAILABLE || otaStatus == OtaStatus.DOWNLOADED -> settingsIconColor(SettingsIconTone.OTA)
         otaStatus == OtaStatus.DOWNLOADING || otaStatus == OtaStatus.INSTALLING -> MaterialTheme.statusWarn
         otaStatus == OtaStatus.FAILED || state is VehicleOtaState.Error -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.primary
+        else -> settingsIconColor(SettingsIconTone.OTA)
     }
 
     val arrowRotation by animateFloatAsState(

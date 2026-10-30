@@ -15,4 +15,4 @@ internal object HomeStatusPillStyle {
 
 internal fun homeStatusPillBackground(isHeroDark: Boolean): Color =
     if (isHeroDark) Color(0xFF303030).copy(alpha = 0.68f)
-    else Color(0xFFDDE1E6).copy(alpha = 0.65f)
+    else Color(0xFFE1E1E1).copy(alpha = 0.65f)

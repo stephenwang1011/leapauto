@@ -282,9 +282,8 @@ class CompactControlWidget : AppWidgetProvider() {
 
             val backgroundTone = when {
                 !presentation.showEnabledIcon -> CompactActionTone.NEUTRAL
-                presentation.tone == ClimateTemperatureTone.HEATING -> CompactActionTone.SUCCESS
-                presentation.tone == ClimateTemperatureTone.VENTILATION -> CompactActionTone.SUCCESS
-                else -> CompactActionTone.PRIMARY
+                presentation.tone == ClimateTemperatureTone.HEATING -> CompactActionTone.HEATING
+                else -> CompactActionTone.ACTIVE
             }
             views.setInt(
                 R.id.btnWCAc,
@@ -344,12 +343,12 @@ class CompactControlWidget : AppWidgetProvider() {
                 } else {
                     R.drawable.widget_compact_action_neutral_light
                 }
-                CompactActionTone.SUCCESS -> if (darkTheme) {
+                CompactActionTone.HEATING -> if (darkTheme) {
                     R.drawable.widget_compact_action_success_dark
                 } else {
                     R.drawable.widget_compact_action_success_light
                 }
-                CompactActionTone.PRIMARY -> if (darkTheme) {
+                CompactActionTone.ACTIVE -> if (darkTheme) {
                     R.drawable.widget_compact_action_primary_dark
                 } else {
                     R.drawable.widget_compact_action_primary_light
@@ -359,8 +358,8 @@ class CompactControlWidget : AppWidgetProvider() {
 
         private enum class CompactActionTone {
             NEUTRAL,
-            SUCCESS,
-            PRIMARY
+            HEATING,
+            ACTIVE
         }
 
     }

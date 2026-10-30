@@ -306,7 +306,7 @@
                         android:contentDescription="@null"
                         android:scaleType="fitCenter"
                         android:src="@drawable/ic_hybrid_fuel"
-                        android:tint="@color/leap_blue" />
+                        android:tint="@color/energy_green" />
 
                     <TextView
                         android:id="@+id/txtWFuelRange"
@@ -321,7 +321,7 @@
                         android:shadowDy="0"
                         android:shadowRadius="1.5"
                         android:text="-- km"
-                        android:textColor="@color/leap_blue"
+                        android:textColor="@color/widget_on_surface"
                         android:textSize="18sp"
                         android:textStyle="bold"
                         android:autoSizeTextType="uniform"
@@ -393,16 +393,16 @@
 
             <ImageView
                 android:id="@+id/imgWChargingStatus"
-                android:layout_width="14dp"
-                android:layout_height="14dp"
+                android:layout_width="12dp"
+                android:layout_height="12dp"
                 android:contentDescription="充电中"
                 android:src="@drawable/ic_widget_charging_bolt"
                 android:visibility="gone" />
 
             <TextView
                 android:id="@+id/txtWWindowWarning"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
                 android:layout_marginEnd="2dp"
                 android:contentDescription="车窗未关闭"
                 android:background="@drawable/widget_window_warning_badge"
@@ -410,7 +410,7 @@
                 android:includeFontPadding="false"
                 android:text="!"
                 android:textColor="@android:color/white"
-                android:textSize="11sp"
+                android:textSize="9sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
 

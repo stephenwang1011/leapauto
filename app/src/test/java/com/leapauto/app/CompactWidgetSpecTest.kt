@@ -4,8 +4,76 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 
 class CompactWidgetSpecTest {
+
+    @Test
+    fun `widget neutral surfaces have no blue tint in either theme`() {
+        val resources = File(projectDirectory(), "app/src/main/res")
+        val surfaces = resources.walkTopDown().filter { file ->
+            file.extension == "xml" && listOf(
+                "widget_card_background", "widget_action_background", "widget_compact_action_neutral"
+            ).any { file.name.startsWith(it) }
+        }.toList()
+        assertTrue(surfaces.isNotEmpty())
+        surfaces.forEach { file ->
+            literalColors(file).forEach { color ->
+                val rgb = color.takeLast(6).toInt(16)
+                assertEquals(file.name, (rgb shr 16) and 255, (rgb shr 8) and 255)
+                assertEquals(file.name, (rgb shr 8) and 255, rgb and 255)
+            }
+        }
+        listOf("values", "values-night").forEach { directory ->
+            val colors = File(resources, "$directory/colors.xml").readText()
+            assertTrue(colors.contains("name=\"action_neutral\""))
+            assertTrue(!colors.contains("leap_blue"))
+        }
+    }
+
+    @Test
+    fun `confirmed cooling and ventilation use green while inactive controls remain neutral`() {
+        val resources = File(projectDirectory(), "app/src/main/res")
+        listOf("light", "dark").forEach { theme ->
+            val active = File(resources, "drawable/widget_compact_action_primary_$theme.xml")
+            literalColors(active).forEach { color ->
+                val rgb = color.takeLast(6).toInt(16)
+                val green = (rgb shr 8) and 255
+                assertTrue(green > ((rgb shr 16) and 255))
+                assertTrue(green > (rgb and 255))
+            }
+        }
+        val provider = File(
+            projectDirectory(), "app/src/main/java/com/leapauto/app/CompactControlWidget.kt"
+        ).readText()
+        assertTrue(provider.contains("!presentation.showEnabledIcon -> CompactActionTone.NEUTRAL"))
+        assertTrue(provider.contains("presentation.tone == ClimateTemperatureTone.HEATING -> CompactActionTone.HEATING"))
+        assertTrue(provider.contains("else -> CompactActionTone.ACTIVE"))
+        val coolingIcon = File(resources, "drawable/ic_widget_ac_snowflake_cooling.xml").readText()
+        assertTrue(coolingIcon.contains("@color/energy_green"))
+    }
+
+    @Test
+    fun `normal widget range gradients use green without a blue starting point`() {
+        listOf("widget_charge_progress.xml", "widget_pure_range_progress.xml").forEach { name ->
+            val file = File(projectDirectory(), "app/src/main/res/drawable/$name")
+            literalColors(file).forEach { color ->
+                val rgb = color.takeLast(6).toInt(16)
+                val green = (rgb shr 8) and 255
+                assertTrue(green > ((rgb shr 16) and 255))
+                assertTrue(green > (rgb and 255))
+            }
+        }
+    }
+
+    private fun literalColors(file: File): List<String> {
+        val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file)
+        val elements = document.getElementsByTagName("*")
+        return (0 until elements.length).flatMap { index ->
+            val attributes = elements.item(index).attributes
+            (0 until attributes.length).map { attributes.item(it).nodeValue }
+        }.filter { it.matches(Regex("#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?")) }
+    }
 
     @Test
     fun `compact widget is registered as a fixed two by two provider`() {
@@ -113,9 +181,9 @@ class CompactWidgetSpecTest {
         val badge = File(projectDir, "app/src/main/res/drawable/widget_window_warning_badge.xml").readText()
 
         assertTrue(layout.contains("android:id=\"@+id/txtWWindowWarning\""))
-        assertTrue(layout.contains("android:layout_width=\"16dp\""))
-        assertTrue(layout.contains("android:layout_height=\"18dp\""))
-        assertTrue(layout.contains("android:textSize=\"12sp\""))
+        assertTrue(layout.contains("android:layout_width=\"12dp\""))
+        assertTrue(layout.contains("android:layout_height=\"12dp\""))
+        assertTrue(layout.contains("android:textSize=\"9sp\""))
         assertTrue(layout.contains("android:textStyle=\"bold\""))
         assertTrue(controlWidget.contains("text == \"车窗未关闭\""))
         assertTrue(controlWidget.contains("R.id.txtWWindowWarning"))

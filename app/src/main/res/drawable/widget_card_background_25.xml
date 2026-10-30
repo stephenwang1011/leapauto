@@ -3,7 +3,7 @@
     <gradient
         android:angle="315"
         android:startColor="#33FFFFFF"
-        android:centerColor="#26F6F8FC"
+        android:centerColor="#26F7F7F7"
         android:endColor="#2DFFFFFF"
         android:type="linear" />
     <stroke android:width="1dp" android:color="@color/widget_card_border" />

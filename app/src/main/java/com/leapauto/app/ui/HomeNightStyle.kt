@@ -18,11 +18,11 @@ import androidx.compose.ui.unit.dp
 internal val LocalHomeNightCards = staticCompositionLocalOf { false }
 
 internal object HomeNightStyle {
-    const val auraScale = 0.5f
-    val page = Color(0xFF1B1D20)
-    val cardStart = Color(0xFF34373B).copy(alpha = 0.90f)
-    val cardMiddle = Color(0xFF2B2E32).copy(alpha = 0.86f)
-    val cardEnd = Color(0xFF25282C).copy(alpha = 0.90f)
+    const val auraScale = 0.4f
+    val page = Color(0xFF1D1D1D)
+    val cardStart = Color(0xFF373737).copy(alpha = 0.90f)
+    val cardMiddle = Color(0xFF2E2E2E).copy(alpha = 0.86f)
+    val cardEnd = Color(0xFF282828).copy(alpha = 0.90f)
     val borderStart = Color.White.copy(alpha = 0.20f)
     val borderMiddle = Color.White.copy(alpha = 0.09f)
     val borderEnd = Color.White.copy(alpha = 0.04f)

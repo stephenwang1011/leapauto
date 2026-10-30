@@ -744,9 +744,9 @@ fun LeapAutoScreen(
                 drawRect(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFFCED4DC),
-                            Color(0xFFD6DCE4),
-                            Color(0xFFDFE5ED)
+                            Color(0xFFD3D3D3),
+                            Color(0xFFDDDDDD),
+                            Color(0xFFE5E5E5)
                         ),
                         startY = 0f,
                         endY = size.height
@@ -755,8 +755,8 @@ fun LeapAutoScreen(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFE8EEF7).copy(alpha = 0.60f),
-                            Color(0xFFDCE2EC).copy(alpha = 0.25f),
+                            Color(0xFFEFEFEF).copy(alpha = 0.60f),
+                            Color(0xFFE3E3E3).copy(alpha = 0.25f),
                             Color.Transparent
                         ),
                         center = Offset(size.width * 0.5f, size.height * 0.22f),
@@ -767,8 +767,8 @@ fun LeapAutoScreen(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFF1E293B).copy(alpha = 0.45f),
-                            Color(0xFF0F172A).copy(alpha = 0.18f),
+                            Color(0xFF292929).copy(alpha = 0.45f),
+                            Color(0xFF181818).copy(alpha = 0.18f),
                             Color.Transparent
                         ),
                         center = Offset(size.width * 0.5f, size.height * 0.22f),
@@ -1277,7 +1277,7 @@ private fun LoginContent(
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = Color.White,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
                             disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                             disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.40f)
                         ),
@@ -1287,7 +1287,7 @@ private fun LoginContent(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
                                 strokeWidth = 2.dp,
-                                color = Color.White
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
                         } else {
                             Text(
@@ -1788,6 +1788,7 @@ private fun MyContent(
         )
 
         // 6. 蓝牙数字钥匙
+        val bluetoothKeyIconColor = settingsIconColor(SettingsIconTone.KEY)
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1805,12 +1806,12 @@ private fun MyContent(
                 Surface(
                     modifier = Modifier.size(36.dp),
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    color = bluetoothKeyIconColor.copy(alpha = 0.12f)
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_phosphor_key),
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = bluetoothKeyIconColor,
                         modifier = Modifier.padding(8.dp)
                     )
                 }
@@ -2113,6 +2114,7 @@ private fun LogoutButtonCard(onClick: () -> Unit) {
 @Composable
 private fun OpenSourceCodeCard() {
     val context = LocalContext.current
+    val iconColor = settingsIconColor(SettingsIconTone.CODE)
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -2138,12 +2140,12 @@ private fun OpenSourceCodeCard() {
             Surface(
                 modifier = Modifier.size(36.dp),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                color = iconColor.copy(alpha = 0.12f)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_phosphor_code),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = iconColor,
                     modifier = Modifier.padding(8.dp)
                 )
             }
@@ -2267,6 +2269,7 @@ private fun ModifyNicknameDialog(
 
 @Composable
 private fun SupportAuthorCard(onClick: () -> Unit) {
+    val iconColor = settingsIconColor(SettingsIconTone.SUPPORT)
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -2286,12 +2289,12 @@ private fun SupportAuthorCard(onClick: () -> Unit) {
             Surface(
                 modifier = Modifier.size(36.dp),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                color = iconColor.copy(alpha = 0.12f)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_phosphor_heart),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = iconColor,
                     modifier = Modifier.padding(8.dp)
                 )
             }
@@ -2537,9 +2540,8 @@ private fun VersionUpdateCard(
     )
     val statusColor = when (state) {
         is VersionUpdateState.UpToDate -> MaterialTheme.statusGood
-        is VersionUpdateState.UpdateAvailable -> MaterialTheme.colorScheme.primary
         is VersionUpdateState.Failed -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> settingsIconColor(SettingsIconTone.VERSION)
     }
     val statusText = when (state) {
         VersionUpdateState.Idle -> "尚未检查蒲公英最新版本"
@@ -3334,6 +3336,7 @@ private fun ThemeConfigCard(
     val context = LocalContext.current
     val cachedThemes = ThemeManager.loadCachedThemeList(context)
     val activeThemeName = VehicleThemePolicy.displayName(supports3dThemes, selectedThemeId, cachedThemes)
+    val iconColor = settingsIconColor(SettingsIconTone.THEME)
 
     Surface(
         modifier = Modifier
@@ -3353,12 +3356,12 @@ private fun ThemeConfigCard(
             Surface(
                 modifier = Modifier.size(36.dp),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                color = iconColor.copy(alpha = 0.12f)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_theme_palette),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = iconColor,
                     modifier = Modifier.padding(8.dp)
                 )
             }
@@ -3991,9 +3994,9 @@ internal fun Modifier.frostedGlassCard(
             } else if (isDark) {
                 Brush.linearGradient(
                     colors = listOf(
-                        Color(0xFF222938).copy(alpha = 0.82f),
-                        Color(0xFF181E2A).copy(alpha = 0.70f),
-                        Color(0xFF131722).copy(alpha = 0.80f)
+                        Color(0xFF292929).copy(alpha = 0.82f),
+                        Color(0xFF202020).copy(alpha = 0.70f),
+                        Color(0xFF181818).copy(alpha = 0.80f)
                     ),
                     start = Offset(0f, 0f),
                     end = Offset(w, h)
@@ -4002,7 +4005,7 @@ internal fun Modifier.frostedGlassCard(
                 Brush.linearGradient(
                     colors = listOf(
                         Color(0xFFFFFFFF).copy(alpha = 0.88f),
-                        Color(0xFFF6F8FC).copy(alpha = 0.72f),
+                        Color(0xFFF8F8F8).copy(alpha = 0.72f),
                         Color(0xFFFFFFFF).copy(alpha = 0.82f)
                     ),
                     start = Offset(0f, 0f),
@@ -4238,12 +4241,14 @@ fun VehicleHero(
         }
     }
     val isHeroDark = heroNight.isHeroDark
-    val heroPrimaryTextColor = if (isHeroDark) Color.White else Color(0xFF141923)
-    val heroSecondaryTextColor = if (isHeroDark) Color.White.copy(alpha = 0.90f) else Color(0xFF4A5568)
-    val defaultPillBg = if (isHeroDark) Color(0xFF131722).copy(alpha = 0.68f) else Color.White.copy(alpha = 0.90f)
+    val heroTextColors = HomeHeroTextStyle.resolve(renderedThemeId, isDark, isHeroDark)
+    val heroPrimaryTextColor = heroTextColors.primary
+    val heroSecondaryTextColor = heroTextColors.secondary
+    val heroBluetoothNeutralColor = if (isHeroDark) Color.White.copy(alpha = 0.90f) else Color(0xFF555555)
+    val defaultPillBg = if (isHeroDark) Color(0xFF181818).copy(alpha = 0.68f) else Color.White.copy(alpha = 0.90f)
     val statusPillBg = homeStatusPillBackground(isHeroDark)
     val pillBorderStroke = BorderStroke(0.5.dp, if (isHeroDark) Color.White.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.12f))
-    val pillContentColor = if (isHeroDark) Color.White else Color(0xFF141923)
+    val pillContentColor = if (isHeroDark) Color.White else Color(0xFF202020)
 
     // 默认主题/自选主题自愈检测：若本地高清背景尚未就绪，异步静默下载并即时上屏
     androidx.compose.runtime.LaunchedEffect(selectedThemeId, vehicleVin, is3dSupported) {
@@ -4314,7 +4319,7 @@ fun VehicleHero(
                         Brush.linearGradient(
                             colors = listOf(
                                 Color(0xFFFFFFFF).copy(alpha = 0.88f),
-                                Color(0xFFF6F8FC).copy(alpha = 0.72f),
+                                Color(0xFFF8F8F8).copy(alpha = 0.72f),
                                 Color(0xFFFFFFFF).copy(alpha = 0.82f)
                             ),
                             start = Offset(0f, 0f),
@@ -4339,7 +4344,7 @@ fun VehicleHero(
                     )
 
                     // 3. 车模下方柔光漫反射（提升立体浮空展台感）
-                    val stageLightColor = if (isDark) Color(0xFF384358).copy(alpha = 0.18f) else Color(0xFFFFFFFF).copy(alpha = 0.45f)
+                    val stageLightColor = if (isDark) Color(0xFF444444).copy(alpha = 0.18f) else Color(0xFFFFFFFF).copy(alpha = 0.45f)
                     drawOval(
                         brush = Brush.radialGradient(
                             colors = listOf(
@@ -4400,7 +4405,7 @@ fun VehicleHero(
                 val hudMidAlpha = if (isDark) 0.14f else 0.22f
                 val hudGradientColor = when {
                     isDark -> HomeNightStyle.page
-                    isHeroDark -> Color(0xFF131722)
+                    isHeroDark -> Color(0xFF181818)
                     else -> MaterialTheme.colorScheme.background
                 }
                 Box(
@@ -4539,8 +4544,8 @@ fun VehicleHero(
                     // 方案 A 智能座舱极光双色微晶体系：
                     // 1. 里程大字统一为纯净微晶高光白 (深色/暗调主题) / 深邃科技黑曜灰 (浅色高光主题)
                     // 跟随实际背景，缺图及无 3D 雪景回退不能仅凭旧主题 ID 强制白字。
-                    val mileageDisplayColor = heroPrimaryTextColor
-                    val unitDisplayColor = heroSecondaryTextColor
+                    val mileageDisplayColor = heroTextColors.mileage
+                    val unitDisplayColor = heroTextColors.unit
 
                     // 2. 纯电与增程纯电百分比：极光薄荷青 (深色 #00E676 / 浅色 #00B42A) / 警示色
                     val auroraMintGreen = if (isDark) Color(0xFF00E676) else Color(0xFF00B42A)
@@ -4550,12 +4555,12 @@ fun VehicleHero(
                         VehicleHomeStatus.SocBand.CRITICAL -> warningContentColor
                     }
 
-                    // 3. 纯电微晶流光渐变（零跑蓝 ➔ 极光能量绿）
+                    // 3. 纯电微晶流光渐变（深绿 ➔ 能量绿）
                     val electricGradientColors = when (VehicleHomeStatus.socBand(normalizedSoc)) {
                         VehicleHomeStatus.SocBand.NORMAL -> if (isDark) {
-                            listOf(Color(0xFF0066FF), Color(0xFF00E676))
+                            listOf(Color(0xFF159447), Color(0xFF00E676))
                         } else {
-                            listOf(Color(0xFF0052D9), Color(0xFF00B42A))
+                            listOf(Color(0xFF008F3D), Color(0xFF00B42A))
                         }
                         VehicleHomeStatus.SocBand.WARNING -> listOf(Color(0xFFFF9800), Color(0xFFFFB74D))
                         VehicleHomeStatus.SocBand.CRITICAL -> listOf(Color(0xFFE53935), Color(0xFFFF5252))
@@ -4778,7 +4783,7 @@ fun VehicleHero(
                             HeroBluetoothStatusButton(
                                 phase = bluetoothState?.phase ?: BleConnectionPhase.IDLE,
                                 onClick = onOpenBluetoothKey,
-                                neutralContentColor = heroSecondaryTextColor
+                                neutralContentColor = heroBluetoothNeutralColor
                             )
                         }
 
@@ -4956,7 +4961,7 @@ fun VehicleHero(
                                     onRetryDownload3D()
                                 },
                             shape = RoundedCornerShape(8.dp),
-                            color = if (isDark) Color(0xFF1E2330).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.88f),
+                            color = if (isDark) Color(0xFF242424).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.88f),
                             border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
                             shadowElevation = 0.dp
                         ) {
@@ -5016,7 +5021,7 @@ fun VehicleHero(
                     if (is3dSupported && !is3DRendered && h5Key != null && !hasCustomImage && !prefer2DModel && !is3DLoadFailed && !is3DTimedOut) {
                         Surface(
                             shape = RoundedCornerShape(16.dp),
-                            color = if (isDark) Color(0xFF131722).copy(alpha = 0.70f) else Color.White.copy(alpha = 0.75f),
+                            color = if (isDark) Color(0xFF181818).copy(alpha = 0.70f) else Color.White.copy(alpha = 0.75f),
                             border = BorderStroke(0.5.dp, if (isDark) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.08f)),
                             shadowElevation = 0.dp
                         ) {
@@ -5054,7 +5059,7 @@ fun VehicleHero(
                     embedded = true,
                     onOpenHealthCheck = onOpenHealthCheck,
                     // Quick controls sit on the page-colored lower horizon, not the upper sky.
-                    isHeroDark = isDark || isHeroDark
+                    isHeroDark = isDark
                 )
             }
             Spacer(Modifier.height(2.dp))
@@ -5101,7 +5106,7 @@ private fun HeroControlHudPill(
     val isError = feedback.kind == ControlFeedbackKind.ERROR || feedback.kind == ControlFeedbackKind.WARNING
 
     val pillBg = when {
-        isDark -> Color(0xFF181C26).copy(alpha = 0.88f)
+        isDark -> Color(0xFF202020).copy(alpha = 0.88f)
         else -> Color.White.copy(alpha = 0.92f)
     }
 
@@ -5181,7 +5186,7 @@ private fun HeroBluetoothStatusButton(
         BleConnectionPhase.SCANNING
     )
 
-    // 连接中的灰蓝色动态平滑呼吸切换 (1.2 秒往复周期)
+    // 连接中的中性色动态平滑呼吸切换 (1.2 秒往复周期)
     val transition = rememberInfiniteTransition(label = "heroBtPulse")
     val pulseColor by transition.animateColor(
         initialValue = neutralContentColor.copy(alpha = 0.40f),
@@ -5195,12 +5200,12 @@ private fun HeroBluetoothStatusButton(
 
     val iconColor = when {
         isConnecting -> pulseColor
-        isConnected -> MaterialTheme.colorScheme.primary
+        isConnected -> MaterialTheme.statusGood
         else -> neutralContentColor.copy(alpha = 0.45f)
     }
 
     val containerColor = when {
-        isConnected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        isConnected -> MaterialTheme.statusGood.copy(alpha = 0.12f)
         isConnecting -> MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
         else -> Color.Transparent
     }
@@ -5477,7 +5482,7 @@ private fun ChargingCenterPill(
         0.8.dp,
         MaterialTheme.statusGood.copy(alpha = if (isHeroDark) 0.55f else 0.70f)
     )
-    val pillContentColor = if (isHeroDark) Color.White else Color(0xFF141923)
+    val pillContentColor = if (isHeroDark) Color.White else Color(0xFF202020)
 
     val backgroundColor = homeStatusPillBackground(isHeroDark)
     val border = if (isChargingActive) chargingActiveBorder else pillBorderStroke
@@ -6209,8 +6214,8 @@ private fun QuickVehicleActions(
     }
 
     val actionsContent = @Composable {
-        val normalActionContentColor = if (isHeroDark) Color.White else Color(0xFF141923)
-        val normalActionLabelColor = if (isHeroDark) Color.White.copy(alpha = 0.92f) else Color(0xFF141923)
+        val normalActionContentColor = if (isHeroDark) Color.White else Color(0xFF202020)
+        val normalActionLabelColor = if (isHeroDark) Color.White.copy(alpha = 0.92f) else Color(0xFF202020)
 
         Column(
             modifier = Modifier
@@ -6880,8 +6885,8 @@ private fun QuickVehicleButton(
     onLongClick: (() -> Unit)? = null,
     onLongPressConfirm: (() -> Unit)? = null,
     isHeroDark: Boolean = false,
-    iconTint: Color = if (warning) MaterialTheme.colorScheme.error else (if (isHeroDark) Color.White else Color(0xFF141923)),
-    labelTint: Color = if (warning) MaterialTheme.colorScheme.error else (if (isHeroDark) Color.White.copy(alpha = 0.92f) else Color(0xFF141923))
+    iconTint: Color = if (warning) MaterialTheme.colorScheme.error else (if (isHeroDark) Color.White else Color(0xFF202020)),
+    labelTint: Color = if (warning) MaterialTheme.colorScheme.error else (if (isHeroDark) Color.White.copy(alpha = 0.92f) else Color(0xFF202020))
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -6916,8 +6921,8 @@ private fun QuickVehicleButton(
     val circleBg = when {
         inProgress -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f * pulseAlpha)
         isWarning -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
-        isPressed || isHolding -> if (isHeroDark) Color(0xFF303438).copy(alpha = 0.92f) else MaterialTheme.glassInsetSurface.copy(alpha = 0.92f)
-        else -> if (isHeroDark) Color(0xFF262E3D).copy(alpha = 0.68f) else Color.White.copy(alpha = 0.88f)
+        isPressed || isHolding -> if (isHeroDark) Color(0xFF343434).copy(alpha = 0.92f) else MaterialTheme.glassInsetSurface.copy(alpha = 0.92f)
+        else -> if (isHeroDark) Color(0xFF2E2E2E).copy(alpha = 0.68f) else Color.White.copy(alpha = 0.88f)
     }
     val circleBorder = when {
         inProgress -> BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = pulseAlpha))
@@ -6987,7 +6992,7 @@ private fun QuickVehicleButton(
             // 高敏感操作 1.2 秒长按环形外圈蓄力进度光环
             if (isSensitive && isHolding) {
                 val successColor = MaterialTheme.statusGood
-                val chargingColor = MaterialTheme.colorScheme.primary
+                val chargingColor = MaterialTheme.statusGood
                 Canvas(modifier = Modifier.size(54.dp)) {
                     val strokeW = 2.5.dp.toPx()
                     drawArc(
@@ -7080,7 +7085,7 @@ private fun showUpperToast(context: Context, text: String) {
             setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13.5f)
             setPadding(42, 22, 42, 22)
             val bg = android.graphics.drawable.GradientDrawable().apply {
-                setColor(android.graphics.Color.parseColor("#E620242F"))
+                setColor(android.graphics.Color.parseColor("#E6262626"))
                 cornerRadius = 32f
                 setStroke(2, android.graphics.Color.parseColor("#40FFFFFF"))
             }
@@ -7251,49 +7256,49 @@ private fun TopDownCarModel(
 ) {
     val isDark = LocalAppDarkTheme.current
     val outlineColor = if (isDark) {
-        Color(0xFF5E6D82).copy(alpha = 0.65f)
+        Color(0xFF6D6D6D).copy(alpha = 0.65f)
     } else {
-        Color(0xFF7D8C9F).copy(alpha = 0.55f)
+        Color(0xFF8C8C8C).copy(alpha = 0.55f)
     }
     val bodyBgColor = if (isDark) {
-        Color(0xFF222731).copy(alpha = 0.90f)
+        Color(0xFF282828).copy(alpha = 0.90f)
     } else {
-        Color(0xFFE6EBF2).copy(alpha = 0.95f)
+        Color(0xFFEBEBEB).copy(alpha = 0.95f)
     }
     val glassCanopyColor = if (isDark) {
-        Color(0xFF11151C).copy(alpha = 0.96f)
+        Color(0xFF161616).copy(alpha = 0.96f)
     } else {
-        Color(0xFF242A36).copy(alpha = 0.88f)
+        Color(0xFF2A2A2A).copy(alpha = 0.88f)
     }
     val glassBorderColor = if (isDark) {
-        Color(0xFF3F4A5A).copy(alpha = 0.60f)
+        Color(0xFF4A4A4A).copy(alpha = 0.60f)
     } else {
-        Color(0xFF1E242E).copy(alpha = 0.35f)
+        Color(0xFF242424).copy(alpha = 0.35f)
     }
     val mirrorColor = if (isDark) {
-        Color(0xFF3A4352)
+        Color(0xFF434343)
     } else {
-        Color(0xFF8F9DAE)
+        Color(0xFF9D9D9D)
     }
     val wheelNormalColor = if (isDark) {
-        Color(0xFF282D36)
+        Color(0xFF2D2D2D)
     } else {
-        Color(0xFF48505E)
+        Color(0xFF505050)
     }
     val wheelNormalBorder = if (isDark) {
-        Color(0xFF4E5A6C).copy(alpha = 0.65f)
+        Color(0xFF5A5A5A).copy(alpha = 0.65f)
     } else {
-        Color(0xFF717E90).copy(alpha = 0.55f)
+        Color(0xFF7E7E7E).copy(alpha = 0.55f)
     }
     val wheelRimColor = if (isDark) {
-        Color(0xFF7E8D9F).copy(alpha = 0.60f)
+        Color(0xFF8D8D8D).copy(alpha = 0.60f)
     } else {
-        Color(0xFFC4D0DE).copy(alpha = 0.75f)
+        Color(0xFFD0D0D0).copy(alpha = 0.75f)
     }
     val wheelWarningColor = homeAlertContentColor()
 
     // 车灯科技微光
-    val headlightColor = if (isDark) Color(0xFF64B5F6) else MaterialTheme.colorScheme.primary
+    val headlightColor = if (isDark) Color(0xFFE4E4E4) else MaterialTheme.colorScheme.primary
     val taillightColor = Color(0xFFFF3B30)
 
     Canvas(modifier = modifier) {
@@ -8251,6 +8256,25 @@ private fun ParkingDetailDialog(
                 Text("关闭")
             }
         },
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_phosphor_car),
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "驻车实景",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        },
         text = {
             Column(
                 modifier = Modifier
@@ -8433,12 +8457,21 @@ private fun ParkingDetailDialog(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         SelectionContainer(Modifier.weight(1f)) {
-                            Text(
-                                text = fullAddress.ifBlank { "正在获取车辆位置..." },
-                                color = MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    text = "车辆位置",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = fullAddress.ifBlank { "正在获取车辆位置..." },
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                         if (hasLocation && apps.isNotEmpty()) {
                             Icon(
@@ -8451,64 +8484,61 @@ private fun ParkingDetailDialog(
                     }
                 }
 
-                // 3. 实况气象与爱车洗车建议卡片 (方案 A 一体化微晶卡片)
+                // 3. 驻车实景下仅保留天气信息，不展示洗车建议
                 if (liveWeather != null && liveWeather.weather.isNotBlank()) {
-                    val weatherTint = com.leapauto.app.weather.WeatherVisualResolver.iconTint(liveWeather.weather, isDark = true)
+                    val weatherTint = com.leapauto.app.weather.WeatherVisualResolver.iconTint(
+                        liveWeather.weather,
+                        isDark = LocalAppDarkTheme.current
+                    )
                     val weatherIcon = com.leapauto.app.weather.WeatherVisualResolver.iconRes(liveWeather.weather)
-                    val carWashAdvice = remember(liveWeather) {
-                        com.leapauto.app.weather.CarWashRecommendationPolicy.evaluate(liveWeather)
-                    }
-
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
                             .frostedGlassCard(
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 auraColor = weatherTint.copy(alpha = 0.08f),
                                 auraCenter = Offset(0.85f, 0.20f),
                                 auraRadiusRatio = 0.65f
                             ),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(12.dp),
                         color = Color.Transparent,
                         border = glassCardBorder()
                     ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // 首层：天气图标 + 气温 + 天气现象 + 洗车建议标签
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
+                                Icon(
+                                    painter = painterResource(weatherIcon),
+                                    contentDescription = "天气",
+                                    modifier = Modifier.size(24.dp),
+                                    tint = weatherTint
+                                )
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.Bottom
                                 ) {
-                                    Icon(
-                                        painter = painterResource(weatherIcon),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp),
-                                        tint = weatherTint
+                                    Text(
+                                        text = liveWeather.temperature.ifBlank { "--" },
+                                        fontSize = 24.sp,
+                                        lineHeight = 26.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
-                                    Row(verticalAlignment = Alignment.Bottom) {
-                                        Text(
-                                            text = liveWeather.temperature.ifBlank { "--" },
-                                            fontSize = 24.sp,
-                                            lineHeight = 26.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = "℃",
-                                            fontSize = 12.sp,
-                                            lineHeight = 16.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = weatherTint,
-                                            modifier = Modifier.padding(bottom = 2.dp, start = 1.dp)
-                                        )
-                                    }
+                                    Text(
+                                        text = "℃",
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = weatherTint,
+                                        modifier = Modifier.padding(bottom = 2.dp, start = 1.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
                                     Text(
                                         text = liveWeather.weather,
                                         style = MaterialTheme.typography.titleMedium,
@@ -8516,119 +8546,78 @@ private fun ParkingDetailDialog(
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
-
-                                if (carWashAdvice != null) {
-                                    Surface(
-                                        shape = RoundedCornerShape(percent = 50),
-                                        color = carWashAdvice.tagColor.copy(alpha = 0.12f),
-                                        border = BorderStroke(0.5.dp, carWashAdvice.tagColor.copy(alpha = 0.40f))
-                                    ) {
-                                        Text(
-                                            text = carWashAdvice.levelLabel,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = carWashAdvice.tagColor,
-                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.5.dp)
+                                Text(
+                                    text = "实况",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = weatherTint,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier
+                                        .background(
+                                            color = weatherTint.copy(alpha = 0.12f),
+                                            shape = RoundedCornerShape(6.dp)
                                         )
-                                    }
-                                }
+                                        .padding(horizontal = 7.dp, vertical = 3.dp)
+                                )
                             }
-
-                            // 中层：并排双微晶格 (风向风力 & 空气湿度)
+                            val windText = if (liveWeather.windDirection.isNotBlank() && liveWeather.windPower.isNotBlank()) {
+                                "${liveWeather.windDirection}风 ${liveWeather.windPower}级"
+                            } else if (liveWeather.windPower.isNotBlank()) {
+                                "${liveWeather.windPower}级"
+                            } else {
+                                "--"
+                            }
+                            val humidityText = if (liveWeather.humidity.isNotBlank()) {
+                                "${liveWeather.humidity}%"
+                            } else {
+                                "--"
+                            }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // 1. 风向风力小卡
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(com.leapauto.app.weather.WeatherVisualResolver.windIconRes),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(14.dp),
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                        val windStr = if (liveWeather.windDirection.isNotBlank() && liveWeather.windPower.isNotBlank()) {
-                                            "${liveWeather.windDirection}风 ${liveWeather.windPower}级"
-                                        } else if (liveWeather.windPower.isNotBlank()) {
-                                            "${liveWeather.windPower}级"
-                                        } else "--"
-                                        Text(
-                                            text = windStr,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1
-                                        )
-                                    }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "风向风力",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = windText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
-
-                                // 2. 空气湿度小卡
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f),
-                                    modifier = Modifier.weight(1f)
+                                Box(
+                                    modifier = Modifier
+                                        .width(1.dp)
+                                        .height(28.dp)
+                                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                                )
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(start = 12.dp)
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(com.leapauto.app.weather.WeatherVisualResolver.humidityIconRes),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(14.dp),
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                        val humidityStr = if (liveWeather.humidity.isNotBlank()) "湿度 ${liveWeather.humidity}%" else "--"
-                                        Text(
-                                            text = humidityStr,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-                            }
-
-                            // 底层：贴心爱车洗车建议
-                            if (carWashAdvice != null) {
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = carWashAdvice.tagColor.copy(alpha = 0.06f),
-                                    border = BorderStroke(0.5.dp, carWashAdvice.tagColor.copy(alpha = 0.25f)),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(7.dp)
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(R.drawable.ic_phosphor_car),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(14.dp),
-                                            tint = carWashAdvice.tagColor
-                                        )
-                                        Text(
-                                            text = carWashAdvice.reason,
-                                            style = MaterialTheme.typography.labelSmall.copy(lineHeight = 14.sp),
-                                            fontSize = 10.5.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                                    Text(
+                                        text = "空气湿度",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = humidityText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = FontWeight.Medium
+                                    )
                                 }
                             }
                         }
                     }
                 }
+
             }
         }
     )
@@ -9520,7 +9509,7 @@ fun ClimateOverviewCard(
         targetTemperature = temperatureTarget.value
     )
     val temperatureColor = when (climateTone) {
-        ClimateTemperatureTone.COOLING -> MaterialTheme.colorScheme.primary
+        ClimateTemperatureTone.COOLING -> MaterialTheme.statusGood
         ClimateTemperatureTone.HEATING -> MaterialTheme.statusWarn
         ClimateTemperatureTone.VENTILATION -> MaterialTheme.statusGood
         ClimateTemperatureTone.DEFAULT -> MaterialTheme.colorScheme.onSurface
@@ -9564,7 +9553,7 @@ fun ClimateOverviewCard(
         when (climateTone) {
             ClimateTemperatureTone.COOLING -> Brush.horizontalGradient(
                 listOf(
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                    MaterialTheme.statusGood.copy(alpha = 0.06f),
                     Color.Transparent
                 )
             )
@@ -9589,7 +9578,7 @@ fun ClimateOverviewCard(
     val isAcOn = status?.acSwitch == true
     val climateAuraColor = if (isAcOn) {
         when (climateTone) {
-            ClimateTemperatureTone.COOLING -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+            ClimateTemperatureTone.COOLING -> MaterialTheme.statusGood.copy(alpha = 0.14f)
             ClimateTemperatureTone.HEATING -> MaterialTheme.statusWarn.copy(alpha = 0.14f)
             else -> temperatureColor.copy(alpha = 0.14f)
         }

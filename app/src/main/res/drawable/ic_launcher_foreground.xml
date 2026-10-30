@@ -23,7 +23,7 @@
                 android:endX="51.78"
                 android:endY="43.75">
                 <item android:offset="0.00" android:color="#FFFFFF" />
-                <item android:offset="1.00" android:color="#CBD5E1" />
+                <item android:offset="1.00" android:color="#D4D4D4" />
             </gradient>
         </aapt:attr>
     </path>
@@ -31,7 +31,7 @@
     <!-- 1.3「L」底座横向出挑部 -->
     <path
         android:pathData="M32.94,69.8 L45.13,62.59 L51.78,66.47 L39.59,73.67 Z"
-        android:fillColor="#E2E8F0" />
+        android:fillColor="#E8E8E8" />
 
     <!-- 2. 右翼极光能量绿立体晶核 (#00C853 至 #69F0AE) -->
     <!-- 2.1 顶层斜切面 (能量反射角) -->

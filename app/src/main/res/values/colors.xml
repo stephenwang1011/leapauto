@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="leap_blue">#0066FF</color>
+    <color name="action_neutral">#303030</color>
     <color name="energy_green">#00C853</color>
     <color name="alert_red">#FF3B30</color>
-    <color name="widget_on_surface">#101828</color>
-    <color name="widget_on_surface_variant">#2D3748</color>
-    <color name="widget_action_pressed">#E8EDF2</color>
-    <color name="widget_action_icon">#101828</color>
+    <color name="widget_on_surface">#202020</color>
+    <color name="widget_on_surface_variant">#4A4A4A</color>
+    <color name="widget_action_pressed">#EAEAEA</color>
+    <color name="widget_action_icon">#202020</color>
     <color name="widget_range_track">#14000000</color>
     <color name="widget_range_track_border">#1A000000</color>
     <color name="widget_range_good">#00C853</color>
@@ -15,7 +15,7 @@
     <color name="widget_fuel_range">#FF9500</color>
     <color name="widget_fuel_range_track">#14000000</color>
     <color name="widget_on_surface_high_contrast">#000000</color>
-    <color name="widget_range_track_high_contrast">#AAB4C2</color>
+    <color name="widget_range_track_high_contrast">#B2B2B2</color>
     <color name="widget_range_good_high_contrast">#008F3D</color>
     <color name="widget_range_warning_high_contrast">#C56F00</color>
     <color name="widget_range_critical_high_contrast">#D91F16</color>

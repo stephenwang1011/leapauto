@@ -14,7 +14,7 @@ import com.leapauto.app.R
 import com.leapauto.app.SessionStore
 
 /**
- * 下拉控制中心快捷磁贴：车锁（上锁 / 解锁）。
+ * 下拉控制中心快捷磁贴：车辆门锁（上锁 / 解锁）。
  * 具备锁闭状态自适应反馈：已上锁时点击安全解锁，未锁时点击一键上锁。
  */
 class LockToggleTileService : TileService() {
@@ -130,7 +130,7 @@ class LockToggleTileService : TileService() {
 
         if (inProgress) {
             tile.state = Tile.STATE_ACTIVE
-            tile.label = "车锁"
+            tile.label = TilePromptHelper.TileType.LOCK.title
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 tile.subtitle = customSubtitle ?: "正在发送..."
             }
@@ -138,14 +138,14 @@ class LockToggleTileService : TileService() {
         } else {
             if (isCarLocked) {
                 tile.state = Tile.STATE_INACTIVE
-                tile.label = "车锁"
+                tile.label = TilePromptHelper.TileType.LOCK.title
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     tile.subtitle = customSubtitle ?: "已上锁 (点击解锁)"
                 }
                 tile.icon = Icon.createWithResource(this, R.drawable.ic_phosphor_lock)
             } else {
                 tile.state = Tile.STATE_ACTIVE
-                tile.label = "车锁"
+                tile.label = TilePromptHelper.TileType.LOCK.title
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     tile.subtitle = customSubtitle ?: "已解锁 (点击上锁)"
                 }

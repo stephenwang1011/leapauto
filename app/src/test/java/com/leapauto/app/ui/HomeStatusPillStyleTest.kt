@@ -80,7 +80,7 @@ class HomeStatusPillStyleTest {
         val light = homeStatusPillBackground(isHeroDark = false)
         val dark = homeStatusPillBackground(isHeroDark = true)
 
-        assertEquals(Color(0xFFDDE1E6), light.copy(alpha = 1f))
+        assertEquals(Color(0xFFE1E1E1), light.copy(alpha = 1f))
         assertEquals(0.65f, light.alpha, 0.005f)
         assertEquals(Color(0xFF303030), dark.copy(alpha = 1f))
         assertEquals(0.68f, dark.alpha, 0.005f)
@@ -91,7 +91,7 @@ class HomeStatusPillStyleTest {
     fun `ordinary labels retain AA contrast over light dark and extreme backdrops`() {
         val backdrops = listOf(Color.Black, Color.White, AppBackgroundLight, AppBackgroundDark)
         for (isHeroDark in listOf(false, true)) {
-            val text = if (isHeroDark) Color.White else Color(0xFF141923)
+            val text = if (isHeroDark) Color.White else Color(0xFF202020)
             for (backdrop in backdrops) {
                 val background = homeStatusPillBackground(isHeroDark).compositeOver(backdrop)
                 assertTrue(

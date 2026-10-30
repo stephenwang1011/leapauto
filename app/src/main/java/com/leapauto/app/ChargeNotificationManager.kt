@@ -57,7 +57,7 @@ object ChargeNotificationManager {
         )
         val notification = Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_phosphor_battery_charging)
-            .setColor(0xFF0066FF.toInt())
+            .setColor(context.getColor(R.color.action_neutral))
             .setContentTitle(title)
             .setContentText(text)
             .setContentIntent(pendingIntent)

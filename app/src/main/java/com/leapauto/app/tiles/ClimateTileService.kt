@@ -14,7 +14,7 @@ import com.leapauto.app.R
 import com.leapauto.app.SessionStore
 
 /**
- * 下拉控制中心快捷磁贴：座舱空调（一键自动恒温 24℃ / 关空调）。
+ * 下拉控制中心快捷磁贴：车辆空调（一键自动恒温 24℃ / 关空调）。
  */
 class ClimateTileService : TileService() {
 
@@ -92,14 +92,14 @@ class ClimateTileService : TileService() {
 
         if (inProgress) {
             tile.state = Tile.STATE_ACTIVE
-            tile.label = "空调"
+            tile.label = TilePromptHelper.TileType.CLIMATE.title
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 tile.subtitle = customSubtitle ?: "正在发送..."
             }
             tile.icon = Icon.createWithResource(this, R.drawable.ic_phosphor_fan)
         } else {
             tile.state = if (isAcOn) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-            tile.label = "空调"
+            tile.label = TilePromptHelper.TileType.CLIMATE.title
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 tile.subtitle = customSubtitle ?: if (isAcOn) "运行中 (点击关闭)" else "已关闭 (点击开启)"
             }

@@ -89,7 +89,7 @@ fun FridgeOverviewCard(
     val isHot = fridgeStatus.mode == FridgeMode.HOT
     val isParkRunning = fridgeStatus.isParkRunning
 
-    val activeThemeColor = if (isHot) MaterialTheme.statusWarn else MaterialTheme.colorScheme.primary
+    val activeThemeColor = if (isHot) MaterialTheme.statusWarn else MaterialTheme.statusGood
     val displayColor = if (isEnabled) activeThemeColor else MaterialTheme.colorScheme.onSurfaceVariant
     val fridgeAuraColor = if (isEnabled) {
         activeThemeColor.copy(alpha = 0.14f)
@@ -325,7 +325,7 @@ fun FridgeControlBottomSheet(
     }
 
     val isHot = currentMode == FridgeMode.HOT
-    val activeColor = if (isHot) MaterialTheme.statusWarn else MaterialTheme.colorScheme.primary
+    val activeColor = if (isHot) MaterialTheme.statusWarn else MaterialTheme.statusGood
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -595,7 +595,7 @@ fun FridgeControlBottomSheet(
                     selected = !isHot,
                     iconRes = R.drawable.ic_phosphor_snowflake,
                     label = "智能制冷",
-                    activeColor = MaterialTheme.colorScheme.primary,
+                    activeColor = MaterialTheme.statusGood,
                     modifier = Modifier.weight(1f),
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -876,7 +876,7 @@ fun FridgeControlBottomSheet(
                     enabled = !busy,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = Color.White
+                        contentColor = MaterialTheme.colorScheme.onPrimary
                     ),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
@@ -885,7 +885,7 @@ fun FridgeControlBottomSheet(
                 ) {
                     if (busy) {
                         CircularProgressIndicator(
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp
                         )

@@ -6,7 +6,7 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- 1. 315° 座舱黑曜微晶磨砂底盘 (#2B3448 至 #12161F) -->
+    <!-- 1. 315° 中性黑曜微晶磨砂底盘 -->
     <path
         android:pathData="M0,0h108v108h-108z">
         <aapt:attr name="android:fillColor">
@@ -16,14 +16,14 @@
                 android:startY="0"
                 android:endX="108"
                 android:endY="108">
-                <item android:offset="0.00" android:color="#2B3448" />
-                <item android:offset="0.45" android:color="#1F2634" />
-                <item android:offset="1.00" android:color="#12161F" />
+                <item android:offset="0.00" android:color="#303030" />
+                <item android:offset="0.45" android:color="#242424" />
+                <item android:offset="1.00" android:color="#181818" />
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- 2. 45° 零跑科技蓝与极光微晶漫反射光晕 (座舱深邃微晶通透质感) -->
+    <!-- 2. 中性微晶反光 -->
     <path
         android:pathData="M0,0h108v108h-108z">
         <aapt:attr name="android:fillColor">
@@ -32,8 +32,8 @@
                 android:centerX="76"
                 android:centerY="32"
                 android:gradientRadius="64">
-                <item android:offset="0.00" android:color="#330066FF" />
-                <item android:offset="0.55" android:color="#1400C853" />
+                <item android:offset="0.00" android:color="#33FFFFFF" />
+                <item android:offset="0.55" android:color="#14000000" />
                 <item android:offset="1.00" android:color="#00000000" />
             </gradient>
         </aapt:attr>
