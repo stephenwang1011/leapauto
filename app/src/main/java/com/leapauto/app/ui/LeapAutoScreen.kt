@@ -134,6 +134,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -157,6 +159,7 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -1054,8 +1057,10 @@ private fun LoginContent(
     onLoginWithRawAuth: (String, String) -> Unit = { _, _ -> }
 ) {
     val haptic = LocalHapticFeedback.current
-    val canLogin = phone.length == 11 && code.length >= 4 && !busy
-    val canSendSms = smsCountdownSeconds == 0 && phone.length == 11 && !busy
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val codeFocusRequester = remember { FocusRequester() }
+    val canLogin = LoginUiPolicy.canSubmitLogin(phone, code, busy)
+    val canSendSms = LoginUiPolicy.canSendSms(phone, smsCountdownSeconds, busy)
     var showTokenImportDialog by remember { mutableStateOf(false) }
 
     Box(
@@ -1169,7 +1174,7 @@ private fun LoginContent(
                     // 手机号输入框（左侧内嵌 +86 微晶胶囊标，右侧一键清空）
                     OutlinedTextField(
                         value = phone,
-                        onValueChange = { onPhoneChange(it.filter(Char::isDigit).take(11)) },
+                        onValueChange = { onPhoneChange(LoginUiPolicy.filterPhoneNumber(it)) },
                         placeholder = { Text("请输入 11 位手机号") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
@@ -1217,7 +1222,7 @@ private fun LoginContent(
                     // 验证码输入框（行内集成圆润胶囊式“获取验证码”按钮）
                     OutlinedTextField(
                         value = code,
-                        onValueChange = { onCodeChange(it.filter(Char::isDigit).take(6)) },
+                        onValueChange = { onCodeChange(LoginUiPolicy.filterSmsCode(it)) },
                         placeholder = { Text("请输入 6 位短信验证码") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -1236,8 +1241,12 @@ private fun LoginContent(
                             ) {
                                 TextButton(
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        onSendSms()
+                                        LoginUiPolicy.handleSendSmsClick(
+                                            performHaptic = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
+                                            requestCodeFocus = { codeFocusRequester.requestFocus() },
+                                            showKeyboard = { keyboardController?.show() },
+                                            onSendSms = onSendSms
+                                        )
                                     },
                                     enabled = canSendSms,
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -1260,7 +1269,9 @@ private fun LoginContent(
                             focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.40f),
                             unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.25f)
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(codeFocusRequester)
                     )
 
                     Spacer(Modifier.height(4.dp))
@@ -4536,7 +4547,7 @@ fun VehicleHero(
                         text = statusTextWithWeather,
                         style = MaterialTheme.typography.labelSmall,
                         color = if (isDark && renderedThemeId == VehicleThemePolicy.SNOW_THEME_ID)
-                            Color.Black
+                            Color.White
                         else heroSecondaryTextColor,
                         maxLines = 1
                     )
@@ -5406,10 +5417,14 @@ internal object ChargingCenterPillPresentation {
         chargeRemainTime: String?,
         chargeScheduleEnabled: Boolean?,
         chargeScheduleStart: String?,
-        soc: String? = null
+        soc: String? = null,
+        chargerUnlocked: Boolean = false,
+        healthyChargeLimitSoc: Int? = null,
+        isHealthyChargeEnabled: Boolean = false
     ): ChargingPillModel {
-        val isGunConnected = chargeGunConnected || chargeState == 1 || chargeState == 2
-        val presentation = ChargeStatus.presentation(chargeState, ChargeStatus.socPercent(soc), chargeRemainTime)
+        val isGunConnected = chargeGunConnected || chargeState in setOf(1, 2, 4, 5, 6)
+        val socPercent = ChargeStatus.socPercent(soc)
+        val presentation = ChargeStatus.presentation(chargeState, socPercent, chargeRemainTime)
         val formattedTime = presentation.remainingTime?.removeSuffix("钟")
 
         return when {
@@ -5418,27 +5433,36 @@ internal object ChargingCenterPillPresentation {
                 val label = if (formattedTime != null) "剩$formattedTime" else "充电中"
                 ChargingPillModel(ChargingPillType.CHARGING, label, hasBoltIcon = true)
             }
-            presentation.state == ChargeStatus.PresentationState.FULL -> {
-                ChargingPillModel(ChargingPillType.CHARGED, presentation.label)
+            // 2. 刚刚解锁充电枪成功后（车端锁止销已收起，提示可拔枪）
+            chargerUnlocked -> {
+                ChargingPillModel(ChargingPillType.GUN_CONNECTED, "充电枪已解锁", hasBoltIcon = false)
             }
-            presentation.state == ChargeStatus.PresentationState.STOPPED ->
-                ChargingPillModel(ChargingPillType.STOPPED, presentation.label)
-            presentation.state == ChargeStatus.PresentationState.FAULT ->
+            // 3. 充满 100%
+            (presentation.state == ChargeStatus.PresentationState.FULL || (socPercent != null && socPercent >= 100)) && chargeState in setOf(2, 6) -> {
+                ChargingPillModel(ChargingPillType.CHARGED, "已充满", hasBoltIcon = false)
+            }
+            // 4. 达到健康充电目标限额正常完成
+            isHealthyChargeEnabled && healthyChargeLimitSoc != null && socPercent != null && socPercent >= healthyChargeLimitSoc && chargeState in setOf(2, 6) -> {
+                ChargingPillModel(ChargingPillType.CHARGED, "充电完成", hasBoltIcon = false)
+            }
+            // 5. 充电故障
+            presentation.state == ChargeStatus.PresentationState.FAULT -> {
                 ChargingPillModel(ChargingPillType.FAULT, presentation.label)
-            // 3. 插枪且有预约任务（开启预约且有开始时间，或车端报告预约等待）
+            }
+            // 6. 插枪且有预约任务（开启预约且有开始时间，或车端报告预约等待）
             (chargeState == 4 || isGunConnected && chargeScheduleEnabled == true) && !chargeScheduleStart.isNullOrBlank() -> {
                 val startTime = chargeScheduleStart.trim()
                 ChargingPillModel(ChargingPillType.SCHEDULED_WAITING, "${startTime}开始充电", hasBoltIcon = false)
             }
-            // 4. 插枪且处于预约等待（但未取到具体开始时间）
+            // 7. 插枪且处于预约等待（但未取到具体开始时间）
             chargeState == 4 -> {
                 ChargingPillModel(ChargingPillType.SCHEDULED_WAITING, "预约等待中", hasBoltIcon = false)
             }
-            // 5. 仅插枪未充未预约
+            // 8. 插枪未充 / 手动停止充电后 / 充电完成待拔枪（均显示充电枪物理连接）
             isGunConnected -> {
                 ChargingPillModel(ChargingPillType.GUN_CONNECTED, "充电枪已插", hasBoltIcon = false)
             }
-            // 6. 未插枪默认状态
+            // 9. 未插枪默认状态
             else -> {
                 ChargingPillModel(ChargingPillType.DEFAULT, "充电中心", hasBoltIcon = false)
             }
@@ -5458,7 +5482,10 @@ private fun ChargingCenterPill(
         status?.chargeRemainTime,
         status?.chargeSoc,
         status?.chargeScheduleEnabled,
-        status?.chargeScheduleStart
+        status?.chargeScheduleStart,
+        status?.chargerUnlocked,
+        status?.chargeScheduleSocLimit,
+        status?.healthyChargeEnabled
     ) {
         ChargingCenterPillPresentation.resolve(
             chargeState = status?.chargeState,
@@ -5466,13 +5493,15 @@ private fun ChargingCenterPill(
             chargeRemainTime = status?.chargeRemainTime,
             chargeScheduleEnabled = status?.chargeScheduleEnabled,
             chargeScheduleStart = status?.chargeScheduleStart,
-            soc = status?.chargeSoc?.toString()
+            soc = status?.chargeSoc?.toString(),
+            chargerUnlocked = status?.chargerUnlocked == true,
+            healthyChargeLimitSoc = status?.chargeScheduleSocLimit,
+            isHealthyChargeEnabled = status?.healthyChargeEnabled == true
         )
     }
 
     val isChargingActive = pillModel.type == ChargingPillType.CHARGING ||
-        pillModel.type == ChargingPillType.CHARGED ||
-        pillModel.type == ChargingPillType.GUN_CONNECTED
+        pillModel.type == ChargingPillType.CHARGED
 
     val pillBorderStroke = BorderStroke(
         0.5.dp,

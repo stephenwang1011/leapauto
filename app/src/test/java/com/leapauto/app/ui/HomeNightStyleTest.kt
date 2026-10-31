@@ -150,14 +150,14 @@ class HomeNightStyleTest {
     }
 
     @Test
-    fun `snow night update text uses black while other themes keep the secondary color`() {
+    fun `snow night update text uses white while other themes keep the secondary color`() {
         val hero = source("ui/LeapAutoScreen").substringAfter("fun VehicleHero(")
             .substringBefore("private fun HeroControlHudPill(")
         val updateText = Regex("Text\\(\\s*text = statusTextWithWeather,[\\s\\S]*?\\n\\s*\\)")
             .find(hero)?.value.orEmpty()
         assertTrue(updateText.isNotEmpty())
         assertTrue(updateText.contains("color = if (isDark && renderedThemeId == VehicleThemePolicy.SNOW_THEME_ID)"))
-        assertTrue(updateText.contains("Color.Black"))
+        assertTrue(updateText.contains("Color.White"))
         assertTrue(updateText.contains("else heroSecondaryTextColor"))
     }
 

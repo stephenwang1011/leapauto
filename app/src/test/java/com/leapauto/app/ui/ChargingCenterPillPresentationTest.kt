@@ -121,12 +121,44 @@ class ChargingCenterPillPresentationTest {
     }
 
     @Test
-    fun endedOrPausedAtLimitOrUnknownSocShowsStopped() {
+    fun chargerUnlockedShowsUnlockedPrompt() {
+        val model = ChargingCenterPillPresentation.resolve(
+            chargeState = 2,
+            chargeGunConnected = true,
+            chargeRemainTime = null,
+            chargeScheduleEnabled = false,
+            chargeScheduleStart = null,
+            chargerUnlocked = true
+        )
+        assertEquals(ChargingPillType.GUN_CONNECTED, model.type)
+        assertEquals("充电枪已解锁", model.labelText)
+        assertFalse(model.hasBoltIcon)
+    }
+
+    @Test
+    fun healthyLimitReachedShowsChargingCompleted() {
+        val model = ChargingCenterPillPresentation.resolve(
+            chargeState = 2,
+            chargeGunConnected = true,
+            chargeRemainTime = null,
+            chargeScheduleEnabled = false,
+            chargeScheduleStart = null,
+            soc = "90%",
+            isHealthyChargeEnabled = true,
+            healthyChargeLimitSoc = 90
+        )
+        assertEquals(ChargingPillType.CHARGED, model.type)
+        assertEquals("充电完成", model.labelText)
+        assertFalse(model.hasBoltIcon)
+    }
+
+    @Test
+    fun endedOrPausedAtLimitOrUnknownSocShowsGunConnectedOrFull() {
         for (state in listOf(2, 6)) {
             for (soc in listOf(null, "未知", "--", "80%", "90%", "99%")) {
-                val model = ChargingCenterPillPresentation.resolve(state, false, "已充满", true, "23:00", soc)
-                assertEquals(ChargingPillType.STOPPED, model.type)
-                assertEquals("充电已停止", model.labelText)
+                val model = ChargingCenterPillPresentation.resolve(state, true, "已充满", false, null, soc)
+                assertEquals(ChargingPillType.GUN_CONNECTED, model.type)
+                assertEquals("充电枪已插", model.labelText)
                 assertFalse(model.hasBoltIcon)
             }
             val full = ChargingCenterPillPresentation.resolve(state, false, null, false, null, "100%")

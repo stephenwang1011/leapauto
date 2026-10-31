@@ -205,8 +205,11 @@ class ChargeStatusTest {
         // 快充枪插入
         assertEquals(true, ChargeStatus.isGunConnected(mapOf("dcInputFastCharge" to 1, "chargeState" to 0)))
 
-        // 充电中或已充满
+        // 充电中、已充满、预约等待、插枪未充状态
         assertEquals(true, ChargeStatus.isGunConnected(mapOf("chargeState" to 1)))
         assertEquals(true, ChargeStatus.isGunConnected(mapOf("chargeState" to 2)))
+        assertEquals(true, ChargeStatus.isGunConnected(mapOf("chargeState" to 4)))
+        assertEquals(true, ChargeStatus.isGunConnected(mapOf("chargeState" to 5)))
+        assertEquals(true, ChargeStatus.isGunConnected(mapOf("chargeState" to 6)))
     }
 }

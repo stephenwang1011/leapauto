@@ -23,7 +23,8 @@ internal object ChargingTelemetry {
             chargeType = ChargeStatus.type(values),
             batteryVoltage = value(values.opt("batteryVoltage"), " V"),
             batteryCurrent = ChargeStatus.displayCurrent(values)?.let { "$it A" },
-            minBatteryTemp = value(values.opt("minBatteryTemp"), " °C")
+            minBatteryTemp = value(values.opt("minBatteryTemp"), " °C"),
+            chargerUnlocked = current.chargerUnlocked && ChargeStatus.state(values) != 1
         )
         return ChargingControlPolicy.mergeTelemetry(current, refreshed)
     }

@@ -108,7 +108,7 @@ class CommandsTest {
         assertEquals("开始充电", start.label)
 
         assertEquals("193", stop.cmdid)
-        assertEquals("{\"value\":\"stop\"}", stop.stateJson)
+        assertEquals("{\"value\":\"finish\"}", stop.stateJson)
         assertEquals("停止充电", stop.label)
 
         assertEquals("192", unlock.cmdid)
@@ -812,5 +812,30 @@ class CommandsTest {
         assertTrue("Must parse temperature through BatteryPreheatGatePolicy", screenSource.contains("BatteryPreheatGatePolicy.parseTemperatureC("))
         assertTrue("Must parse soc through BatteryPreheatGatePolicy", screenSource.contains("BatteryPreheatGatePolicy.parseSocPercent("))
         assertFalse("Must not inline a raw soc parse that breaks on percentage strings", screenSource.contains("status?.soc?.trim()?.toIntOrNull()"))
+    }
+
+    @Test
+    fun parseScheduledBatteryPreheatHandlesLiveOfficialPayload() {
+        val liveCapture = """{"controls":[{"days":[],"on":"0","set_id":"Android_LFZ63AZ55SH023503_1792640862316","start_time":"2026-10-23 11:47:00","update_time":"1792640862316"}]}"""
+        val parsed = Commands.parseScheduledBatteryPreheat(liveCapture)
+        org.junit.Assert.assertNotNull(parsed)
+        assertEquals(false, parsed!!.enabled)
+        assertEquals("11:47", parsed.startTime)
+        assertEquals("1,1,1,1,1,1,1", parsed.days)
+
+        val enabledPayload = """{"controls":[{"days":[1,2,3,4,5],"on":"1","start_time":"2026-10-23 07:30:00"}]}"""
+        val parsedEnabled = Commands.parseScheduledBatteryPreheat(enabledPayload)
+        org.junit.Assert.assertNotNull(parsedEnabled)
+        assertEquals(true, parsedEnabled!!.enabled)
+        assertEquals("07:30", parsedEnabled.startTime)
+        assertEquals("1,1,1,1,1,0,0", parsedEnabled.days)
+
+        val empty = Commands.parseScheduledBatteryPreheat("""{"controls":[]}""")
+        org.junit.Assert.assertNotNull(empty)
+        assertEquals(false, empty!!.enabled)
+
+        org.junit.Assert.assertNull(Commands.parseScheduledBatteryPreheat(null))
+        org.junit.Assert.assertNull(Commands.parseScheduledBatteryPreheat(""))
+        org.junit.Assert.assertNull(Commands.parseScheduledBatteryPreheat("invalid-json"))
     }
 }

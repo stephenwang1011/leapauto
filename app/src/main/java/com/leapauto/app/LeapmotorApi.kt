@@ -2321,6 +2321,46 @@ class LeapmotorApi internal constructor(
         return null
     }
 
+    /**
+     * 查询预约电池预热（cmdid=161）。
+     * 官方抓包：GET {appCenter}/carownerservice/v3/api/appremotectl/getappointment?carvin={vin}&cmdid=161
+     */
+    fun getScheduledBatteryPreheat(): ScheduledPreheatPlan? {
+        requireVin()
+        try {
+            ensureFreshOldToken()
+        } catch (_: Exception) {}
+        val route = ensureRoute()
+        val params = LinkedHashMap<String, String>()
+        params["cmdid"] = "161"
+        params["carvin"] = session.selectedVin
+
+        val signedBody = oldSignedParams(params)
+        val headers = combinedAppAndGatewayHeaders(signedBody, needLogin = true)
+        val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
+        val candidates = listOf(
+            "https://appgateway.leapmotor.com/carownerservice/v3/api/appremotectl/getappointment",
+            "$host/carownerservice/v3/api/appremotectl/getappointment"
+        ).distinct()
+
+        var lastException: Exception? = null
+        for (url in candidates) {
+            try {
+                val resp = http(url, headers = headers, query = signedBody)
+                val result = resp.opt("result")
+                if (result != null && result != JSONObject.NULL && result.toString() != "0") {
+                    return null
+                }
+                val parsed = Commands.parseScheduledBatteryPreheat(resp.opt("data"))
+                if (parsed != null) return parsed
+                lastException = ApiException("电池预热预约数据结构无效")
+            } catch (e: Exception) {
+                lastException = e
+            }
+        }
+        return null
+    }
+
     // ---------------------------------------------------------------- 内部
 
     private fun gatewayFetch(

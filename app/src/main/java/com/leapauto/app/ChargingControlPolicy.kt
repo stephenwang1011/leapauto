@@ -15,6 +15,13 @@ object ChargingControlPolicy {
     fun supports(name: String): Boolean =
         name == "startCharging" || name == "stopCharging" || name == "unlockCharger"
 
+    /** 控车结果查询确认：需网关结果成功且车端未处于执行中（data=0 表示仍在执行中，data=1 表示完成）。 */
+    fun isQueryConfirmed(result: Any?, code: Any?, data: Any?): Boolean {
+        if (!SentryModeControlPolicy.querySucceeded(result, code)) return false
+        if (data == 0 || data == "0") return false
+        return true
+    }
+
     fun canConfirmFromRefresh(acceptedAtMs: Long, refreshStartedAtMs: Long, nowMs: Long): Boolean =
         refreshStartedAtMs > acceptedAtMs && refreshStartedAtMs <= nowMs &&
             nowMs - acceptedAtMs in 0..LATE_CONFIRMATION_WINDOW_MS
@@ -42,7 +49,8 @@ object ChargingControlPolicy {
         chargeType = refreshed.chargeType,
         batteryVoltage = refreshed.batteryVoltage,
         batteryCurrent = refreshed.batteryCurrent,
-        minBatteryTemp = refreshed.minBatteryTemp
+        minBatteryTemp = refreshed.minBatteryTemp,
+        chargerUnlocked = refreshed.chargerUnlocked
     )
 
     fun outcome(
@@ -64,14 +72,14 @@ object ChargingControlPolicy {
         return if (outcome == ChargingControlOutcome.SUCCESS) {
             ControlFeedback(
                 when (name) {
-                    "startCharging" -> "车况已确认正在充电"
-                    "stopCharging" -> "车况已确认停止充电"
-                    else -> "充电枪解锁结果已确认"
+                    "startCharging" -> "开始充电"
+                    "stopCharging" -> "已停止充电"
+                    else -> "解锁成功"
                 },
                 ControlFeedbackKind.SUCCESS
             )
         } else {
-            ControlFeedback("指令已发送，执行结果待确认，请刷新车况或检查车辆", ControlFeedbackKind.WARNING)
+            ControlFeedback("指令已发送，执行结果待确认", ControlFeedbackKind.WARNING)
         }
     }
 

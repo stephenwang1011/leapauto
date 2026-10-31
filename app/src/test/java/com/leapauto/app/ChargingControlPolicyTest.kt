@@ -55,6 +55,27 @@ class ChargingControlPolicyTest {
     }
 
     @Test
+    fun `query confirmation requires successful gateway response and non-zero execution data`() {
+        // data=0 表示车端执行中，不应判定为已确认
+        assertFalse(ChargingControlPolicy.isQueryConfirmed(0, 0, 0))
+        assertFalse(ChargingControlPolicy.isQueryConfirmed(0, 0, "0"))
+        assertFalse(ChargingControlPolicy.isQueryConfirmed("0", "0", 0))
+
+        // data=1 表示车端执行成功
+        assertTrue(ChargingControlPolicy.isQueryConfirmed(0, 0, 1))
+        assertTrue(ChargingControlPolicy.isQueryConfirmed(0, 0, "1"))
+
+        // 缺省 data 或 null 时兼容网关原有成功结果
+        assertTrue(ChargingControlPolicy.isQueryConfirmed(0, null, null))
+        assertTrue(ChargingControlPolicy.isQueryConfirmed(null, 0, null))
+
+        // 网关失败结果不确认
+        assertFalse(ChargingControlPolicy.isQueryConfirmed(1, 0, 1))
+        assertFalse(ChargingControlPolicy.isQueryConfirmed(null, 200, 1))
+        assertFalse(ChargingControlPolicy.isQueryConfirmed(null, null, 1))
+    }
+
+    @Test
     fun `charger unlock has no telemetry target and requires verified query success`() {
         listOf(null, 0, 1, 2, 3, 4, 6).forEach { state ->
             assertFalse(ChargingControlPolicy.telemetryMatches("unlockCharger", state))
@@ -153,6 +174,10 @@ class ChargingControlPolicyTest {
             assertEquals(ControlFeedbackKind.WARNING, pending.kind)
             assertTrue(pending.message.contains("待确认"))
         }
+        assertEquals("开始充电", ChargingControlPolicy.feedback("startCharging", ChargingControlOutcome.SUCCESS).message)
+        assertEquals("已停止充电", ChargingControlPolicy.feedback("stopCharging", ChargingControlOutcome.SUCCESS).message)
+        assertEquals("解锁成功", ChargingControlPolicy.feedback("unlockCharger", ChargingControlOutcome.SUCCESS).message)
+        assertEquals("指令已发送，执行结果待确认", ChargingControlPolicy.feedback("stopCharging", ChargingControlOutcome.AWAITING_CONFIRMATION).message)
     }
 
     @Test

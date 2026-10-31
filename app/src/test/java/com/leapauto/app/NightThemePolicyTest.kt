@@ -63,7 +63,7 @@ class NightThemePolicyTest {
         assertEquals(0.45f, plaza.background.gain, 0f)
         assertTrue(snow.background.saturation < plaza.background.saturation)
         for (result in listOf(snow, plaza)) {
-            assertEquals(result == plaza, result.isHeroDark)
+            assertTrue(result.isHeroDark)
             val shadow = transform(result.background, 0f, 0f, 0f)
             val midtone = transform(result.background, 0.5f, 0.5f, 0.5f)
             val highlight = transform(result.background, 1f, 1f, 1f)
@@ -110,6 +110,7 @@ class NightThemePolicyTest {
         assertEquals("7", actualTheme)
         assertFalse(NightThemePolicy.resolve(actualTheme, true).background.isIdentity)
         assertFalse(NightThemePolicy.resolve(actualTheme, false).isHeroDark)
+        assertTrue(NightThemePolicy.resolve(actualTheme, true).isHeroDark)
         val original = VehicleThemePolicy.activeThemeId(false, "4")
         assertEquals(0.5f, NightThemePolicy.resolve(original, true, false).background.gain, 0f)
     }
@@ -145,6 +146,14 @@ class NightThemePolicyTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun `snow theme in dark mode resolves to dark hero with white foreground`() {
+        val nightSnow = NightThemePolicy.resolve("7", isDark = true)
+        assertTrue("雪境在深色模式下必须判定为暗底", nightSnow.isHeroDark)
+        val lightSnow = NightThemePolicy.resolve("7", isDark = false)
+        assertFalse("雪境在浅色模式下保持亮底", lightSnow.isHeroDark)
     }
 
     @Test

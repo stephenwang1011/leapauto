@@ -141,6 +141,7 @@ data class VehicleStatus(
     val sunroofOpen: Boolean = false,
     val sunroofOpeningPercent: Int? = null,
     val fridgeStatus: FridgeStatus? = null,
+    val chargerUnlocked: Boolean = false,
     val carType: String? = null
 )
 
@@ -248,6 +249,7 @@ class MainActivity : ComponentActivity() {
     @Volatile private var optimisticHealthyChargeLimitSoc: Int? = null
     @Volatile private var optimisticHealthyChargeEnabled: Boolean? = null
     @Volatile private var lastChargingSettingsActionEpochMs = 0L
+    @Volatile private var lastUnlockChargerActionEpochMs = 0L
     private var climatePreControlStatus: VehicleStatus? = null
     @Volatile private var pendingClimateConfirmation: PendingClimateConfirmation? = null
     private var pendingStatusRefreshCompletion: ((Boolean) -> Unit)? = null
@@ -904,6 +906,14 @@ class MainActivity : ComponentActivity() {
                     val serverState = healthyData?.optInt("state", -1)
                     val serverSoc = healthyData?.optInt("targetSoc", healthyData.optInt("soc", -1))
 
+                    // 官方抓包同步：从云端查询预约电池预热计划 (cmdid=161 getappointment)
+                    val preheatPlan = runCatching { api.getScheduledBatteryPreheat() }.getOrNull()
+                    if (preheatPlan != null && !chargingProtected) {
+                        sessionStore.saveScheduledPreheatEnabled(targetVin, preheatPlan.enabled)
+                        sessionStore.saveScheduledPreheatStartTime(targetVin, preheatPlan.startTime)
+                        sessionStore.saveScheduledPreheatDays(targetVin, preheatPlan.days)
+                    }
+
                     mainHandler.post {
                         if (session.selectedVin == targetVin) {
                             if (!chargingProtected) {
@@ -913,6 +923,12 @@ class MainActivity : ComponentActivity() {
                                 scheduledChargeCycles = vehicleMask
                                 scheduledChargeCirculation = plan.circulation
                                 scheduledChargeContinueUntilLimit = plan.recharge
+
+                                if (preheatPlan != null) {
+                                    scheduledPreheatEnabled = preheatPlan.enabled
+                                    scheduledPreheatStartTime = preheatPlan.startTime
+                                    scheduledPreheatDays = preheatPlan.days
+                                }
 
                                 if (serverSoc != null && serverSoc in 50..100) {
                                     healthyChargeLimitSoc = serverSoc
@@ -4000,6 +4016,8 @@ class MainActivity : ComponentActivity() {
             sunroofOpen = SunroofCapabilityPolicy.isOpen((m.opt("sunroofOpening") ?: m.opt("1718"))?.toString()?.toIntOrNull()),
             sunroofOpeningPercent = SunroofCapabilityPolicy.parseOpeningPercent((m.opt("sunroofOpening") ?: m.opt("1718"))?.toString()?.toIntOrNull()),
             fridgeStatus = parseFridgeStatus(m),
+            chargerUnlocked = (System.currentTimeMillis() - lastUnlockChargerActionEpochMs < 60_000L) &&
+                ChargeStatus.isGunConnected(m) && ChargeStatus.state(m) != 1,
             carType = session.selectedCarType
         )
     }
@@ -4269,6 +4287,10 @@ class MainActivity : ComponentActivity() {
             val outcome = ChargingControlPolicy.outcome(context.name, query, chargeState)
             runOnMain(context.generation) {
                 if (!isCurrentChargingControl(context)) return@runOnMain
+                if (context.name == "unlockCharger" && outcome == ChargingControlOutcome.SUCCESS) {
+                    lastUnlockChargerActionEpochMs = System.currentTimeMillis()
+                    status = status?.copy(chargerUnlocked = true)
+                }
                 chargingControlFeedback = ChargingControlPolicy.feedback(context.name, outcome)
                 awaitingChargingConfirmation = confirmation.takeIf {
                     outcome == ChargingControlOutcome.AWAITING_CONFIRMATION &&
@@ -4309,7 +4331,7 @@ class MainActivity : ComponentActivity() {
             if (!isCurrentChargingControl(context)) return ChargingControlQueryOutcome.UNCONFIRMED
             val response = api.queryControlResult(result.msgID)
             saveChargingSession(context)
-            if (SentryModeControlPolicy.querySucceeded(response.opt("result"), response.opt("code"))) {
+            if (ChargingControlPolicy.isQueryConfirmed(response.opt("result"), response.opt("code"), response.opt("data"))) {
                 return ChargingControlQueryOutcome.CONFIRMED
             }
             // Reuse known error classifiers; do not guess meanings for other result codes.

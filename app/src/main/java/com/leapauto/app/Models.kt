@@ -1056,6 +1056,13 @@ data class ScheduledAcState(
     val plan: ScheduledAcPlan
 )
 
+/** 零跑车辆预约电池预热配置模型 (对应 cmdid=161 getappointment)。 */
+data class ScheduledPreheatPlan(
+    val enabled: Boolean,
+    val startTime: String,
+    val days: String
+)
+
 /** 定时空调入口只在当前 VIN 成功确认预约接口可用后显示。 */
 enum class ScheduledAcCapability {
     UNKNOWN,
@@ -1117,7 +1124,7 @@ object Commands {
         "sentryOn" -> ControlCommand("400", """{"operation":"on"}""", "开启哨兵模式")
         "sentryOff" -> ControlCommand("400", """{"operation":"off"}""", "关闭哨兵模式")
         "startCharging" -> ControlCommand("193", """{"value":"start"}""", "开始充电")
-        "stopCharging" -> ControlCommand("193", """{"value":"stop"}""", "停止充电")
+        "stopCharging" -> ControlCommand("193", """{"value":"finish"}""", "停止充电")
         "unlockCharger" -> ControlCommand("192", """{"operation":"unlock"}""", "解锁充电枪")
         "fridgeOn" -> buildFridgeControl(FridgeControlCommand(enable = true, mode = FridgeMode.COLD, temp = FRIDGE_DEFAULT_TEMP, style = FridgeStyle.NORMAL))
         "fridgeOff" -> buildFridgeControl(FridgeControlCommand(enable = false, mode = FridgeMode.COLD, temp = FRIDGE_DEFAULT_TEMP, style = FridgeStyle.NORMAL))
@@ -1366,6 +1373,41 @@ object Commands {
                 },
                 windshieldDefogging = item.optString("wshld") == "1"
             )
+        )
+    }
+
+    /**
+     * 解析定时电池预热预约 (cmdid=161 getappointment)。
+     * 官方抓包数据格式: {"controls":[{"days":[],"on":"0","set_id":"...","start_time":"2026-10-23 11:47:00","update_time":"..."}]}
+     */
+    fun parseScheduledBatteryPreheat(payload: Any?): ScheduledPreheatPlan? {
+        val text = when (payload) {
+            null, JSONObject.NULL -> return null
+            is JSONObject -> payload.toString()
+            is JSONArray -> return null
+            else -> payload.toString()
+        }.trim()
+        if (text.isBlank()) return null
+        val root = runCatching { JSONObject(text) }.getOrNull() ?: return null
+        val controls = root.optJSONArray("controls") ?: return null
+        if (controls.length() == 0) {
+            return ScheduledPreheatPlan(enabled = false, startTime = "23:00", days = "1,1,1,1,1,1,1")
+        }
+        val item = controls.optJSONObject(0) ?: return null
+        val daySet = item.optJSONArray("days")?.let { array ->
+            (0 until array.length()).mapNotNull { index ->
+                array.optInt(index, -1).takeIf { it in 0..6 }
+            }.map { if (it == 0) 7 else it }.toSet()
+        }.orEmpty()
+        val startTime = item.optString("start_time")
+            .let { Regex("(\\d{1,2}):(\\d{2})").find(it) }
+            ?.let { "%02d:%s".format(it.groupValues[1].toIntOrNull() ?: 23, it.groupValues[2]) }
+            ?: "23:00"
+        val vehicleDays = if (daySet.isEmpty()) "1,1,1,1,1,1,1" else ChargePlanCyclesHelper.toVehicleMask(daySet)
+        return ScheduledPreheatPlan(
+            enabled = item.optString("on") == "1",
+            startTime = startTime,
+            days = vehicleDays
         )
     }
 

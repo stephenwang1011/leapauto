@@ -94,7 +94,7 @@ object NightThemePolicy {
             background = treatment,
             isHeroDark = when {
                 isDark && source == BackgroundSource.IMAGE -> treatment.gain + treatment.lift <= 0.47f ||
-                    (themeId == "5" && treatment.gain <= 1f)
+                    ((themeId == "5" || themeId == "7") && treatment.gain <= 1f)
                 isDark && source == BackgroundSource.ORIGINAL_SKYBOX -> treatment.gain <= 1f &&
                     treatment.gain * 0.22f + treatment.lift <= 0.47f
                 isDark -> true

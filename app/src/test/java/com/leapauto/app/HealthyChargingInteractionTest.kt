@@ -29,14 +29,23 @@ class HealthyChargingInteractionTest {
 
     private val feedbackBlock: String
         get() {
-            val start = source.indexOf("displayedFeedback?.let")
-            require(start >= 0) { "Inline feedback is missing" }
+            val start = source.indexOf("LaunchedEffect(controlFeedback)")
+            require(start >= 0) { "Feedback effect is missing" }
             return blockAt(source, source.indexOf('{', start))
         }
 
     @Test
-    fun unlockUsesNativeSurfaceClickAndKeepsSheetOpen() {
-        assertNativeAction("\"unlockCharger\"")
+    fun unlockUsesNativeSurfaceClickWithChargingGuard() {
+        val nativeClick = Regex("\\bSurface\\s*\\(\\s*onClick\\s*=\\s*\\{")
+        val bodies = nativeClick.findAll(actionBar).map { match ->
+            blockAt(actionBar, actionBar.indexOf('{', match.range.first))
+                .replace(Regex("\\s+"), "")
+        }.toList()
+        assertEquals("Both actions must bind the native Surface onClick", 2, bodies.size)
+        assertTrue(
+            "Unlock action must guard while charging and delegate when safe",
+            bodies.any { it.contains("if(isCharging)") && it.contains("onControl(\"unlockCharger\")") }
+        )
     }
 
     @Test
@@ -70,16 +79,11 @@ class HealthyChargingInteractionTest {
     }
 
     @Test
-    fun pendingActionsShowWaitingLabelsAndDedicatedFeedback() {
+    fun pendingActionsShowWaitingLabelsAndToastFeedback() {
         assertTrue(actionBar.contains("text = if (controlInProgress) \"处理中…\" else \"解锁充电枪\""))
         assertTrue(actionBar.contains("text = if (controlInProgress) \"处理中…\" else mainActionText"))
-        assertTrue(feedbackBlock.contains("ControlFeedbackKind.IN_PROGRESS, ControlFeedbackKind.SUBMITTED -> MaterialTheme.colorScheme.primary"))
-        assertTrue(feedbackBlock.contains("ControlFeedbackKind.SUCCESS -> MaterialTheme.statusGood"))
-        assertTrue(feedbackBlock.contains("ControlFeedbackKind.WARNING -> MaterialTheme.statusWarn"))
-        assertTrue(feedbackBlock.contains("ControlFeedbackKind.ERROR -> MaterialTheme.statusBad"))
-        assertTrue(feedbackBlock.contains("ControlFeedbackKind.SUBMITTED -> \"已提交，等待车辆确认\""))
-        assertTrue(feedbackBlock.contains("if (feedback.message.isBlank()) feedbackLabel"))
-        assertTrue(feedbackBlock.contains("color = feedbackColor"))
+        assertTrue(feedbackBlock.contains("feedback.kind != ControlFeedbackKind.IN_PROGRESS"))
+        assertTrue(feedbackBlock.contains("Toast.makeText(context, feedback.message, Toast.LENGTH_SHORT).show()"))
     }
 
     @Test
@@ -87,25 +91,14 @@ class HealthyChargingInteractionTest {
         val gateStart = source.indexOf("if (isGunConnected) {")
         val gateOpening = source.indexOf('{', gateStart)
         val afterGate = source.substring(gateOpening + actionBar.length + 2).trimStart()
-        assertFalse(actionBar.contains("displayedFeedback"))
-        assertTrue("Feedback selection must follow the gun gate unconditionally", afterGate.startsWith("val displayedFeedback ="))
-        val feedbackStart = source.indexOf("displayedFeedback?.let")
-        val selectionEnd = source.lastIndexOf('}', feedbackStart)
-        assertTrue(
-            "Feedback rendering must not add a gun or charge-state visibility condition",
-            source.substring(selectionEnd + 1, feedbackStart).isBlank()
-        )
-        assertTrue("The unconditional feedback block must render its message", feedbackBlock.contains("Text("))
+        assertFalse(actionBar.contains("LaunchedEffect(controlFeedback)"))
+        assertTrue("Feedback effect must follow the gun gate unconditionally", afterGate.startsWith("LaunchedEffect(controlFeedback)"))
     }
 
     @Test
-    fun suppliedWarningOrSubmittedFeedbackTakesPriorityEvenWhileProcessing() {
-        assertTrue(
-            "Preserve every supplied feedback; synthesize progress only when feedback is null and processing",
-            Regex("val displayedFeedback = controlFeedback \\?: if \\(controlInProgress\\) \\{\\s*ControlFeedback\\(\"充电控制处理中，请稍候\", ControlFeedbackKind.IN_PROGRESS\\)\\s*} else \\{\\s*null\\s*}\\s*displayedFeedback\\?\\.let")
-                .containsMatchIn(source)
-        )
-        assertFalse("Rendering must not replace supplied feedback based on progress", feedbackBlock.contains("controlInProgress"))
+    fun progressDoesNotTriggerToastAndResultShowsToast() {
+        assertTrue(feedbackBlock.contains("feedback.kind != ControlFeedbackKind.IN_PROGRESS"))
+        assertTrue(feedbackBlock.contains("feedback.message.isNotBlank()"))
     }
 
     @Test
@@ -121,7 +114,7 @@ class HealthyChargingInteractionTest {
         assertTrue("Changing progress must cancel and restart the polling effect", polling >= 0)
         val body = blockAt(source, source.indexOf('{', polling)).replace(Regex("\\s+"), "")
         assertEquals(
-            "if(isChargingState&&!controlInProgress){while(true){delay(1000L)if(!latestControlInProgress){latestRefreshTelemetry()}}}",
+            "if(isChargingState&&!controlInProgress){while(true){delay(3000L)if(!latestControlInProgress){latestRefreshTelemetry()}}}",
             body
         )
     }

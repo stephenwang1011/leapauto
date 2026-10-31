@@ -143,12 +143,12 @@ fun HealthyChargingBottomSheet(
         }
     }
 
-    // 充电中每 1 秒仅静默轮询底层遥测（功率/电流/电压/倒计时），不重复轮询静态充电计划与控制策略
+    // 充电中每 3 秒仅静默轮询底层遥测（功率/电流/电压/倒计时），不重复轮询静态充电计划与控制策略
     val isChargingState = status?.chargeState == 1
     LaunchedEffect(isChargingState, controlInProgress) {
         if (isChargingState && !controlInProgress) {
             while (true) {
-                delay(1000L)
+                delay(3000L)
                 if (!latestControlInProgress) {
                     latestRefreshTelemetry()
                 }
@@ -429,7 +429,7 @@ fun HealthyChargingBottomSheet(
             }
 
             // 实时插枪即时充电操作栏（未插枪时完全隐藏）
-            val isGunConnected = status?.chargeGunConnected == true || status?.chargeState == 1 || status?.chargeState == 2
+            val isGunConnected = status?.chargeGunConnected == true || status?.chargeState in setOf(1, 2, 4, 5, 6)
             val isCharging = status?.chargeState == 1
 
             if (isGunConnected) {
@@ -438,7 +438,7 @@ fun HealthyChargingBottomSheet(
                 val outlineBtnText = if (isDark) Color(0xFFEDEDED) else Color(0xFF222222)
                 val solidBtnBg = if (isDark) Color(0xFF393939) else Color(0xFF2B2B2B)
 
-                val mainActionText = if (isCharging) "结束充电" else "开始充电"
+                val mainActionText = if (isCharging) "停止充电" else "开始充电"
                 val mainActionCmd = if (isCharging) "stopCharging" else "startCharging"
 
                 Row(
@@ -451,7 +451,9 @@ fun HealthyChargingBottomSheet(
                     // 左侧线框按钮：解锁充电枪
                     Surface(
                         onClick = {
-                            if (!latestControlInProgress) {
+                            if (isCharging) {
+                                Toast.makeText(context, "正在充电中，请先停止充电后再解锁充电枪", Toast.LENGTH_SHORT).show()
+                            } else if (!latestControlInProgress) {
                                 onControl("unlockCharger")
                             }
                         },
@@ -476,7 +478,7 @@ fun HealthyChargingBottomSheet(
                         }
                     }
 
-                    // 右侧实心深色按钮：结束充电 (充电中) / 开始充电 (未充电)
+                    // 右侧实心深色按钮：停止充电 (充电中) / 开始充电 (未充电)
                     Surface(
                         onClick = {
                             if (!latestControlInProgress) {
@@ -505,31 +507,11 @@ fun HealthyChargingBottomSheet(
                 }
             }
 
-            val displayedFeedback = controlFeedback ?: if (controlInProgress) {
-                ControlFeedback("充电控制处理中，请稍候", ControlFeedbackKind.IN_PROGRESS)
-            } else {
-                null
-            }
-            displayedFeedback?.let { feedback ->
-                val feedbackColor = when (feedback.kind) {
-                    ControlFeedbackKind.IN_PROGRESS, ControlFeedbackKind.SUBMITTED -> MaterialTheme.colorScheme.primary
-                    ControlFeedbackKind.SUCCESS -> MaterialTheme.statusGood
-                    ControlFeedbackKind.WARNING -> MaterialTheme.statusWarn
-                    ControlFeedbackKind.ERROR -> MaterialTheme.statusBad
+            LaunchedEffect(controlFeedback) {
+                val feedback = controlFeedback ?: return@LaunchedEffect
+                if (feedback.kind != ControlFeedbackKind.IN_PROGRESS && feedback.message.isNotBlank()) {
+                    Toast.makeText(context, feedback.message, Toast.LENGTH_SHORT).show()
                 }
-                val feedbackLabel = when (feedback.kind) {
-                    ControlFeedbackKind.IN_PROGRESS -> "处理中"
-                    ControlFeedbackKind.SUBMITTED -> "已提交，等待车辆确认"
-                    ControlFeedbackKind.SUCCESS -> "操作成功"
-                    ControlFeedbackKind.WARNING -> "请注意"
-                    ControlFeedbackKind.ERROR -> "操作失败"
-                }
-                Text(
-                    text = if (feedback.message.isBlank()) feedbackLabel else "$feedbackLabel：${feedback.message}",
-                    color = feedbackColor,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp)
-                )
             }
 
             // 卡片 1: 健康充电（参考图 1）
