@@ -167,7 +167,29 @@ class ControlWidget : AppWidgetProvider() {
             val ids = manager.getAppWidgetIds(ComponentName(appContext, ControlWidget::class.java))
             if (ids.isEmpty()) return
             SessionStore(appContext).suppressWidgetSyncFor(10_000L)
-            manager.updateAppWidget(ids, baseViews(appContext))
+            manager.partiallyUpdateAppWidget(ids, partialViews(appContext))
+        }
+
+        internal fun partialViews(context: Context, status: JSONObject, carType: String): RemoteViews =
+            RemoteViews(context.packageName, R.layout.widget_layout).apply {
+                renderStatus(context, this, status, carType, partial = true)
+            }
+
+        internal fun partialViews(context: Context, snapshot: SessionStore.WidgetSnapshot): RemoteViews =
+            RemoteViews(context.packageName, R.layout.widget_layout).apply {
+                renderSnapshot(context, this, snapshot, partial = true)
+            }
+
+        internal fun partialViews(context: Context): RemoteViews {
+            val store = SessionStore(context)
+            val snapshot = store.loadSelectedWidgetSnapshot()
+            val views = RemoteViews(context.packageName, R.layout.widget_layout)
+            if (snapshot != null) {
+                renderSnapshot(context, views, snapshot, partial = true)
+            } else {
+                return baseViews(context)
+            }
+            return views
         }
 
         fun formatUpdatedTime(): String =
@@ -250,18 +272,22 @@ class ControlWidget : AppWidgetProvider() {
             )
         }
 
-        internal fun renderStatus(context: Context, views: RemoteViews, status: JSONObject, carType: String) {
+        internal fun renderStatus(context: Context, views: RemoteViews, status: JSONObject, carType: String, partial: Boolean = false) {
             val store = SessionStore(context)
             val themeContext = widgetThemeContext(context)
             val darkTheme = widgetEffectiveDarkTheme(context)
-            applyWidgetBackground(context, views, darkTheme)
-            applyStaticAppearance(themeContext, views)
+            if (!partial) {
+                applyWidgetBackground(context, views, darkTheme)
+                applyStaticAppearance(themeContext, views)
+            }
             val session = store.load()
             val config = store.loadVehicleConfig(session.selectedVin, carType)
             val displayStatus = status
             val appearance = resolveWidgetAppearance(config, carType)
-            setVehicleImage(views, appearance, session.selectedVin, context)
-            views.setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
+            if (!partial) {
+                setVehicleImage(views, appearance, session.selectedVin, context)
+                views.setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
+            }
             val effectivePowerType = VehiclePowerTypeResolver.fromStatus(
                 status = displayStatus,
                 configuredPowerType = config.powerType,
@@ -311,12 +337,14 @@ class ControlWidget : AppWidgetProvider() {
             )
         }
 
-        internal fun renderSnapshot(context: Context, views: RemoteViews, snapshot: SessionStore.WidgetSnapshot) {
+        internal fun renderSnapshot(context: Context, views: RemoteViews, snapshot: SessionStore.WidgetSnapshot, partial: Boolean = false) {
             val store = SessionStore(context)
             val themeContext = widgetThemeContext(context)
             val darkTheme = widgetEffectiveDarkTheme(context)
-            applyWidgetBackground(context, views, darkTheme)
-            applyStaticAppearance(themeContext, views)
+            if (!partial) {
+                applyWidgetBackground(context, views, darkTheme)
+                applyStaticAppearance(themeContext, views)
+            }
             val session = store.load()
             val configVin = session.selectedVin.ifBlank { snapshot.vin }
             val config = store.loadVehicleConfig(configVin, snapshot.carType)
@@ -324,8 +352,10 @@ class ControlWidget : AppWidgetProvider() {
                 config,
                 snapshot.carType.ifBlank { session.selectedCarType }
             )
-            setVehicleImage(views, appearance, configVin, context)
-            views.setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
+            if (!partial) {
+                setVehicleImage(views, appearance, configVin, context)
+                views.setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
+            }
             val widgetPowerType = VehiclePowerTypeResolver.resolve(
                 configuredPowerType = config.powerType,
                 carType = snapshot.carType.ifBlank { session.selectedCarType },
@@ -600,16 +630,10 @@ class ControlWidget : AppWidgetProvider() {
                 R.id.imgWChargingStatus,
                 if (visible && presentation?.showChargingIcon == true) View.VISIBLE else View.GONE
             )
-            views.setViewVisibility(
-                R.id.txtWWindowWarning,
-                if (visible && text == "车窗未关闭") View.VISIBLE else View.GONE
-            )
             if (visible) {
                 views.setTextViewText(R.id.txtWGeneralStatus, text)
-                views.setTextColor(
-                    R.id.txtWGeneralStatus,
-                    ContextCompat.getColor(widgetThemeContext(context), widgetStatusColorResource(text))
-                )
+                val color = ContextCompat.getColor(widgetThemeContext(context), widgetStatusColorResource(text))
+                views.setTextColor(R.id.txtWGeneralStatus, color)
             }
         }
 
@@ -744,9 +768,13 @@ class ControlWidget : AppWidgetProvider() {
                     false
                 )
             )
+            val darkTheme = widgetEffectiveDarkTheme(context)
+            val unitColor = if (isTransparentMicrocrystal(context)) {
+                if (darkTheme) onSurface else ContextCompat.getColor(themeCtx, R.color.widget_on_surface_high_contrast)
+            } else onSurfaceVariant
             // 与主界面严格对齐：公里数大字为沉稳白/炭黑，单位为次级文字灰，仅百分比显示当前状态能量色
             views.setTextColor(R.id.txtWRange, onSurface)
-            views.setTextColor(R.id.txtWRangeUnit, onSurfaceVariant)
+            views.setTextColor(R.id.txtWRangeUnit, unitColor)
             val cleanSoc = (socText?.takeIf { it.isNotBlank() } ?: if (soc != null) "$progress%" else "")
                 .removePrefix("·")
                 .trim()
@@ -770,7 +798,7 @@ class ControlWidget : AppWidgetProvider() {
 
         private fun widgetStatusColorResource(text: String?): Int = when {
             text?.startsWith("剩余") == true -> R.color.energy_green
-            text == "行驶中" -> R.color.action_neutral
+            text?.startsWith("行驶中") == true -> R.color.driving_cyan
             text == "充电中" || text == "充电完成" -> R.color.energy_green
             text == "车窗未关闭" -> R.color.alert_red
             else -> R.color.widget_on_surface_variant
@@ -960,17 +988,27 @@ class ControlWidget : AppWidgetProvider() {
             views.setInt(R.id.widgetRoot, "setBackgroundResource", 0)
         }
 
+        internal fun isTransparentMicrocrystal(context: Context): Boolean {
+            val store = SessionStore(context)
+            val opacity = store.loadWidgetOpacity()
+            val bgStyle = store.loadWidgetBackgroundStyle()
+            return bgStyle == SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL && opacity == 25
+        }
+
         private fun applyStaticAppearance(context: Context, views: RemoteViews) {
             val onSurface = ContextCompat.getColor(context, R.color.widget_on_surface)
             val onSurfaceVariant = ContextCompat.getColor(context, R.color.widget_on_surface_variant)
             val actionIcon = ContextCompat.getColor(context, R.color.widget_action_icon)
+            val darkTheme = widgetEffectiveDarkTheme(context)
+            val secondaryText = if (isTransparentMicrocrystal(context)) {
+                if (darkTheme) onSurface else ContextCompat.getColor(context, R.color.widget_on_surface_high_contrast)
+            } else onSurfaceVariant
             views.setTextColor(R.id.txtWTitle, onSurface)
-            views.setTextColor(R.id.txtWUpdated, onSurfaceVariant)
+            views.setTextColor(R.id.txtWUpdated, secondaryText)
             views.setTextColor(R.id.txtWRange, onSurface)
-            views.setTextColor(R.id.txtWRangeUnit, onSurfaceVariant)
+            views.setTextColor(R.id.txtWRangeUnit, secondaryText)
             views.setTextColor(R.id.txtWPureSoc, onSurface)
             views.setTextColor(R.id.txtWGeneralStatus, onSurfaceVariant)
-            views.setViewVisibility(R.id.txtWWindowWarning, View.GONE)
             val slotIds = listOf(R.id.slotW1, R.id.slotW2, R.id.slotW3, R.id.slotW4, R.id.slotW5)
             val btnBgIds = listOf(R.id.btnBgSlot1, R.id.btnBgSlot2, R.id.btnBgSlot3, R.id.btnBgSlot4, R.id.btnBgSlot5)
             val imgIds = listOf(R.id.imgWSlot1, R.id.imgWSlot2, R.id.imgWSlot3, R.id.imgWSlot4, R.id.imgWSlot5)
@@ -979,7 +1017,6 @@ class ControlWidget : AppWidgetProvider() {
             }
             // Use the widget's resolved appearance, including the user's explicit
             // light/dark preference, instead of the device configuration alone.
-            val darkTheme = widgetEffectiveDarkTheme(context)
             val actionBackground = resolveWidgetActionBackground(context, darkTheme)
             btnBgIds.forEach { id ->
                 views.setInt(id, "setBackgroundResource", actionBackground)

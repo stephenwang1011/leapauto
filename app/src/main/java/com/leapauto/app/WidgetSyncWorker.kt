@@ -23,14 +23,15 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
         if (controlWidgetIds.isEmpty() && compactWidgetIds.isEmpty()) return Result.success()
 
         val store = SessionStore(context)
-        val views = ControlWidget.baseViews(context)
         var session: Session? = null
         return try {
             val current = store.load()
             session = current
             if (current.oldAuth == null || current.newAuth == null || current.selectedVin.isBlank()) {
-                views.setTextViewText(R.id.txtWUpdated, "打开 App 登录")
+                val fullViews = ControlWidget.baseViews(context)
+                fullViews.setTextViewText(R.id.txtWUpdated, "打开 App 登录")
                 ControlWidget.updateSyncCadence(context, null)
+                updateWidgets(store, manager, controlWidgetIds, compactWidgetIds, fullViews, partial = false)
             } else {
                 val config = store.loadVehicleConfig(current.selectedVin)
                 val status = LeapmotorApi(current).getVehicleState()
@@ -40,10 +41,11 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                     status, config.powerType, current.selectedCarType
                 )
                 val powerType = workerPowerType.toStatusPowerType()
-                ControlWidget.renderStatus(context, views, status, current.selectedCarType)
+                val partialViews = RemoteViews(context.packageName, R.layout.widget_layout)
+                ControlWidget.renderStatus(context, partialViews, status, current.selectedCarType, partial = true)
                 store.save(current)
                 val updated = formatUpdatedTime()
-                views.setTextViewText(R.id.txtWUpdated, updated)
+                partialViews.setTextViewText(R.id.txtWUpdated, updated)
                 store.saveWidgetSnapshot(
                     vin = current.selectedVin,
                     carType = current.selectedCarType,
@@ -83,17 +85,18 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                     driving = WidgetStatusMapper.isDriving(status),
                     rescheduleAfterCurrentSync = true
                 )
+                updateWidgets(store, manager, controlWidgetIds, compactWidgetIds, partialViews, partial = true)
             }
-            updateWidgets(store, manager, controlWidgetIds, compactWidgetIds, views)
             Result.success()
         } catch (error: Exception) {
             val terminalAuthFailure = error is ApiException &&
                 (SessionExpiry.isRefreshTokenInvalid(error.message) || error.httpStatus in setOf(401, 403))
             if (terminalAuthFailure) {
                 store.invalidateWidgetSnapshot()
-                views.setTextViewText(R.id.txtWUpdated, "请打开App登录")
+                val fullViews = ControlWidget.baseViews(context)
+                fullViews.setTextViewText(R.id.txtWUpdated, "请打开App登录")
                 ControlWidget.updateSyncCadence(context, null)
-                updateWidgets(store, manager, controlWidgetIds, compactWidgetIds, views)
+                updateWidgets(store, manager, controlWidgetIds, compactWidgetIds, fullViews, partial = false)
                 return Result.success()
             }
             val snapshot = session?.let { current -> store.loadWidgetSnapshot(current.selectedVin) }
@@ -103,14 +106,17 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
             )
             if (snapshot != null) {
                 // Preserve the last known-good data and timestamp on transient failures.
-                ControlWidget.renderSnapshot(context, views, snapshot)
+                val partialViews = RemoteViews(context.packageName, R.layout.widget_layout)
+                ControlWidget.renderSnapshot(context, partialViews, snapshot, partial = true)
                 ControlWidget.updateSyncCadence(
                     context,
                     continueDrivingCadence,
                     rescheduleAfterCurrentSync = true
                 )
+                updateWidgets(store, manager, controlWidgetIds, compactWidgetIds, partialViews, partial = true)
             } else {
-                views.setTextViewText(
+                val fullViews = ControlWidget.baseViews(context)
+                fullViews.setTextViewText(
                     R.id.txtWUpdated,
                     if (continueDrivingCadence) "正在重试" else "同步失败"
                 )
@@ -119,8 +125,8 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                     continueDrivingCadence,
                     rescheduleAfterCurrentSync = true
                 )
+                updateWidgets(store, manager, controlWidgetIds, compactWidgetIds, fullViews, partial = false)
             }
-            updateWidgets(store, manager, controlWidgetIds, compactWidgetIds, views)
             Result.success()
         }
     }
@@ -130,14 +136,23 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
         manager: AppWidgetManager,
         controlWidgetIds: IntArray,
         compactWidgetIds: IntArray,
-        views: RemoteViews
+        views: RemoteViews,
+        partial: Boolean = true
     ) {
         store.suppressWidgetSyncFor(SUPPRESS_ECHO_WINDOW_MILLIS)
         if (controlWidgetIds.isNotEmpty()) {
-            manager.updateAppWidget(controlWidgetIds, views)
+            if (partial) {
+                manager.partiallyUpdateAppWidget(controlWidgetIds, views)
+            } else {
+                manager.updateAppWidget(controlWidgetIds, views)
+            }
         }
         if (compactWidgetIds.isNotEmpty()) {
-            manager.updateAppWidget(compactWidgetIds, CompactControlWidget.baseViews(applicationContext))
+            if (partial) {
+                manager.partiallyUpdateAppWidget(compactWidgetIds, CompactControlWidget.partialViews(applicationContext))
+            } else {
+                manager.updateAppWidget(compactWidgetIds, CompactControlWidget.baseViews(applicationContext))
+            }
         }
     }
 

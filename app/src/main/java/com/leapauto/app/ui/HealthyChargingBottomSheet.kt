@@ -507,9 +507,11 @@ fun HealthyChargingBottomSheet(
                 }
             }
 
+            var lastHandledFeedback by remember { mutableStateOf(controlFeedback) }
             LaunchedEffect(controlFeedback) {
                 val feedback = controlFeedback ?: return@LaunchedEffect
-                if (feedback.kind != ControlFeedbackKind.IN_PROGRESS && feedback.message.isNotBlank()) {
+                if (feedback != lastHandledFeedback && feedback.kind != ControlFeedbackKind.IN_PROGRESS && feedback.message.isNotBlank()) {
+                    lastHandledFeedback = feedback
                     Toast.makeText(context, feedback.message, Toast.LENGTH_SHORT).show()
                 }
             }

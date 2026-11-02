@@ -41,7 +41,7 @@ object WidgetStatusMapper {
         fallbackLabel: String?,
         soc: Int? = null
     ): WidgetStatusPresentation {
-        if (fallbackLabel == "行驶中") return WidgetStatusPresentation(fallbackLabel)
+        if (fallbackLabel?.startsWith("行驶中") == true) return WidgetStatusPresentation(fallbackLabel)
         val presentation = ChargeStatus.presentation(chargeState, soc, chargeRemainTime)
         return when (presentation.state) {
             ChargeStatus.PresentationState.CHARGING -> WidgetStatusPresentation(
@@ -88,7 +88,7 @@ object WidgetStatusMapper {
     }
 
     private fun label(valueForKey: (String) -> Any?): String? = when {
-        isDrivingGear(valueForKey("gearStatus")) -> "行驶中"
+        isDrivingGear(valueForKey("gearStatus")) -> "行驶中..."
         ChargeStatus.state(mapOf("chargeState" to valueForKey("chargeState"))) in setOf(1, 2, 3, 4, 6) ->
             ChargeStatus.presentation(
                 ChargeStatus.state(mapOf("chargeState" to valueForKey("chargeState"))),

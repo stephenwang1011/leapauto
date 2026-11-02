@@ -565,7 +565,7 @@ class SessionStore(context: Context) {
 
     fun saveWidgetBackgroundStyle(style: Int) {
         appPrefs.edit().putInt(WIDGET_BACKGROUND_STYLE, style).apply()
-        ControlWidget.refreshData(appContext)
+        ControlWidget.refreshAppearance(appContext)
     }
 
     fun loadWidgetOpacity(): Int =
@@ -575,7 +575,7 @@ class SessionStore(context: Context) {
     fun saveWidgetOpacity(opacity: Int) {
         require(opacity in WIDGET_OPACITY_OPTIONS) { "不支持的小组件透明度" }
         appPrefs.edit().putInt(WIDGET_OPACITY, opacity).apply()
-        ControlWidget.refreshData(appContext)
+        ControlWidget.refreshAppearance(appContext)
     }
 
     /** 最近一次成功同步的小组件数据，用于网络短暂失败时保留可读状态。 */

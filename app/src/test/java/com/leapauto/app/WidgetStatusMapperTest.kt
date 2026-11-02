@@ -28,7 +28,7 @@ class WidgetStatusMapperTest {
     @Test
     fun `driving gear wins over every other widget status`() {
         assertEquals(
-            "行驶中",
+            "行驶中...",
             WidgetStatusMapper.label(
                 mapOf(
                     "gearStatus" to "D",
@@ -114,7 +114,7 @@ class WidgetStatusMapperTest {
         assertNull(WidgetStatusMapper.presentation(0, "已充满", null, 100).label)
         assertEquals("车窗未关闭", WidgetStatusMapper.presentation(0, "0分钟", "车窗未关闭", 100).label)
         for (state in listOf(1, 2, 3, 4, 6)) {
-            assertEquals("行驶中", WidgetStatusMapper.presentation(state, "0分钟", "行驶中", 100).label)
+            assertEquals("行驶中...", WidgetStatusMapper.presentation(state, "0分钟", "行驶中...", 100).label)
         }
     }
 
@@ -215,5 +215,20 @@ class WidgetStatusMapperTest {
                 }
             )
         )
+    }
+
+    @Test
+    fun `driving status uses driving cyan color`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(java.io.File(workingDirectory)) { it.parentFile }
+            .first { java.io.File(it, "app").isDirectory }
+
+        val lightColors = java.io.File(projectDir, "app/src/main/res/values/colors.xml").readText()
+        val darkColors = java.io.File(projectDir, "app/src/main/res/values-night/colors.xml").readText()
+        val widgetCode = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
+
+        assertTrue(lightColors.contains("name=\"driving_cyan\""))
+        assertTrue(darkColors.contains("name=\"driving_cyan\""))
+        assertTrue(widgetCode.contains("text?.startsWith(\"行驶中\") == true -> R.color.driving_cyan"))
     }
 }

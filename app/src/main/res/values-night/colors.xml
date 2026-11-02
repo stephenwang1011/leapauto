@@ -1,19 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="action_neutral">#ECECEC</color>
+    <color name="driving_cyan">#00E5FF</color>
     <color name="energy_green">#4ADE80</color>
     <color name="widget_card_border">#33FFFFFF</color>
     <color name="widget_on_surface">#ECECEC</color>
     <color name="widget_on_surface_variant">#B0B0B0</color>
     <color name="widget_action_pressed">#33585858</color>
     <color name="widget_action_icon">#ECECEC</color>
-    <color name="widget_range_track">#1FFFFFFF</color>
-    <color name="widget_range_track_border">#2EFFFFFF</color>
+    <color name="widget_range_track">#38FFFFFF</color>
+    <color name="widget_range_track_border">#59FFFFFF</color>
     <color name="widget_range_good">#4ADE80</color>
     <color name="widget_range_warning">#FFB74D</color>
     <color name="widget_range_critical">#FF8A80</color>
     <color name="widget_fuel_range">#FFB74D</color>
-    <color name="widget_fuel_range_track">#1FFFFFFF</color>
+    <color name="widget_fuel_range_track">#38FFFFFF</color>
     <color name="widget_on_surface_high_contrast">#FFFFFF</color>
     <color name="widget_range_track_high_contrast">#737373</color>
     <color name="widget_range_good_high_contrast">#69F59C</color>

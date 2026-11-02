@@ -400,21 +400,6 @@
                 android:visibility="gone" />
 
             <TextView
-                android:id="@+id/txtWWindowWarning"
-                android:layout_width="14dp"
-                android:layout_height="14dp"
-                android:layout_marginEnd="2dp"
-                android:contentDescription="车窗未关闭"
-                android:background="@drawable/widget_window_warning_badge"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:text="!"
-                android:textColor="@android:color/white"
-                android:textSize="9sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
-
-            <TextView
                 android:id="@+id/txtWGeneralStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

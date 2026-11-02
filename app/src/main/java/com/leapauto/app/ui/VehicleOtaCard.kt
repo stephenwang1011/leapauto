@@ -81,10 +81,10 @@ fun VehicleOtaCard(
     val auraColor = when {
         isSubAccount -> MaterialTheme.statusWarn.copy(alpha = 0.08f)
         otaStatus == OtaStatus.UP_TO_DATE -> MaterialTheme.statusGood.copy(alpha = 0.10f)
-        otaStatus == OtaStatus.UPDATE_AVAILABLE || otaStatus == OtaStatus.DOWNLOADED -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-        otaStatus == OtaStatus.DOWNLOADING || otaStatus == OtaStatus.INSTALLING -> MaterialTheme.statusWarn.copy(alpha = 0.14f)
+        otaStatus == OtaStatus.UPDATE_AVAILABLE || otaStatus == OtaStatus.DOWNLOADED -> settingsIconColor(SettingsIconTone.OTA).copy(alpha = 0.12f)
+        otaStatus == OtaStatus.DOWNLOADING || otaStatus == OtaStatus.INSTALLING -> MaterialTheme.statusWarn.copy(alpha = 0.12f)
         otaStatus == OtaStatus.FAILED || state is VehicleOtaState.Error -> MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
-        else -> null
+        else -> settingsIconColor(SettingsIconTone.OTA).copy(alpha = 0.09f)
     }
 
     val statusBadgeColor = when {

@@ -188,7 +188,7 @@ fun ThemeSelectorBottomSheet(
                                     coroutineScope.launch {
                                         withContext(Dispatchers.IO) {
                                             ThemeManager.setActiveThemeId(context, vin, theme.themeId)
-                                            ControlWidget.refreshData(context)
+                                            ControlWidget.refreshAppearance(context)
                                         }
                                         activeThemeId = theme.themeId
                                         onThemeApplied(theme.themeId)
@@ -206,7 +206,7 @@ fun ThemeSelectorBottomSheet(
                                             applyingThemeId = theme.themeId
                                             withContext(Dispatchers.IO) {
                                                 ThemeManager.setActiveThemeId(context, vin, theme.themeId)
-                                                ControlWidget.refreshData(context)
+                                                ControlWidget.refreshAppearance(context)
                                             }
                                             activeThemeId = theme.themeId
                                             onThemeApplied(theme.themeId)

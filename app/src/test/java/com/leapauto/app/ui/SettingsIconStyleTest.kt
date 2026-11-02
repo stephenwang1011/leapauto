@@ -32,6 +32,21 @@ class SettingsIconStyleTest {
         }
     }
 
+    @Test
+    fun `settings cards wire subtle upper right aura per module icon tone`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(java.io.File(workingDirectory)) { it.parentFile }
+            .first { java.io.File(it, "app").isDirectory }
+        val screenSource = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+
+        assertTrue(screenSource.contains("settingsGlassCard(tone = SettingsIconTone.KEY)"))
+        assertTrue(screenSource.contains("settingsGlassCard(tone = SettingsIconTone.THEME)"))
+        assertTrue(screenSource.contains("settingsGlassCard(tone = SettingsIconTone.SUPPORT)"))
+        assertTrue(screenSource.contains("settingsGlassCard(tone = SettingsIconTone.CODE)"))
+        assertTrue(screenSource.contains("settingsGlassCard(auraColor = statusColor.copy"))
+        assertTrue(screenSource.contains("settingsGlassCard(auraColor = amapAura)"))
+    }
+
     private fun contrast(first: Color, second: Color): Float =
         (maxOf(first.luminance(), second.luminance()) + 0.05f) /
             (minOf(first.luminance(), second.luminance()) + 0.05f)

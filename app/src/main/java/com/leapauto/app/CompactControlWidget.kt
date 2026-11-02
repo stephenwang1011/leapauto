@@ -78,8 +78,44 @@ class CompactControlWidget : AppWidgetProvider() {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, CompactControlWidget::class.java))
             if (ids.isEmpty()) return
-            manager.updateAppWidget(ids, baseViews(context))
+            manager.partiallyUpdateAppWidget(ids, partialViews(context))
         }
+
+        internal fun partialViews(context: Context): RemoteViews =
+            RemoteViews(context.packageName, R.layout.widget_compact_layout).apply {
+                val store = SessionStore(context)
+                val themeContext = ControlWidget.widgetThemeContext(context)
+                val snapshot = store.loadSelectedWidgetSnapshot()
+                val session = store.load()
+                val config = store.loadVehicleConfig(session.selectedVin, session.selectedCarType)
+                val appearance = ControlWidget.resolveWidgetAppearance(config, snapshot?.carType ?: session.selectedCarType)
+                setTextViewText(R.id.txtWCTitle, ControlWidget.widgetTitle(config, appearance))
+                setTextViewText(R.id.txtWCUpdated, snapshot?.updated?.removePrefix("今天")?.trim().orEmpty())
+                val resolvedPowerType = VehiclePowerTypeResolver.resolve(
+                    configuredPowerType = config.powerType,
+                    carType = snapshot?.carType?.ifBlank { session.selectedCarType } ?: session.selectedCarType,
+                    cachedPowerType = snapshot?.powerType,
+                    hasFuelTelemetry = snapshot?.fuelRange != null || snapshot?.fuelSoc != null
+                )
+                applyRangePresentation(
+                    themeContext,
+                    this,
+                    CompactWidgetRangePresentationMapper.fromValues(
+                        range = snapshot?.range,
+                        soc = snapshot?.soc,
+                        powerType = resolvedPowerType,
+                        electricRange = snapshot?.electricRange,
+                        fuelRange = snapshot?.fuelRange,
+                        electricSoc = snapshot?.soc,
+                        fuelSoc = snapshot?.fuelSoc,
+                        electricTotalRange = snapshot?.electricTotalRange,
+                        fuelTotalRange = snapshot?.fuelTotalRange
+                    ),
+                    highContrast = false
+                )
+                applyLockPresentation(themeContext, this, snapshot?.locked)
+                applyAcPresentation(themeContext, this, snapshot?.acEnabled, snapshot?.acTone ?: ClimateTemperatureTone.DEFAULT)
+            }
 
         fun refreshAppearance(context: Context) {
             val manager = AppWidgetManager.getInstance(context)

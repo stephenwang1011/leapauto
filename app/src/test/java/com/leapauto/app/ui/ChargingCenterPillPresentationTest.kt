@@ -93,7 +93,7 @@ class ChargingCenterPillPresentationTest {
     }
 
     @Test
-    fun gunConnectedOnlyShowsGunConnected() {
+    fun gunConnectedIdleOrStoppedShowsDefaultChargingCenter() {
         val model = ChargingCenterPillPresentation.resolve(
             chargeState = 0,
             chargeGunConnected = true,
@@ -101,8 +101,8 @@ class ChargingCenterPillPresentationTest {
             chargeScheduleEnabled = false,
             chargeScheduleStart = null
         )
-        assertEquals(ChargingPillType.GUN_CONNECTED, model.type)
-        assertEquals("充电枪已插", model.labelText)
+        assertEquals(ChargingPillType.DEFAULT, model.type)
+        assertEquals("充电中心", model.labelText)
         assertFalse(model.hasBoltIcon)
     }
 
@@ -121,7 +121,7 @@ class ChargingCenterPillPresentationTest {
     }
 
     @Test
-    fun chargerUnlockedShowsUnlockedPrompt() {
+    fun chargerUnlockedShowsDefaultChargingCenter() {
         val model = ChargingCenterPillPresentation.resolve(
             chargeState = 2,
             chargeGunConnected = true,
@@ -130,8 +130,8 @@ class ChargingCenterPillPresentationTest {
             chargeScheduleStart = null,
             chargerUnlocked = true
         )
-        assertEquals(ChargingPillType.GUN_CONNECTED, model.type)
-        assertEquals("充电枪已解锁", model.labelText)
+        assertEquals(ChargingPillType.DEFAULT, model.type)
+        assertEquals("充电中心", model.labelText)
         assertFalse(model.hasBoltIcon)
     }
 
@@ -153,12 +153,12 @@ class ChargingCenterPillPresentationTest {
     }
 
     @Test
-    fun endedOrPausedAtLimitOrUnknownSocShowsGunConnectedOrFull() {
+    fun endedOrPausedAtLimitOrUnknownSocShowsDefaultOrFull() {
         for (state in listOf(2, 6)) {
             for (soc in listOf(null, "未知", "--", "80%", "90%", "99%")) {
                 val model = ChargingCenterPillPresentation.resolve(state, true, "已充满", false, null, soc)
-                assertEquals(ChargingPillType.GUN_CONNECTED, model.type)
-                assertEquals("充电枪已插", model.labelText)
+                assertEquals(ChargingPillType.DEFAULT, model.type)
+                assertEquals("充电中心", model.labelText)
                 assertFalse(model.hasBoltIcon)
             }
             val full = ChargingCenterPillPresentation.resolve(state, false, null, false, null, "100%")
@@ -183,6 +183,6 @@ class ChargingCenterPillPresentationTest {
         assertEquals("预约等待中", ChargingCenterPillPresentation.resolve(4, false, "0分钟", false, null, "100%").labelText)
         assertEquals("充电故障", ChargingCenterPillPresentation.resolve(3, true, "0分钟", true, "23:00", "100%").labelText)
         assertEquals("充电中心", ChargingCenterPillPresentation.resolve(0, false, "已充满", false, null, "100%").labelText)
-        assertEquals("充电枪已插", ChargingCenterPillPresentation.resolve(0, true, "已充满", false, null, "100%").labelText)
+        assertEquals("充电中心", ChargingCenterPillPresentation.resolve(0, true, "已充满", false, null, "100%").labelText)
     }
 }

@@ -1,6 +1,7 @@
 package com.leapauto.app
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -174,23 +175,16 @@ class CompactWidgetSpecTest {
     }
 
     @Test
-    fun `wide widget marks an open window with a coordinated warning icon and status text`() {
+    fun `wide widget marks an open window with coordinated alert red status text`() {
         val projectDir = projectDirectory()
         val layout = File(projectDir, "app/src/main/res/layout/widget_layout.xml").readText()
         val controlWidget = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
-        val badge = File(projectDir, "app/src/main/res/drawable/widget_window_warning_badge.xml").readText()
+        val colors = File(projectDir, "app/src/main/res/values/colors.xml").readText()
 
-        assertTrue(layout.contains("android:id=\"@+id/txtWWindowWarning\""))
-        assertTrue(layout.contains("android:layout_width=\"12dp\""))
-        assertTrue(layout.contains("android:layout_height=\"12dp\""))
-        assertTrue(layout.contains("android:textSize=\"9sp\""))
-        assertTrue(layout.contains("android:textStyle=\"bold\""))
-        assertTrue(controlWidget.contains("text == \"车窗未关闭\""))
-        assertTrue(controlWidget.contains("R.id.txtWWindowWarning"))
-        assertTrue(layout.contains("android:text=\"!\""))
-        assertTrue(layout.contains("android:textColor=\"@android:color/white\""))
-        assertTrue(badge.contains("android:shape=\"oval\""))
-        assertTrue(badge.contains("@color/alert_red"))
+        assertFalse(layout.contains("android:id=\"@+id/txtWWindowWarning\""))
+        assertFalse(controlWidget.contains("R.id.txtWWindowWarning"))
+        assertTrue(controlWidget.contains("text == \"车窗未关闭\" -> R.color.alert_red"))
+        assertTrue(colors.contains("name=\"alert_red\""))
     }
 
     @Test
@@ -413,6 +407,16 @@ class CompactWidgetSpecTest {
     @Test
     fun `session store defaults widget background style to landscape`() {
         assertEquals(SessionStore.WIDGET_BG_STYLE_LANDSCAPE, SessionStore.WIDGET_BG_STYLE_DEFAULT)
+    }
+
+    @Test
+    fun `transparent microcrystal mode switches unit and updated time to black high contrast in light mode`() {
+        val projectDir = projectDirectory()
+        val controlWidget = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
+
+        assertTrue(controlWidget.contains("fun isTransparentMicrocrystal(context: Context): Boolean"))
+        assertTrue(controlWidget.contains("bgStyle == SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL && opacity == 25"))
+        assertTrue(controlWidget.contains("R.color.widget_on_surface_high_contrast"))
     }
 
     private fun projectDirectory(): File {

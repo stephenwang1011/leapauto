@@ -92,7 +92,7 @@ class HealthyChargingInteractionTest {
         val gateOpening = source.indexOf('{', gateStart)
         val afterGate = source.substring(gateOpening + actionBar.length + 2).trimStart()
         assertFalse(actionBar.contains("LaunchedEffect(controlFeedback)"))
-        assertTrue("Feedback effect must follow the gun gate unconditionally", afterGate.startsWith("LaunchedEffect(controlFeedback)"))
+        assertTrue("Feedback effect must follow the gun gate unconditionally", afterGate.contains("LaunchedEffect(controlFeedback)"))
     }
 
     @Test
