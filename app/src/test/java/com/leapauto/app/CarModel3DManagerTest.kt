@@ -208,7 +208,7 @@ class CarModel3DManagerTest {
 
         assertTrue(viewSource.contains("targetZoom = 1.12"))
         assertTrue(viewSource.contains("cam.updateProjectionMatrix()"))
-        assertTrue(viewSource.contains("cam.position.set(-11.15, 3.13, 10.45)"))
+        assertTrue(viewSource.contains("cam.position.set(-10.8, 2.90, 10.8)"))
         assertTrue(viewSource.contains("ctrl.target.copy(target)"))
         assertTrue(viewSource.contains("v.renderer.setClearColor(0x000000, 0)"))
         assertTrue(viewSource.contains("v.renderer.setClearAlpha(0)"))
@@ -716,8 +716,8 @@ class CarModel3DManagerTest {
         val viewSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/CarModel3DView.kt").readText()
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
-        assertTrue(viewSource.contains("var target = new THREE.Vector3(-0.35, 0.98, -0.35);"))
-        assertTrue(viewSource.contains("cam.position.set(-11.15, 3.13, 10.45);"))
+        assertTrue(viewSource.contains("var target = new THREE.Vector3(0, 0.85, 0);"))
+        assertTrue(viewSource.contains("cam.position.set(-10.8, 2.90, 10.8);"))
         assertTrue(screenSource.contains(".height(172.dp)"))
     }
 }
