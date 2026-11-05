@@ -179,8 +179,40 @@ class ChargingCenterPillPresentationTest {
     }
 
     @Test
+    fun unpluggedVehicleWithScheduledChargingShowsDefaultChargingCenter() {
+        // 未插枪时，即使有预约时间或车端上报等待，也必须显示默认充电中心
+        val modelWithoutGun = ChargingCenterPillPresentation.resolve(
+            chargeState = 4,
+            chargeGunConnected = false,
+            chargeRemainTime = null,
+            chargeScheduleEnabled = true,
+            chargeScheduleStart = "23:00"
+        )
+        assertEquals(ChargingPillType.DEFAULT, modelWithoutGun.type)
+        assertEquals("充电中心", modelWithoutGun.labelText)
+        assertFalse(modelWithoutGun.hasBoltIcon)
+    }
+
+    @Test
+    fun drivingVehicleAlwaysShowsDefaultChargingCenter() {
+        // 行驶中强互斥：即便车端上报插枪或预约中，行驶中也必须显示默认充电中心
+        val drivingModel = ChargingCenterPillPresentation.resolve(
+            chargeState = 4,
+            chargeGunConnected = true,
+            chargeRemainTime = null,
+            chargeScheduleEnabled = true,
+            chargeScheduleStart = "23:00",
+            isDriving = true
+        )
+        assertEquals(ChargingPillType.DEFAULT, drivingModel.type)
+        assertEquals("充电中心", drivingModel.labelText)
+        assertFalse(drivingModel.hasBoltIcon)
+    }
+
+    @Test
     fun waitingAndFaultRemainVisibleWithoutConnectionFlagAndIdleDoesNotInferStopped() {
-        assertEquals("预约等待中", ChargingCenterPillPresentation.resolve(4, false, "0分钟", false, null, "100%").labelText)
+        assertEquals("充电中心", ChargingCenterPillPresentation.resolve(4, false, "0分钟", false, null, "100%").labelText)
+        assertEquals("预约等待中", ChargingCenterPillPresentation.resolve(4, true, "0分钟", false, null, "100%").labelText)
         assertEquals("充电故障", ChargingCenterPillPresentation.resolve(3, true, "0分钟", true, "23:00", "100%").labelText)
         assertEquals("充电中心", ChargingCenterPillPresentation.resolve(0, false, "已充满", false, null, "100%").labelText)
         assertEquals("充电中心", ChargingCenterPillPresentation.resolve(0, true, "已充满", false, null, "100%").labelText)

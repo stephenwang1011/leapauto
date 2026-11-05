@@ -197,10 +197,12 @@ class ChargeStatusTest {
     fun `isGunConnected correctly detects slow charge, fast charge and active charge states`() {
         // 未插枪且未充电
         assertEquals(false, ChargeStatus.isGunConnected(mapOf("acInputSlowCharge" to 0, "dcInputFastCharge" to 0, "chargeState" to 0)))
+        assertEquals(false, ChargeStatus.isGunConnected(mapOf("acInputSlowCharge" to 0, "dcInputFastCharge" to 0, "chargeState" to 4)))
         assertEquals(false, ChargeStatus.isGunConnected(null as Map<String, Any?>?))
 
         // 慢充枪插入
         assertEquals(true, ChargeStatus.isGunConnected(mapOf("acInputSlowCharge" to 1, "chargeState" to 0)))
+        assertEquals(true, ChargeStatus.isGunConnected(mapOf("acInputSlowCharge" to 1, "chargeState" to 4)))
 
         // 快充枪插入
         assertEquals(true, ChargeStatus.isGunConnected(mapOf("dcInputFastCharge" to 1, "chargeState" to 0)))

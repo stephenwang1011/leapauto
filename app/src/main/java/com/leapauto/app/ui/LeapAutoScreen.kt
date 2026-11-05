@@ -220,7 +220,6 @@ import com.leapauto.app.QuickCommandExecutionPolicy
 import com.leapauto.app.QuickCommandOrderPolicy
 import com.leapauto.app.SunshadeMenuPolicy
 import com.leapauto.app.SunroofMenuPolicy
-import com.leapauto.app.VehicleOtaState
 import com.leapauto.app.R
 import com.leapauto.app.SentryModeControlPolicy
 import com.leapauto.app.SessionExpiredDialogAction
@@ -356,11 +355,6 @@ fun LeapAutoScreen(
     currentVersion: String,
     currentReleaseNotes: String,
     versionUpdateState: VersionUpdateState,
-    vehicleOtaState: VehicleOtaState = VehicleOtaState.Idle,
-    onCheckVehicleOta: () -> Unit = {},
-    onDownloadVehicleOta: (String) -> Unit = {},
-    onInstallVehicleOta: (String, String) -> Unit = { _, _ -> },
-    onScheduleVehicleOta: (String, String, String) -> Unit = { _, _, _ -> },
     handledUpdateVersion: String? = null,
     showSessionExpiredDialog: Boolean = false,
     phone: String,
@@ -1010,13 +1004,8 @@ fun LeapAutoScreen(
                                 onSaveVehicleConfig = onSaveVehicleConfig,
                                 currentVersion = currentVersion,
                                 currentReleaseNotes = currentReleaseNotes,
-                                versionUpdateState = versionUpdateState,
-                                vehicleOtaState = vehicleOtaState,
-                                onCheckVehicleOta = onCheckVehicleOta,
-                                onDownloadVehicleOta = onDownloadVehicleOta,
-                                onInstallVehicleOta = onInstallVehicleOta,
-                                onScheduleVehicleOta = onScheduleVehicleOta,
-                                onCheckForUpdate = onCheckForUpdate,
+                                 versionUpdateState = versionUpdateState,
+                                 onCheckForUpdate = onCheckForUpdate,
                                 onOpenUpdate = onOpenUpdate,
                                 downloadUpdateProgress = downloadUpdateProgress,
                                 onStartInAppUpdate = onStartInAppUpdate,
@@ -1619,11 +1608,6 @@ private fun MyContent(
     currentVersion: String,
     currentReleaseNotes: String,
     versionUpdateState: VersionUpdateState,
-    vehicleOtaState: VehicleOtaState = VehicleOtaState.Idle,
-    onCheckVehicleOta: () -> Unit = {},
-    onDownloadVehicleOta: (String) -> Unit = {},
-    onInstallVehicleOta: (String, String) -> Unit = { _, _ -> },
-    onScheduleVehicleOta: (String, String, String) -> Unit = { _, _, _ -> },
     onCheckForUpdate: () -> Unit,
     onOpenUpdate: () -> Unit,
     downloadUpdateProgress: Int? = null,
@@ -1855,17 +1839,6 @@ private fun MyContent(
             }
         }
 
-        // 5.9 车机系统 OTA
-        val isSubAccount = availableVehicles.firstOrNull { it.vin == vehicleVin }?.isSharedAccount == true
-        VehicleOtaCard(
-            state = vehicleOtaState,
-            isSubAccount = isSubAccount,
-            onCheck = onCheckVehicleOta,
-            onDownload = onDownloadVehicleOta,
-            onInstall = onInstallVehicleOta,
-            onSchedule = onScheduleVehicleOta
-        )
-
         // 6. 当前版本信息与检查更新
         VersionUpdateCard(
             currentVersion = currentVersion,
@@ -1949,8 +1922,10 @@ private fun BluetoothEnableWarningDialog(
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
                     text = "若本机同时运行官方零跑 App，两端后台会争抢蓝牙信道，易导致频繁断连或感应迟钝。",
@@ -1959,11 +1934,30 @@ private fun BluetoothEnableWarningDialog(
                     lineHeight = 20.sp
                 )
                 Text(
-                    text = "为获得最稳定的日常体验，建议优先使用官方 App 蓝牙与手机 NFC 钥匙。",
+                    text = "为获得最稳定的日常体验，建议：",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
                     lineHeight = 20.sp
                 )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    BluetoothWarningTipItem(
+                        number = "1.",
+                        content = "优先使用官方 App 蓝牙与手机 NFC 钥匙，关闭此开关（推荐）",
+                        isHighlighted = true
+                    )
+                    BluetoothWarningTipItem(
+                        number = "2.",
+                        content = "若坚持使用本 App 的蓝牙钥匙，你需要先删除官方 App 中已经保存好的蓝牙数字钥匙，否则无法使用本 App 的蓝牙钥匙"
+                    )
+                    BluetoothWarningTipItem(
+                        number = "3.",
+                        content = "推荐使用组合是两个手机号 A 和 B，A 手机号登录本 App 控车用，B 手机号登录到官方 App 创建蓝牙钥匙和 NFC 钥匙"
+                    )
+                }
             }
         },
         confirmButton = {
@@ -1986,6 +1980,38 @@ private fun BluetoothEnableWarningDialog(
             }
         }
     )
+}
+
+@Composable
+private fun BluetoothWarningTipItem(
+    number: String,
+    content: String,
+    isHighlighted: Boolean = false
+) {
+    val textColor = if (isHighlighted) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant
+    val numberColor = if (isHighlighted) MaterialTheme.statusGood else MaterialTheme.colorScheme.primary
+    val fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = number,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = numberColor,
+            lineHeight = 20.sp
+        )
+        Text(
+            text = content,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = fontWeight,
+            color = textColor,
+            lineHeight = 20.sp,
+            modifier = Modifier.weight(1f)
+        )
+    }
 }
 
 @Composable
@@ -5429,9 +5455,15 @@ internal object ChargingCenterPillPresentation {
         soc: String? = null,
         chargerUnlocked: Boolean = false,
         healthyChargeLimitSoc: Int? = null,
-        isHealthyChargeEnabled: Boolean = false
+        isHealthyChargeEnabled: Boolean = false,
+        isDriving: Boolean = false
     ): ChargingPillModel {
-        val isGunConnected = chargeGunConnected || chargeState in setOf(1, 2, 4, 5, 6)
+        // 行驶状态强互斥：行驶中绝对不可能插枪充电，统一显示默认入口
+        if (isDriving) {
+            return ChargingPillModel(ChargingPillType.DEFAULT, "充电中心", hasBoltIcon = false)
+        }
+
+        val isGunConnected = chargeGunConnected || chargeState in setOf(1, 2, 6)
         val socPercent = ChargeStatus.socPercent(soc)
         val presentation = ChargeStatus.presentation(chargeState, socPercent, chargeRemainTime)
         val formattedTime = presentation.remainingTime?.removeSuffix("钟")
@@ -5455,12 +5487,12 @@ internal object ChargingCenterPillPresentation {
                 ChargingPillModel(ChargingPillType.FAULT, presentation.label)
             }
             // 5. 插枪且有预约任务（开启预约且有开始时间，或车端报告预约等待）
-            (chargeState == 4 || isGunConnected && chargeScheduleEnabled == true) && !chargeScheduleStart.isNullOrBlank() -> {
+            isGunConnected && (chargeState == 4 || chargeScheduleEnabled == true) && !chargeScheduleStart.isNullOrBlank() -> {
                 val startTime = chargeScheduleStart.trim()
                 ChargingPillModel(ChargingPillType.SCHEDULED_WAITING, "${startTime}开始充电", hasBoltIcon = false)
             }
             // 6. 插枪且处于预约等待（但未取到具体开始时间）
-            chargeState == 4 -> {
+            isGunConnected && chargeState == 4 -> {
                 ChargingPillModel(ChargingPillType.SCHEDULED_WAITING, "预约等待中", hasBoltIcon = false)
             }
             // 7. 默认状态（未插枪、插枪未充、手动停充后、解锁枪后均显示统一入口）
@@ -5486,7 +5518,9 @@ private fun ChargingCenterPill(
         status?.chargeScheduleStart,
         status?.chargerUnlocked,
         status?.chargeScheduleSocLimit,
-        status?.healthyChargeEnabled
+        status?.healthyChargeEnabled,
+        status?.isDriving,
+        status?.gearStatus
     ) {
         ChargingCenterPillPresentation.resolve(
             chargeState = status?.chargeState,
@@ -5497,7 +5531,8 @@ private fun ChargingCenterPill(
             soc = status?.chargeSoc?.toString(),
             chargerUnlocked = status?.chargerUnlocked == true,
             healthyChargeLimitSoc = status?.chargeScheduleSocLimit,
-            isHealthyChargeEnabled = status?.healthyChargeEnabled == true
+            isHealthyChargeEnabled = status?.healthyChargeEnabled == true,
+            isDriving = status?.isDriving == true || VehicleDrivingSafetyPolicy.isDrivingGear(status?.gearStatus)
         )
     }
 

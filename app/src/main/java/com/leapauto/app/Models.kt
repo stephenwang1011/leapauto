@@ -550,9 +550,6 @@ object ControlFeedbackFormatter {
             key.startsWith("steeringWheelHeating") || lbl.contains("方向盘加热") -> "正在开启方向盘加热..."
             key == "rearviewMirrorHeating_0" || lbl == "关闭后视镜加热" -> "正在关闭后视镜加热..."
             key.startsWith("rearviewMirrorHeating") || lbl.contains("后视镜加热") -> "正在开启后视镜加热..."
-            key.startsWith("fotaDownload") -> "正在启动固件下载..."
-            key.startsWith("fotaInstall") -> "正在发送固件升级指令..."
-            key.startsWith("fotaSchedule") -> "正在提交定时升级预约..."
             lbl.isNotBlank() && lbl != "应用空调设置" && lbl != "climate" -> "${lbl.removeSuffix("中").removeSuffix("...")}中..."
             else -> "处理中..."
         }
@@ -585,9 +582,6 @@ object ControlFeedbackFormatter {
             key == "deodorize" || key == "一键除味" || key == "快速除味" -> "快速除味已开启"
             key == "sentryOn" -> "哨兵模式已开启"
             key == "sentryOff" -> "哨兵模式已关闭"
-            key.startsWith("fotaDownload") -> "固件下载已启动"
-            key.startsWith("fotaInstall") -> "整车升级指令已发送"
-            key.startsWith("fotaSchedule") -> "定时升级已预约成功"
             key == "sentry" || key == "哨兵模式" -> "哨兵模式设置成功"
             key == "batteryPreheat" || key == "电池预热" -> "电池预热已开启"
             key == "batteryPreheatOff" || key == "关闭电池预热" -> "电池预热已关闭"
@@ -1168,20 +1162,6 @@ object Commands {
                 }
                 name == "rearviewMirrorHeating_on" -> buildRearviewMirrorHeating(true)
                 name == "rearviewMirrorHeating_off" -> buildRearviewMirrorHeating(false)
-                name.startsWith("fotaDownload:") -> {
-                    val taskId = name.removePrefix("fotaDownload:")
-                    ControlCommand("390", """{"taskId":"$taskId"}""", "下载固件")
-                }
-                name.startsWith("fotaInstall:") -> {
-                    val taskId = name.removePrefix("fotaInstall:")
-                    ControlCommand("391", """{"taskId":"$taskId"}""", "安装固件")
-                }
-                name.startsWith("fotaSchedule:") -> {
-                    val parts = name.removePrefix("fotaSchedule:").split(":", limit = 2)
-                    val taskId = parts.getOrNull(0).orEmpty()
-                    val time = parts.getOrNull(1).orEmpty()
-                    ControlCommand("392", """{"taskId":"$taskId","scheduleTime":"$time"}""", "预约安装固件")
-                }
                 else -> throw ApiException("未知命令: $name")
             }
         }
@@ -1628,16 +1608,6 @@ object SentryModeControlPolicy {
     }
 }
 
-object VehicleOtaPolicy {
-    const val SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE = "当前账号为授权子账号，车机 OTA 更新需车主主账号操作"
-    const val SUB_ACCOUNT_OTA_HINT_TITLE = "子账号无车机 OTA 更新权限"
-    const val SUB_ACCOUNT_OTA_HINT_DESC = "受整车安全法规与零跑官方云端权限管控，固件版本检测、更新日志查看与远程刷写升级仅限车主主账号可用。\n\n如需检查或升级车机系统，请使用车主手机号登录。"
-
-    fun canOperateOta(isSharedAccount: Boolean): Boolean {
-        return !isSharedAccount
-    }
-}
-
 object SensitiveControlPolicy {
     const val LONG_PRESS_HOLD_DURATION_MS = 1200L
     const val SENSITIVE_ACTION_HINT = "高敏感操作请长按1.2秒开启"
@@ -1847,130 +1817,6 @@ sealed interface ParkingPhotoLoadState {
 }
 
 /** 整车 FOTA 固件升级状态枚举 */
-enum class OtaStatus {
-    UP_TO_DATE,        // 已是最新版本
-    UPDATE_AVAILABLE,  // 发现新版本（待下载）
-    DOWNLOADING,       // 正在下载固件包
-    DOWNLOADED,        // 固件包已下载（待安装）
-    INSTALLING,        // 正在刷写安装
-    SCHEDULED,         // 已预约定时安装
-    FAILED,            // 升级/下载失败
-    UNKNOWN            // 未知
-}
-
-/** 车辆车机系统与 OTA 固件升级详情数据模型 */
-data class VehicleOtaInfo(
-    val currentVersion: String = "--",
-    val hasNewVersion: Boolean = false,
-    val newVersion: String = "",
-    val releaseNotes: String = "",
-    val updateTime: String = "",
-    val taskId: String = "",
-    val packageSize: String = "",
-    val status: OtaStatus = OtaStatus.UP_TO_DATE,
-    val progressPercent: Int? = null,
-    val scheduledTime: String? = null,
-    val rawJson: JSONObject? = null
-) {
-    val isUpToDate: Boolean get() =
-        status == OtaStatus.UP_TO_DATE ||
-        (!hasNewVersion && status != OtaStatus.DOWNLOADING && status != OtaStatus.DOWNLOADED && status != OtaStatus.INSTALLING && status != OtaStatus.FAILED)
-    val isDownloading: Boolean get() = status == OtaStatus.DOWNLOADING
-    val isDownloaded: Boolean get() = status == OtaStatus.DOWNLOADED
-    val isInstalling: Boolean get() = status == OtaStatus.INSTALLING
-    val isScheduled: Boolean get() = status == OtaStatus.SCHEDULED || !scheduledTime.isNullOrBlank()
-
-    companion object {
-        fun fromJson(data: JSONObject?, code: String? = null, msg: String? = null): VehicleOtaInfo {
-            if (data == null || data.length() == 0) {
-                return VehicleOtaInfo(
-                    currentVersion = "最新系统",
-                    hasNewVersion = false,
-                    status = OtaStatus.UP_TO_DATE,
-                    releaseNotes = msg.orEmpty()
-                )
-            }
-            val current = data.optString("versionNo")
-                .ifBlank { data.optString("currentVersion") }
-                .ifBlank { data.optString("curVersion") }
-                .ifBlank { data.optString("version") }
-                .ifBlank { data.optString("currentVer") }
-                .ifBlank { "最新系统" }
-            val next = data.optString("targetVersion")
-                .ifBlank { data.optString("newVersion") }
-                .ifBlank { data.optString("nextVersion") }
-                .ifBlank { data.optString("upgradeVersion") }
-                .ifBlank { data.optString("updateVersion") }
-            val notes = data.optString("logContent")
-                .ifBlank { data.optString("releaseNotes") }
-                .ifBlank { data.optString("description") }
-                .ifBlank { data.optString("updateContent") }
-                .ifBlank { data.optString("content") }
-                .ifBlank { data.optString("remark") }
-            val updateTime = data.optString("updateTime")
-                .ifBlank { data.optString("releaseDate") }
-            val taskId = data.optString("taskId")
-                .ifBlank { data.optString("fotaTaskId") }
-                .ifBlank { data.optString("id") }
-            val rawSize = data.optLong("fileSize", 0L).takeIf { it > 0 }
-                ?: data.optLong("packageSize", 0L).takeIf { it > 0 }
-                ?: data.optLong("size", 0L).takeIf { it > 0 }
-            val sizeStr = when {
-                rawSize != null && rawSize > 1024L * 1024L * 1024L -> String.format(java.util.Locale.US, "%.2f GB", rawSize.toDouble() / (1024L * 1024L * 1024L))
-                rawSize != null && rawSize > 1024L * 1024L -> String.format(java.util.Locale.US, "%.1f MB", rawSize.toDouble() / (1024L * 1024L))
-                else -> data.optString("sizeStr").ifBlank { data.optString("packageSizeStr") }
-            }
-            val rawStatus = data.optInt("status", -1).takeIf { it != -1 }
-                ?: data.optInt("state", -1).takeIf { it != -1 }
-                ?: data.optInt("downloadStatus", -1).takeIf { it != -1 }
-                ?: data.optInt("upgradeStatus", -1)
-            val progress = data.optInt("progress", -1).takeIf { it >= 0 }
-                ?: data.optInt("downloadProgress", -1).takeIf { it >= 0 }
-                ?: data.optInt("percent", -1).takeIf { it >= 0 }
-            val hasUpdate = data.optBoolean("hasNewVersion", false) ||
-                data.optBoolean("hasUpdate", false) ||
-                (next.isNotBlank() && next != current && next != "--")
-
-            val scheduledTime = data.optString("scheduleTime")
-                .ifBlank { data.optString("scheduledTime") }
-                .ifBlank { data.optString("appointmentTime") }
-                .takeIf { it.isNotBlank() }
-
-            val statusEnum = when {
-                rawStatus == 2 || (progress != null && progress in 1..99) -> OtaStatus.DOWNLOADING
-                rawStatus == 5 -> OtaStatus.SCHEDULED
-                rawStatus == 3 || progress == 100 -> OtaStatus.DOWNLOADED
-                rawStatus == 4 -> OtaStatus.INSTALLING
-                rawStatus == 6 -> OtaStatus.FAILED
-                hasUpdate -> OtaStatus.UPDATE_AVAILABLE
-                else -> OtaStatus.UP_TO_DATE
-            }
-
-            return VehicleOtaInfo(
-                currentVersion = current,
-                hasNewVersion = hasUpdate,
-                newVersion = next,
-                releaseNotes = notes,
-                updateTime = updateTime,
-                taskId = taskId,
-                packageSize = sizeStr,
-                status = statusEnum,
-                progressPercent = progress,
-                scheduledTime = scheduledTime,
-                rawJson = data
-            )
-        }
-    }
-}
-
-/** 界面展示态 */
-sealed interface VehicleOtaState {
-    data object Idle : VehicleOtaState
-    data object Checking : VehicleOtaState
-    data class Success(val info: VehicleOtaInfo) : VehicleOtaState
-    data class Error(val message: String) : VehicleOtaState
-}
-
 /** 零跑车辆云端预约充电计划配置模型 (对应 commonConfig 的 config.3) */
 data class VehicleChargePlan(
     val isEnable: Boolean,

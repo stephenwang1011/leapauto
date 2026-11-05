@@ -135,18 +135,24 @@ object ChargeStatus {
      */
     fun isGunConnected(status: JSONObject?): Boolean {
         if (status == null) return false
-        val ac = boolean(status.opt("acInputSlowCharge")) == true
-        val dc = boolean(status.opt("dcInputFastCharge")) == true
+        val ac = boolean(status.opt("acInputSlowCharge"))
+        val dc = boolean(status.opt("dcInputFastCharge"))
         val s = state(status)
-        return ac || dc || s in setOf(1, 2, 4, 5, 6)
+        if (ac == false && dc == false) {
+            return s in setOf(1, 2, 6)
+        }
+        return ac == true || dc == true || s in setOf(1, 2, 4, 5, 6)
     }
 
     fun isGunConnected(values: Map<String, Any?>?): Boolean {
         if (values == null) return false
-        val ac = boolean(values["acInputSlowCharge"]) == true
-        val dc = boolean(values["dcInputFastCharge"]) == true
+        val ac = boolean(values["acInputSlowCharge"])
+        val dc = boolean(values["dcInputFastCharge"])
         val s = state(values)
-        return ac || dc || s in setOf(1, 2, 4, 5, 6)
+        if (ac == false && dc == false) {
+            return s in setOf(1, 2, 6)
+        }
+        return ac == true || dc == true || s in setOf(1, 2, 4, 5, 6)
     }
 
     private fun type(value: Any?): String? = when (boolean(value)) {

@@ -285,7 +285,6 @@ class MainActivity : ComponentActivity() {
     private var scheduledAcPlan by mutableStateOf(ScheduledAcPlan())
     private var scheduledAcCapability by mutableStateOf(ScheduledAcCapability.UNKNOWN)
     private var versionUpdateState by mutableStateOf<VersionUpdateState>(VersionUpdateState.Idle)
-    private var vehicleOtaState by mutableStateOf<VehicleOtaState>(VehicleOtaState.Idle)
     private var showPowerTypeDialog by mutableStateOf(false)
     private var handledUpdateVersion by mutableStateOf<String?>(null)
     private var downloadUpdateProgress by mutableStateOf<Int?>(null)
@@ -511,11 +510,6 @@ class MainActivity : ComponentActivity() {
                     currentVersion = AppReleaseInfo.currentVersion,
                     currentReleaseNotes = AppReleaseInfo.currentReleaseNotes,
                     versionUpdateState = versionUpdateState,
-                    vehicleOtaState = vehicleOtaState,
-                    onCheckVehicleOta = { checkForVehicleOta(force = true) },
-                    onDownloadVehicleOta = ::downloadVehicleOta,
-                    onInstallVehicleOta = ::installVehicleOta,
-                    onScheduleVehicleOta = ::scheduleVehicleOta,
                     handledUpdateVersion = handledUpdateVersion,
                     showSessionExpiredDialog = showSessionExpiredDialog,
                     phone = phone,
@@ -757,7 +751,6 @@ class MainActivity : ComponentActivity() {
         val identity = currentBluetoothIdentity() ?: return
         if (bluetoothSessionIdentity != null && bluetoothSessionIdentity != identity) {
         clearBluetoothState(closePage = true)
-        vehicleOtaState = VehicleOtaState.Idle
         optimisticHealthyChargeLimitSoc = null
         optimisticHealthyChargeEnabled = null
         lastChargingSettingsActionEpochMs = 0L
@@ -1600,7 +1593,6 @@ class MainActivity : ComponentActivity() {
         showSessionExpiredDialog = false
         loggedIn = false
         versionUpdateState = VersionUpdateState.Idle
-        vehicleOtaState = VehicleOtaState.Idle
         busy = false
         toast("已登出")
     }
@@ -2391,74 +2383,6 @@ class MainActivity : ComponentActivity() {
         } catch (_: ActivityNotFoundException) {
             toast("未找到可用的浏览器")
         }
-    }
-
-    private fun checkForVehicleOta(force: Boolean = false) {
-        val vin = session.selectedVin
-        if (vin.isBlank() || !loggedIn) return
-        val currentVehicle = availableVehicles.firstOrNull { it.vin == vin }
-        if (currentVehicle?.isSharedAccount == true) {
-            vehicleOtaState = VehicleOtaState.Error(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
-            return
-        }
-        if (!force && vehicleOtaState is VehicleOtaState.Checking) return
-        vehicleOtaState = VehicleOtaState.Checking
-        val generation = operationGeneration
-        asyncWorker.execute {
-            try {
-                val api = LeapmotorApi(session)
-                val info = api.getVehicleOtaInfo(vin)
-                runOnMain(generation) {
-                    vehicleOtaState = if (info != null) {
-                        VehicleOtaState.Success(info)
-                    } else {
-                        VehicleOtaState.Success(VehicleOtaInfo(currentVersion = "车机系统", hasNewVersion = false, status = OtaStatus.UP_TO_DATE))
-                    }
-                }
-            } catch (e: Exception) {
-                runOnMain(generation) {
-                    vehicleOtaState = VehicleOtaState.Error(e.message ?: "检查车机更新失败")
-                }
-            }
-        }
-    }
-
-    private fun downloadVehicleOta(taskId: String) {
-        if (taskId.isBlank()) return
-        val currentVehicle = availableVehicles.firstOrNull { it.vin == session.selectedVin }
-        if (currentVehicle?.isSharedAccount == true) {
-            toast(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
-            return
-        }
-        control(Commands.build("fotaDownload:$taskId"), commandName = "fotaDownload:$taskId")
-    }
-
-    private fun installVehicleOta(taskId: String, pin: String) {
-        if (taskId.isBlank()) return
-        val currentVehicle = availableVehicles.firstOrNull { it.vin == session.selectedVin }
-        if (currentVehicle?.isSharedAccount == true) {
-            toast(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
-            return
-        }
-        if (pin.length == 4) {
-            sessionStore.saveOpPassword(pin)
-            pinSaved = true
-        }
-        control(Commands.build("fotaInstall:$taskId"), commandName = "fotaInstall:$taskId")
-    }
-
-    private fun scheduleVehicleOta(taskId: String, scheduleTime: String, pin: String) {
-        if (taskId.isBlank() || scheduleTime.isBlank()) return
-        val currentVehicle = availableVehicles.firstOrNull { it.vin == session.selectedVin }
-        if (currentVehicle?.isSharedAccount == true) {
-            toast(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
-            return
-        }
-        if (pin.length == 4) {
-            sessionStore.saveOpPassword(pin)
-            pinSaved = true
-        }
-        control(Commands.build("fotaSchedule:$taskId:$scheduleTime"), commandName = "fotaSchedule:$taskId:$scheduleTime")
     }
 
     private var lastUpdateCheckEpochMs = 0L
@@ -3296,13 +3220,6 @@ class MainActivity : ComponentActivity() {
     /** 统一整车控车极速阶梯早退轮询：实车信号达成即刻早退闭环 */
     private fun scheduleControlStatusRefreshes(commandName: String) {
         cancelPendingControlStatusRefreshes()
-        if (commandName.startsWith("fota")) {
-            mainHandler.postDelayed({
-                if (!activityDestroyed && loggedIn) {
-                    checkForVehicleOta(force = true)
-                }
-            }, 1_500L)
-        }
         val checkpoints = VehicleControlConfirmationPolicy.telemetryRefreshScheduleMs(commandName)
         checkpoints.forEach { delayMs ->
             val runnable = object : Runnable {
@@ -4900,13 +4817,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun controlFailureMessage(label: String, error: Exception): String {
-        val raw = error.message.orEmpty()
+        val raw = error.message.orEmpty().trim()
+        val serverMsg = when {
+            raw.startsWith("控车失败") -> raw.removePrefix("控车失败").trimStart('(', ')', ':', ' ')
+            raw.contains(":") -> raw.substringAfterLast(":").trim()
+            else -> raw
+        }.takeUnless { it.contains("VIN=") || it.contains("token=") || it.contains("oppwd=") || it.startsWith("java.") || it.isBlank() }
         return when {
             OperationPasswordErrorPolicy.isPasswordError(error) -> OperationPasswordErrorPolicy.ERROR_PROMPT_MESSAGE
             raw.contains("token", ignoreCase = true) || raw.contains("鉴权") -> "登录状态已过期，请重新登录"
             raw.contains("timeout", ignoreCase = true) || raw.contains("超时") -> "${label}响应超时，请稍后重试"
             raw.contains("网络") || raw.contains("连接") || raw.contains("Connect", ignoreCase = true) -> "网络连接异常，请检查网络"
             raw.contains("500") || raw.contains("502") || raw.contains("503") || raw.contains("504") -> "车联服务暂时繁忙，请稍后重试"
+            !serverMsg.isNullOrBlank() -> "${label}未完成：$serverMsg"
             else -> "${label}未完成，请稍后重试"
         }
     }

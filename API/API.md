@@ -630,10 +630,8 @@
 | `startCharging` | `193` | `{"value":"start"}` | 远程启动即时充电 | 4位操作密码 |
 | `stopCharging` | `193` | `{"value":"finish"}` | 远程停止当前充电 | 4位操作密码 |
 | `unlockCharger` | `192` | `{"operation":"unlock"}` | 解锁充电枪物理锁止销 | 4位操作密码 |
-| `fotaDownload` | `390` | `{"taskId":"{taskId}"}` | 触发车机开始下载新版固件包 | 4位操作密码 |
-| `fotaInstall` | `391` | `{"taskId":"{taskId}"}` | 触发车机就地刷写安装固件 | 4位操作密码 |
-| `fotaSchedule` | `392` | `{"taskId":"{taskId}","scheduleTime":"2026-09-24 03:00:00"}` | 预约车机在凌晨静默升级 | 4位操作密码 |
 
+> 车机系统 OTA 功能（390/391/392 及查询接口）因缺乏官方真实控车抓包已从客户端彻底移除。
 > 直进直出生产功能已从 App 移除。历史抓包中的 `cmdid=410` 与 EEED/EEE2
 > 研究资料仅用于协议分析，不属于当前支持的命令或用户功能。
 
@@ -660,27 +658,9 @@
 
 ---
 
-### 接口 13：车机 FOTA 固件升级查询与控制
-* **URL**: `GET https://appgateway.leapmotor.com/carownerservice/v3/api/fota/getCurrentVersion?vin={vin}&...`
-* **Response 示例**:
-  ```json
-  {
-    "code": 0,
-    "data": {
-      "hasNewVersion": true,
-      "currentVersion": "2.02.80",
-      "targetVersion": "2.03.10",
-      "releaseNotes": "1. 优化座舱空调控制逻辑\n2. 增强辅助驾驶感知能力",
-      "status": 3,
-      "taskId": "fota_task_987654321",
-      "scheduleTime": "2026-09-24 02:00:00"
-    }
-  }
-  ```
-* **状态机说明 (`status`)**:
-  `0`=已是最新版本, `1`=待下载, `2`=下载固件中, `3`=下载完成待安装, `4`=固件安装刷写中, `5`=升级完成。
-* **重置状态机**: `POST {appRegion}/app/app-fota-service/v1/fota/resetStatus`（用于升级遇阻时释放锁）。
-* **客户端方法**: `LeapmotorApi.getVehicleOtaInfo()` / `fotaResetStatus()`
+### 接口 13：车机 FOTA 固件升级查询与控制（已下线移除）
+> **状态**：车机系统 OTA 功能已于 4.5.9 彻底从应用中移除。官方车机端系统固件升级由整车车机系统在联网锁车时自主完成，本客户端不再提供车机 FOTA 固件检测与下发刷写功能。
+> 历史研究记录保留供协议查阅：`GET https://appgateway.leapmotor.com/carownerservice/v3/api/fota/getCurrentVersion`。
 
 ---
 
