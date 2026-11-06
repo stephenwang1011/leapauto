@@ -61,4 +61,41 @@ class WidgetVehicleAppearanceTest {
         org.junit.Assert.assertTrue(widgetSource.contains("scaleBitmapForWidget(remoteBitmap, 680, 0.94f)"))
         org.junit.Assert.assertTrue(compactSource.contains("scaleBitmapForWidget(remoteBitmap, 520, 0.94f)"))
     }
+
+    @Test
+    fun `widgetTitle prioritizes user nickname and session nickname`() {
+        val appearance = VehicleAppearance("C16", VehicleAppearanceCatalog.colorOption("C16", null))
+        val customConfig = SessionStore.VehicleConfig(nickname = "大白")
+        assertEquals("大白", ControlWidget.widgetTitle(customConfig, appearance))
+
+        // config.nickname 为空时回退到 sessionNickname
+        val emptyConfig = SessionStore.VehicleConfig(nickname = "")
+        assertEquals("🐷哥's C16", ControlWidget.widgetTitle(emptyConfig, appearance, sessionNickname = "🐷哥's C16"))
+
+        // sessionNickname 也为空时回退到 vehicleNickname
+        assertEquals("小灰灰", ControlWidget.widgetTitle(emptyConfig, appearance, vehicleNickname = "小灰灰"))
+
+        // 全部为空时回退到车型
+        assertEquals("零跑 C16", ControlWidget.widgetTitle(emptyConfig, appearance))
+    }
+
+    @Test
+    fun `widgetTitle filters out Lafa5 and B05 and falls back to clean brand title`() {
+        val lafaAppearance = VehicleAppearance("Lafa5", VehicleAppearanceCatalog.colorOption("Lafa5", null))
+        val configWithLafa = SessionStore.VehicleConfig(nickname = "Lafa5")
+        // 如果曾因历史 bug 保存过 Lafa5 昵称，严格过滤并显示车型品牌
+        assertEquals("零跑", ControlWidget.widgetTitle(configWithLafa, lafaAppearance))
+
+        val emptyConfig = SessionStore.VehicleConfig(nickname = "")
+        assertEquals("零跑", ControlWidget.widgetTitle(emptyConfig, lafaAppearance))
+    }
+
+    @Test
+    fun `widget canonicalModel falls back to C16 instead of Lafa5 when model is unknown or blank`() {
+        val blankAppearance = VehicleAppearanceCatalog.resolveAppearance("", null)
+        assertEquals("C16", blankAppearance.model)
+
+        val unknownAppearance = VehicleAppearanceCatalog.resolveAppearance("UNKNOWN_MODEL", null)
+        assertEquals("C16", unknownAppearance.model)
+    }
 }

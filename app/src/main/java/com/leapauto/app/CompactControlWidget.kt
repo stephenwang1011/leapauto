@@ -24,7 +24,14 @@ class CompactControlWidget : AppWidgetProvider() {
                 val darkTheme = ControlWidget.widgetEffectiveDarkTheme(context)
                 val session = store.load()
                 val snapshot = store.loadSelectedWidgetSnapshot()
-                val config = store.loadVehicleConfig(session.selectedVin, session.selectedCarType)
+                val vehicles = store.loadVehicles()
+                val matchedVehicle = vehicles.firstOrNull { it.vin == session.selectedVin }
+                val fallbackNickname = session.selectedNickname.ifBlank { matchedVehicle?.nickname.orEmpty() }
+                val config = store.loadVehicleConfig(
+                    vin = session.selectedVin,
+                    defaultModel = session.selectedCarType,
+                    defaultNickname = fallbackNickname
+                )
                 val appearance = ControlWidget.resolveWidgetAppearance(
                     config,
                     snapshot?.carType ?: session.selectedCarType
@@ -45,7 +52,8 @@ class CompactControlWidget : AppWidgetProvider() {
                 setInt(R.id.compactWidgetRoot, "setBackgroundResource", 0)
                 setVehicleImage(this, appearance, session.selectedVin, context)
                 applyStaticAppearance(themeContext, this)
-                setTextViewText(R.id.txtWCTitle, ControlWidget.widgetTitle(config, appearance))
+                val title = ControlWidget.widgetTitle(config, appearance, session.selectedNickname, matchedVehicle?.nickname.orEmpty())
+                setTextViewText(R.id.txtWCTitle, title)
                 setTextViewText(R.id.txtWCUpdated, snapshot?.updated?.removePrefix("今天")?.trim().orEmpty())
                 val resolvedPowerType = VehiclePowerTypeResolver.resolve(
                     configuredPowerType = config.powerType,
@@ -87,9 +95,17 @@ class CompactControlWidget : AppWidgetProvider() {
                 val themeContext = ControlWidget.widgetThemeContext(context)
                 val snapshot = store.loadSelectedWidgetSnapshot()
                 val session = store.load()
-                val config = store.loadVehicleConfig(session.selectedVin, session.selectedCarType)
+                val vehicles = store.loadVehicles()
+                val matchedVehicle = vehicles.firstOrNull { it.vin == session.selectedVin }
+                val fallbackNickname = session.selectedNickname.ifBlank { matchedVehicle?.nickname.orEmpty() }
+                val config = store.loadVehicleConfig(
+                    vin = session.selectedVin,
+                    defaultModel = session.selectedCarType,
+                    defaultNickname = fallbackNickname
+                )
                 val appearance = ControlWidget.resolveWidgetAppearance(config, snapshot?.carType ?: session.selectedCarType)
-                setTextViewText(R.id.txtWCTitle, ControlWidget.widgetTitle(config, appearance))
+                val title = ControlWidget.widgetTitle(config, appearance, session.selectedNickname, matchedVehicle?.nickname.orEmpty())
+                setTextViewText(R.id.txtWCTitle, title)
                 setTextViewText(R.id.txtWCUpdated, snapshot?.updated?.removePrefix("今天")?.trim().orEmpty())
                 val resolvedPowerType = VehiclePowerTypeResolver.resolve(
                     configuredPowerType = config.powerType,

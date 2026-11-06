@@ -203,10 +203,18 @@ class ControlWidget : AppWidgetProvider() {
             applyStaticAppearance(themeContext, this)
             val snapshot = store.loadSelectedWidgetSnapshot()
             val session = store.load()
-            val config = store.loadVehicleConfig(session.selectedVin, session.selectedCarType)
+            val vehicles = store.loadVehicles()
+            val matchedVehicle = vehicles.firstOrNull { it.vin == session.selectedVin }
+            val fallbackNickname = session.selectedNickname.ifBlank { matchedVehicle?.nickname.orEmpty() }
+            val config = store.loadVehicleConfig(
+                vin = session.selectedVin,
+                defaultModel = session.selectedCarType,
+                defaultNickname = fallbackNickname
+            )
             val appearance = resolveWidgetAppearance(config, snapshot?.carType ?: session.selectedCarType)
             setVehicleImage(this, appearance, session.selectedVin, context)
-            setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
+            val title = widgetTitle(config, appearance, session.selectedNickname, matchedVehicle?.nickname.orEmpty())
+            setTextViewText(R.id.txtWTitle, title)
             snapshot?.let { snapshot ->
                 val widgetPowerType = VehiclePowerTypeResolver.resolve(
                     configuredPowerType = config.powerType,
@@ -214,7 +222,7 @@ class ControlWidget : AppWidgetProvider() {
                     cachedPowerType = snapshot.powerType,
                     hasFuelTelemetry = snapshot.fuelRange != null || snapshot.fuelSoc != null
                 )
-                setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
+                setTextViewText(R.id.txtWTitle, title)
                 setTextViewText(R.id.txtWRange, snapshot.range)
                 applyRangePresentation(
                     themeContext,
@@ -281,12 +289,20 @@ class ControlWidget : AppWidgetProvider() {
                 applyStaticAppearance(themeContext, views)
             }
             val session = store.load()
-            val config = store.loadVehicleConfig(session.selectedVin, carType)
+            val vehicles = store.loadVehicles()
+            val matchedVehicle = vehicles.firstOrNull { it.vin == session.selectedVin }
+            val fallbackNickname = session.selectedNickname.ifBlank { matchedVehicle?.nickname.orEmpty() }
+            val config = store.loadVehicleConfig(
+                vin = session.selectedVin,
+                defaultModel = carType,
+                defaultNickname = fallbackNickname
+            )
             val displayStatus = status
             val appearance = resolveWidgetAppearance(config, carType)
+            val title = widgetTitle(config, appearance, session.selectedNickname, matchedVehicle?.nickname.orEmpty())
+            views.setTextViewText(R.id.txtWTitle, title)
             if (!partial) {
                 setVehicleImage(views, appearance, session.selectedVin, context)
-                views.setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
             }
             val effectivePowerType = VehiclePowerTypeResolver.fromStatus(
                 status = displayStatus,
@@ -346,15 +362,23 @@ class ControlWidget : AppWidgetProvider() {
                 applyStaticAppearance(themeContext, views)
             }
             val session = store.load()
+            val vehicles = store.loadVehicles()
             val configVin = session.selectedVin.ifBlank { snapshot.vin }
-            val config = store.loadVehicleConfig(configVin, snapshot.carType)
+            val matchedVehicle = vehicles.firstOrNull { it.vin == configVin }
+            val fallbackNickname = session.selectedNickname.ifBlank { matchedVehicle?.nickname.orEmpty() }
+            val config = store.loadVehicleConfig(
+                vin = configVin,
+                defaultModel = snapshot.carType,
+                defaultNickname = fallbackNickname
+            )
             val appearance = resolveWidgetAppearance(
                 config,
                 snapshot.carType.ifBlank { session.selectedCarType }
             )
+            val title = widgetTitle(config, appearance, session.selectedNickname, matchedVehicle?.nickname.orEmpty())
+            views.setTextViewText(R.id.txtWTitle, title)
             if (!partial) {
                 setVehicleImage(views, appearance, configVin, context)
-                views.setTextViewText(R.id.txtWTitle, widgetTitle(config, appearance))
             }
             val widgetPowerType = VehiclePowerTypeResolver.resolve(
                 configuredPowerType = config.powerType,
@@ -808,15 +832,29 @@ class ControlWidget : AppWidgetProvider() {
         internal fun formatVehicleModel(carType: String): String {
             val model = carType.trim()
             return when {
-                model.isBlank() -> "零跑"
+                model.isBlank() || model.equals("Lafa5", ignoreCase = true) || model.equals("Lafa 5", ignoreCase = true) || model.equals("B05", ignoreCase = true) -> "零跑"
                 model.startsWith("零跑") -> model
                 else -> "零跑 $model"
             }
         }
 
         /** 车辆昵称优先，未设置昵称时回退到车型名。 */
-        internal fun widgetTitle(config: SessionStore.VehicleConfig, appearance: VehicleAppearance): String =
-            config.nickname.trim().takeIf { it.isNotEmpty() } ?: formatVehicleModel(appearance.model)
+        internal fun widgetTitle(
+            config: SessionStore.VehicleConfig,
+            appearance: VehicleAppearance,
+            sessionNickname: String = "",
+            vehicleNickname: String = ""
+        ): String {
+            val candidate = config.nickname.trim().ifEmpty {
+                sessionNickname.trim().ifEmpty {
+                    vehicleNickname.trim()
+                }
+            }
+            if (candidate.isNotEmpty() && !candidate.equals("Lafa5", ignoreCase = true) && !candidate.equals("Lafa 5", ignoreCase = true) && !candidate.equals("B05", ignoreCase = true)) {
+                return candidate
+            }
+            return formatVehicleModel(appearance.model)
+        }
 
         /**
          * Appearance configuration is display-only. The reported carType remains

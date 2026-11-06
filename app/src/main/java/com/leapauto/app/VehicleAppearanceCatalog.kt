@@ -96,7 +96,7 @@ object VehicleAppearanceCatalog {
         val normalized = VehicleConfigConfirmationPolicy.normalizeModel(model.orEmpty())
         return when (normalized) {
             "B05", "Lafa5" -> "Lafa5"
-            else -> normalized?.takeIf { it in colorsByModel } ?: "Lafa5"
+            else -> normalized?.takeIf { it in colorsByModel } ?: "C16"
         }
     }
 }
