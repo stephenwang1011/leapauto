@@ -320,7 +320,7 @@ object ThemeManager {
         return when (effectiveId) {
             "7" -> ThemeTone.LIGHT // 雾川雪镜：雪山冰河高亮底
             "8" -> ThemeTone.LIGHT // 晴空广场：湛蓝天空留白高光底
-            "5" -> ThemeTone.LIGHT // 余晖石筑：浅色暮色原野石筑，高光浅底
+            "5" -> ThemeTone.LIGHT // 余晖石筑：浅色暖砂石筑，高光浅底（深色文字）
             else -> ThemeTone.AUTO // 默认主题跟随系统
         }
     }

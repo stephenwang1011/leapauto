@@ -131,6 +131,8 @@ class CompactControlWidget : AppWidgetProvider() {
                 )
                 applyLockPresentation(themeContext, this, snapshot?.locked)
                 applyAcPresentation(themeContext, this, snapshot?.acEnabled, snapshot?.acTone ?: ClimateTemperatureTone.DEFAULT)
+                applyStaticAppearance(themeContext, this)
+                setOnClickPendingIntent(R.id.compactWidgetRoot, ControlWidget.openAppPendingIntent(context))
             }
 
         fun refreshAppearance(context: Context) {

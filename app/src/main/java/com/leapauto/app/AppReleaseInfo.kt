@@ -5,5 +5,5 @@ object AppReleaseInfo {
         get() = BuildConfig.VERSION_NAME
 
     // Update this text together with apkVersionName before each delivery package.
-    const val currentReleaseNotes = "1. UI调整和bug修复"
+    const val currentReleaseNotes = "1. 修复桌面插件点击响应与余晖石筑高光主题文字配色"
 }

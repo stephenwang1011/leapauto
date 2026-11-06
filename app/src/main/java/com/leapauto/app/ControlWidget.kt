@@ -33,6 +33,8 @@ import java.util.concurrent.TimeUnit
 class ControlWidget : AppWidgetProvider() {
 
     companion object {
+        const val ACTION_WIDGET_COMMAND = "com.leapauto.app.action.WIDGET_COMMAND"
+
         /** 在不重建布局的前提下，把控车进度回写到所有桌面插件实例。 */
         fun showControlStatus(
             context: Context,
@@ -286,8 +288,9 @@ class ControlWidget : AppWidgetProvider() {
             val darkTheme = widgetEffectiveDarkTheme(context)
             if (!partial) {
                 applyWidgetBackground(context, views, darkTheme)
-                applyStaticAppearance(themeContext, views)
             }
+            applyStaticAppearance(themeContext, views)
+            views.setOnClickPendingIntent(R.id.widgetRoot, openAppPendingIntent(context))
             val session = store.load()
             val vehicles = store.loadVehicles()
             val matchedVehicle = vehicles.firstOrNull { it.vin == session.selectedVin }
@@ -359,8 +362,9 @@ class ControlWidget : AppWidgetProvider() {
             val darkTheme = widgetEffectiveDarkTheme(context)
             if (!partial) {
                 applyWidgetBackground(context, views, darkTheme)
-                applyStaticAppearance(themeContext, views)
             }
+            applyStaticAppearance(themeContext, views)
+            views.setOnClickPendingIntent(R.id.widgetRoot, openAppPendingIntent(context))
             val session = store.load()
             val vehicles = store.loadVehicles()
             val configVin = session.selectedVin.ifBlank { snapshot.vin }
@@ -928,9 +932,11 @@ class ControlWidget : AppWidgetProvider() {
 
         internal fun click(context: Context, command: String): PendingIntent {
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            val intent = Intent(context, ControlService::class.java)
-                .putExtra(ControlService.EXTRA_COMMAND, command)
-            return PendingIntent.getForegroundService(context, command.hashCode(), intent, flags)
+            val intent = Intent(context, ControlWidget::class.java).apply {
+                action = ACTION_WIDGET_COMMAND
+                putExtra(ControlService.EXTRA_COMMAND, command)
+            }
+            return PendingIntent.getBroadcast(context, command.hashCode(), intent, flags)
         }
 
         internal fun widgetUsesDarkAppearance(context: Context): Boolean {
@@ -1115,6 +1121,20 @@ class ControlWidget : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
+            ACTION_WIDGET_COMMAND -> {
+                val command = intent.getStringExtra(ControlService.EXTRA_COMMAND)
+                if (!command.isNullOrBlank()) {
+                    val serviceIntent = Intent(context, ControlService::class.java).apply {
+                        putExtra(ControlService.EXTRA_COMMAND, command)
+                    }
+                    try {
+                        androidx.core.content.ContextCompat.startForegroundService(context, serviceIntent)
+                    } catch (e: Exception) {
+                        android.util.Log.e("ControlWidget", "Failed to start ControlService: ${e.message}")
+                    }
+                }
+                return
+            }
             Intent.ACTION_CONFIGURATION_CHANGED -> {
                 refreshAppearance(context)
                 return

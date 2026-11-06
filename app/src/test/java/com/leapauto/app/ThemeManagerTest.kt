@@ -222,7 +222,7 @@ class ThemeManagerTest {
 
     @Test
     fun `shouldApplyNightMoodFilter applies only to light themes in dark mode`() {
-        // 在深色模式下，浅色主题（7、8、5）需要夜巡微暗滤镜
+        // 在深色模式下，浅色高光主题（7、8、5）需要夜巡微暗滤镜
         assertTrue(ThemeManager.shouldApplyNightMoodFilter("7", isSystemDark = true))
         assertTrue(ThemeManager.shouldApplyNightMoodFilter("8", isSystemDark = true))
         assertTrue(ThemeManager.shouldApplyNightMoodFilter("5", isSystemDark = true))
