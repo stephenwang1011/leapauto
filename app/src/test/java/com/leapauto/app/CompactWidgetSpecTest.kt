@@ -126,11 +126,11 @@ class CompactWidgetSpecTest {
         assertTrue(provider31.contains("android:minHeight=\"90dp\""))
         assertTrue(layout.contains("android:id=\"@+id/widgetActionRow\""))
         assertTrue(layout.contains("android:id=\"@+id/widgetBackgroundImg\""))
-        assertTrue(layout.contains("android:layout_marginTop=\"14dp\""))
-        assertTrue(layout.contains("android:layout_marginBottom=\"14dp\""))
+        assertTrue(layout.contains("android:layout_marginTop=\"8dp\""))
+        assertTrue(layout.contains("android:layout_marginBottom=\"8dp\""))
         assertTrue(layout.contains("android:id=\"@+id/imgWCar\""))
-        assertTrue(layout.contains("android:paddingTop=\"3dp\""))
-        assertTrue(layout.contains("android:paddingBottom=\"3dp\""))
+        assertTrue(layout.contains("android:layout_weight=\"1.15\""))
+        assertTrue(layout.contains("android:layout_weight=\"0.85\""))
     }
 
     @Test

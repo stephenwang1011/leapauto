@@ -44,11 +44,13 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -1422,60 +1424,95 @@ private fun WheelPickerColumn(
     onIndexChanged: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var dragAccumulator by remember { mutableFloatStateOf(0f) }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val itemHeight = 32.dp
     val density = LocalDensity.current
     val itemHeightPx = with(density) { itemHeight.toPx() }
+    val coroutineScope = rememberCoroutineScope()
+
+    val virtualCount = items.size * 200
+    val initialVirtualIndex = remember(items.size) {
+        val mid = virtualCount / 2
+        (mid - (mid % items.size)) + selectedIndex.coerceIn(0, items.size - 1)
+    }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = initialVirtualIndex)
+    val flingBehavior = androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior(lazyListState = listState)
+
+    val currentRawIndex by remember {
+        androidx.compose.runtime.derivedStateOf {
+            val offset = listState.firstVisibleItemScrollOffset
+            val extra = if (offset > itemHeightPx / 2) 1 else 0
+            listState.firstVisibleItemIndex + extra
+        }
+    }
+    val currentActualIndex by remember {
+        androidx.compose.runtime.derivedStateOf {
+            (currentRawIndex % items.size + items.size) % items.size
+        }
+    }
+
+    var lastHapticIndex by remember { androidx.compose.runtime.mutableIntStateOf(selectedIndex) }
+
+    LaunchedEffect(currentActualIndex) {
+        if (currentActualIndex != lastHapticIndex) {
+            lastHapticIndex = currentActualIndex
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+        }
+    }
+
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (!listState.isScrollInProgress) {
+            onIndexChanged(currentActualIndex)
+        }
+    }
+
+    // 外部 selectedIndex 改变时同步对齐（若非滑动中）
+    LaunchedEffect(selectedIndex) {
+        if (!listState.isScrollInProgress && currentActualIndex != selectedIndex) {
+            val delta = selectedIndex - currentActualIndex
+            listState.scrollToItem(listState.firstVisibleItemIndex + delta)
+        }
+    }
 
     Box(
         modifier = modifier
             .height(itemHeight * 5)
-            .pointerInput(items.size, selectedIndex) {
-                detectVerticalDragGestures(
-                    onVerticalDrag = { change, dragAmount ->
-                        change.consume()
-                        dragAccumulator += dragAmount
-                        if (dragAccumulator <= -itemHeightPx) {
-                            val steps = (-dragAccumulator / itemHeightPx).toInt()
-                            dragAccumulator += steps * itemHeightPx
-                            onIndexChanged((selectedIndex + steps) % items.size)
-                        } else if (dragAccumulator >= itemHeightPx) {
-                            val steps = (dragAccumulator / itemHeightPx).toInt()
-                            dragAccumulator -= steps * itemHeightPx
-                            onIndexChanged((selectedIndex - steps + items.size * 100) % items.size)
-                        }
-                    },
-                    onDragEnd = { dragAccumulator = 0f },
-                    onDragCancel = { dragAccumulator = 0f }
-                )
-            },
+            .fillMaxWidth(),
         contentAlignment = Alignment.Center
     ) {
-        Column(
+        androidx.compose.foundation.lazy.LazyColumn(
+            state = listState,
+            flingBehavior = flingBehavior,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = itemHeight * 2),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            modifier = Modifier.fillMaxSize()
         ) {
-            for (offset in -2..2) {
-                val index = (selectedIndex + offset + items.size * 100) % items.size
-                val item = items[index]
-                val isSelected = offset == 0
-                val alpha = when (abs(offset)) {
+            items(virtualCount) { virtualIdx ->
+                val actualIdx = (virtualIdx % items.size + items.size) % items.size
+                val item = items[actualIdx]
+
+                val distance = kotlin.math.abs(virtualIdx - currentRawIndex)
+                val alpha = when (distance) {
                     0 -> 1f
                     1 -> 0.40f
                     else -> 0.16f
                 }
-                val fontSize = when (abs(offset)) {
+                val fontSize = when (distance) {
                     0 -> 24.sp
                     1 -> 16.sp
                     else -> 12.sp
                 }
-                val fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                val fontWeight = if (distance == 0) FontWeight.Bold else FontWeight.Normal
 
                 Box(
                     modifier = Modifier
                         .height(itemHeight)
                         .fillMaxWidth()
-                        .clickable { onIndexChanged(index) },
+                        .clickable {
+                            coroutineScope.launch {
+                                listState.animateScrollToItem(virtualIdx)
+                            }
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

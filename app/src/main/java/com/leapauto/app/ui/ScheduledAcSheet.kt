@@ -3,7 +3,11 @@ package com.leapauto.app.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.TextButton
+import com.leapauto.app.ui.theme.statusGood
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -121,12 +125,62 @@ internal fun ScheduledAcSheet(
             }
 
             if (loading) {
-                Text("正在读取服务器预约…")
+                Surface(
+                    shape = RoundedCornerShape(percent = 50),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {
+                    Text(
+                        "正在读取服务器预约…",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             } else if (loadFailed) {
-                Text("服务器预约读取失败，尚未确认当前状态")
-                Button(onClick = { attempt++ }) { Text("重试") }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "服务器预约读取失败，尚未确认当前状态",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    TextButton(onClick = { attempt++ }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
+                        Text("重试", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
             } else {
-            Text(if (draft.enabled) "已读取服务器预约" else "未预约")
+                Surface(
+                    shape = RoundedCornerShape(percent = 50),
+                    color = if (draft.enabled) MaterialTheme.statusGood.copy(alpha = 0.14f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
+                    border = BorderStroke(
+                        0.5.dp,
+                        if (draft.enabled) MaterialTheme.statusGood.copy(alpha = 0.40f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(
+                                    if (draft.enabled) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    CircleShape
+                                )
+                        )
+                        Text(
+                            text = if (draft.enabled) "已读取服务器预约" else "未预约",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (draft.enabled) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
             Surface(
                 shape = RoundedCornerShape(14.dp),
                 color = MaterialTheme.glassInsetSurface,
@@ -329,7 +383,7 @@ internal fun ScheduledAcSheet(
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                text = "开启定时空调时联动关闭打开的车窗，防止冷热气外泄",
+                                text = "定时到点时联动关闭打开的车窗，防止冷热气外泄",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -352,7 +406,7 @@ internal fun ScheduledAcSheet(
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                text = "开启定时空调时联动关闭全景天幕遮阳帘，隔绝阳光直晒",
+                                text = "定时到点时联动关闭全景天幕遮阳帘，隔绝阳光直晒",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -381,7 +435,6 @@ internal fun ScheduledAcSheet(
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp
                 )
-            }
             }
         }
     }
@@ -455,29 +508,25 @@ private fun ChoicePill(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = if (selected) MaterialTheme.statusGood.copy(alpha = 0.14f) else MaterialTheme.glassInsetSurface,
+        border = BorderStroke(
+            0.6.dp,
+            if (selected) MaterialTheme.statusGood.copy(alpha = 0.50f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+        ),
         modifier = modifier
             .height(36.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-                } else {
-                    MaterialTheme.glassInsetSurface
-                }
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
+            .clickable(onClick = onClick)
     ) {
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            }
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                color = if (selected) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }

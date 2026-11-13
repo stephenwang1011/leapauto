@@ -2230,6 +2230,7 @@ class MainActivity : ComponentActivity() {
                         if (confirmed != null && !confirmed.hasSchedule) {
                             persistScheduledAcPlan(vin, plan)
                             scheduledAcPlan = plan
+                            ScheduledAcScheduler.cancel(applicationContext, vin)
                             Toast.makeText(this@MainActivity, "已取消定时空调", Toast.LENGTH_SHORT).show()
                         } else {
                             Toast.makeText(this@MainActivity, "取消请求已提交，尚未确认取消，请稍后刷新", Toast.LENGTH_LONG).show()
@@ -2260,6 +2261,7 @@ class MainActivity : ComponentActivity() {
 
                 if (plan.enabled && success) {
                     var extraActions = ""
+                    // 第一重保障：保存开启时即刻联动密封车身
                     if (plan.closeWindows) {
                         try {
                             Thread.sleep(1200)
@@ -2282,6 +2284,10 @@ class MainActivity : ComponentActivity() {
                             Log.w("ScheduledAc", "联动关遮阳帘失败: ${e.message}")
                         }
                     }
+
+                    // 第二重保障：注册系统 AlarmManager 到点精准唤醒兜底
+                    ScheduledAcScheduler.schedule(applicationContext, vin, plan)
+
                     mainHandler.post {
                         Toast.makeText(
                             this@MainActivity,
@@ -2290,6 +2296,9 @@ class MainActivity : ComponentActivity() {
                         ).show()
                     }
                 } else {
+                    if (!plan.enabled) {
+                        ScheduledAcScheduler.cancel(applicationContext, vin)
+                    }
                     mainHandler.post {
                         if (success) {
                             Toast.makeText(this@MainActivity, "定时空调已关闭", Toast.LENGTH_SHORT).show()
@@ -3085,12 +3094,12 @@ class MainActivity : ComponentActivity() {
                     original.recycle()
                 }
                 if (!isCurrentBackground(snapshot)) return@submit
-                VehicleImageCache.saveCustomImage(this@MainActivity, vin, processed)
+                VehicleImageCache.saveCustomImage(applicationContext, vin, processed)
+                ControlWidget.refreshAppearance(applicationContext)
                 runOnUiThread {
                     if (!isCurrentBackground(snapshot)) return@runOnUiThread
                     vehicleImageVersion++
                     toast("爱车主图已更新")
-                    ControlWidget.refreshData(this@MainActivity)
                 }
             } catch (e: Exception) {
                 Log.e("LeapVehiclePic", "处理自定义车图失败", e)
@@ -3109,7 +3118,7 @@ class MainActivity : ComponentActivity() {
             if (!isCurrentBackground(snapshot)) return@submit
             VehicleImageCache.removeCustomImage(applicationContext, vin)
             if (!isCurrentBackground(snapshot)) return@submit
-            ControlWidget.refreshData(applicationContext)
+            ControlWidget.refreshAppearance(applicationContext)
             runOnMain {
                 if (!isCurrentBackground(snapshot)) return@runOnMain
                 vehicleImageVersion++

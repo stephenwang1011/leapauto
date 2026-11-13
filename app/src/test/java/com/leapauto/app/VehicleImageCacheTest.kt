@@ -164,6 +164,26 @@ class VehicleImageCacheTest {
     }
 
     @Test
+    fun `save and remove custom image clear 3d snapshot memory cache to prevent stale widget presentation`() {
+        val projectDir = projectDirectory()
+        val cacheSource = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/VehicleImageCache.kt").readText()
+
+        val saveSection = cacheSource.substringAfter("fun saveCustomImage(")
+            .substringBefore("fun removeCustomImage(")
+        val removeSection = cacheSource.substringAfter("fun removeCustomImage(")
+            .substringBefore("fun loadCachedBitmap(")
+
+        org.junit.Assert.assertTrue(
+            "saveCustomImage 必须清理 3d 内存缓存，防止小组件继续加载旧 3D 车模快照",
+            saveSection.contains("memoryCache.remove(\"3d_\$vin\")")
+        )
+        org.junit.Assert.assertTrue(
+            "removeCustomImage 必须清理 3d 内存缓存",
+            removeSection.contains("memoryCache.remove(\"3d_\$vin\")")
+        )
+    }
+
+    @Test
     fun `reset custom image refresh runs inside resource lane and outside main callback`() {
         val projectDir = projectDirectory()
         val mainActivityFile = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/MainActivity.kt")
@@ -178,9 +198,9 @@ class VehicleImageCacheTest {
         val mainStart = laneBody.indexOf("runOnMain")
         org.junit.Assert.assertTrue("UI updates must return to main", mainStart >= 0)
         val mainBody = blockAt(laneBody, laneBody.indexOf('{', mainStart))
-        val refresh = "ControlWidget.refreshData(applicationContext)"
-        org.junit.Assert.assertEquals("Only one immediate widget refresh", 1,
-            Regex("ControlWidget\\.refreshData\\(").findAll(resetMethod).count())
+        val refresh = "ControlWidget.refreshAppearance(applicationContext)"
+        org.junit.Assert.assertEquals("Only one immediate widget appearance refresh", 1,
+            Regex("ControlWidget\\.refreshAppearance\\(").findAll(resetMethod).count())
         org.junit.Assert.assertTrue(laneBody.substringBefore("runOnMain").contains(refresh))
         org.junit.Assert.assertTrue(laneBody.substringBefore("runOnMain").contains("VehicleImageCache.removeCustomImage(applicationContext, vin)"))
         org.junit.Assert.assertTrue(laneBody.contains("if (!isCurrentBackground(snapshot)) return@submit"))

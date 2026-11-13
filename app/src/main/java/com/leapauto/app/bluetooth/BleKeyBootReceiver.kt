@@ -52,6 +52,21 @@ class BleKeyBootReceiver : BroadcastReceiver() {
         } else null
         val needsBackground = key?.needsBackground == true
 
+        if (action == Intent.ACTION_BOOT_COMPLETED || action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            if (vin.isNotBlank() && hasOpPassword) {
+                val plan = com.leapauto.app.ScheduledAcPlan(
+                    enabled = sessions.loadScheduledAcEnabled(vin),
+                    startTime = sessions.loadScheduledAcStartTime(vin),
+                    days = sessions.loadScheduledAcDays(vin),
+                    closeWindows = sessions.loadScheduledAcCloseWindows(vin),
+                    closeSunshade = sessions.loadScheduledAcCloseSunshade(vin)
+                )
+                if (plan.enabled && (plan.closeWindows || plan.closeSunshade)) {
+                    com.leapauto.app.ScheduledAcScheduler.schedule(appContext, vin, plan)
+                }
+            }
+        }
+
         if (!BleKeyBootPolicy.shouldAutoStart(action, accountId, vin, hasOpPassword, needsBackground)) {
             return
         }

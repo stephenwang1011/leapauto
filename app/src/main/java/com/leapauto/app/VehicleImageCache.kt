@@ -275,6 +275,7 @@ object VehicleImageCache {
         }
         synchronized(memoryCache) {
             memoryCache.remove("official_$vin")
+            memoryCache.remove("3d_$vin")
             memoryCache.put("custom_$vin", bitmap)
         }
     }
@@ -286,6 +287,7 @@ object VehicleImageCache {
         synchronized(memoryCache) {
             memoryCache.remove("custom_$vin")
             memoryCache.remove("official_$vin")
+            memoryCache.remove("3d_$vin")
         }
     }
 

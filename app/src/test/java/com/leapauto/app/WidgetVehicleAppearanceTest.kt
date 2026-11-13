@@ -98,4 +98,26 @@ class WidgetVehicleAppearanceTest {
         val unknownAppearance = VehicleAppearanceCatalog.resolveAppearance("UNKNOWN_MODEL", null)
         assertEquals("C16", unknownAppearance.model)
     }
+
+    @Test
+    fun `custom vehicle image update and reset trigger full appearance refresh on widgets`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(java.io.File(workingDirectory)) { it.parentFile }
+            .first { java.io.File(it, "app").isDirectory }
+        val mainActivity = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/MainActivity.kt").readText()
+
+        val saveSection = mainActivity.substringAfter("VehicleImageCache.saveCustomImage")
+            .substringBefore("toast(\"保存主图失败")
+        val resetSection = mainActivity.substringAfter("VehicleImageCache.removeCustomImage")
+            .substringBefore("syncVehicleImage(vin)")
+
+        org.junit.Assert.assertTrue(
+            "保存自定义主图后必须全量刷新外观以同步新车图到桌面小组件",
+            saveSection.contains("ControlWidget.refreshAppearance(applicationContext)")
+        )
+        org.junit.Assert.assertTrue(
+            "恢复官方默认车模后必须全量刷新外观以同步恢复桌面小组件车模",
+            resetSection.contains("ControlWidget.refreshAppearance(applicationContext)")
+        )
+    }
 }
