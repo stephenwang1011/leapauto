@@ -181,7 +181,7 @@ data class EnergyAnalyticsData(
 object EnergyHomeCardPolicy {
     const val PAGE_COUNT = 4
     const val MIN_CARD_HEIGHT_DP = 135
-    const val BOTTOM_PADDING_DP = 22
+    const val BOTTOM_PADDING_DP = 8
 
     fun calculateViewportFillHeightPx(
         viewportHeightPx: Int,

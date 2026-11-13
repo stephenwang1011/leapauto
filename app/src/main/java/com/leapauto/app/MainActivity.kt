@@ -284,6 +284,7 @@ class MainActivity : ComponentActivity() {
     private var scheduledPreheatDays by mutableStateOf("1,1,1,1,1,1,1")
     private var scheduledAcPlan by mutableStateOf(ScheduledAcPlan())
     private var scheduledAcCapability by mutableStateOf(ScheduledAcCapability.UNKNOWN)
+    private var openScheduledAcOnLaunch by mutableStateOf(false)
     private var versionUpdateState by mutableStateOf<VersionUpdateState>(VersionUpdateState.Idle)
     private var showPowerTypeDialog by mutableStateOf(false)
     private var handledUpdateVersion by mutableStateOf<String?>(null)
@@ -431,6 +432,9 @@ class MainActivity : ComponentActivity() {
         scheduledPreheatDays = sessionStore.loadScheduledPreheatDays(session.selectedVin)
         scheduledAcPlan = loadScheduledAcPlan(session.selectedVin)
         scheduledAcCapability = sessionStore.loadScheduledAcCapability(session.selectedVin)
+        if (intent?.getBooleanExtra(ControlWidget.EXTRA_OPEN_SCHEDULED_AC, false) == true) {
+            openScheduledAcOnLaunch = true
+        }
         ChargeNotificationManager.ensureChannel(this)
         ParkingAnomalyNotificationManager.ensureChannel(this)
         if (pinSaved) {
@@ -501,6 +505,8 @@ class MainActivity : ComponentActivity() {
                     onApplyScheduledPreheat = ::applyScheduledBatteryPreheat,
                     onApplyScheduledAc = ::applyScheduledAirConditioning,
                     onLoadScheduledAc = ::fetchScheduledAcForEditor,
+                    openScheduledAcSheet = openScheduledAcOnLaunch,
+                    onDismissScheduledAcSheet = { openScheduledAcOnLaunch = false },
                     onRefreshChargingSettings = { syncChargePlanFromServer(force = true) },
                     onFetchParkingPhoto = ::fetchParkingPhoto,
                     networkDebugEnabled = networkDebugEnabled,
@@ -1313,6 +1319,9 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.getBooleanExtra(ControlWidget.EXTRA_OPEN_SCHEDULED_AC, false)) {
+            openScheduledAcOnLaunch = true
+        }
     }
 
     @Deprecated("Deprecated in Java")
@@ -2174,7 +2183,9 @@ class MainActivity : ComponentActivity() {
         mode = ScheduledAcMode.fromName(sessionStore.loadScheduledAcMode(vin)),
         circle = AirCircle.entries.firstOrNull { it.name == sessionStore.loadScheduledAcCircle(vin) }
             ?: AirCircle.INNER,
-        windshieldDefogging = sessionStore.loadScheduledAcDefrost(vin)
+        windshieldDefogging = sessionStore.loadScheduledAcDefrost(vin),
+        closeWindows = sessionStore.loadScheduledAcCloseWindows(vin),
+        closeSunshade = sessionStore.loadScheduledAcCloseSunshade(vin)
     )
 
     private fun persistScheduledAcPlan(vin: String, plan: ScheduledAcPlan) {
@@ -2186,6 +2197,8 @@ class MainActivity : ComponentActivity() {
         sessionStore.saveScheduledAcMode(vin, plan.mode)
         sessionStore.saveScheduledAcCircle(vin, plan.circle)
         sessionStore.saveScheduledAcDefrost(vin, plan.windshieldDefogging)
+        sessionStore.saveScheduledAcCloseWindows(vin, plan.closeWindows)
+        sessionStore.saveScheduledAcCloseSunshade(vin, plan.closeSunshade)
     }
 
     private fun applyScheduledAirConditioning(plan: ScheduledAcPlan) {
@@ -2245,15 +2258,44 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                mainHandler.post {
-                    if (success) {
+                if (plan.enabled && success) {
+                    var extraActions = ""
+                    if (plan.closeWindows) {
+                        try {
+                            Thread.sleep(1200)
+                            if (session.selectedVin == vin && session.generation == generation) {
+                                api.sendControl(Commands.build("windowClose"), savedPin)
+                                extraActions += " · 已关窗"
+                            }
+                        } catch (e: Exception) {
+                            Log.w("ScheduledAc", "联动关窗失败: ${e.message}")
+                        }
+                    }
+                    if (plan.closeSunshade) {
+                        try {
+                            Thread.sleep(1200)
+                            if (session.selectedVin == vin && session.generation == generation) {
+                                api.sendControl(Commands.build("sunshadeClose"), savedPin)
+                                extraActions += " · 已关遮阳帘"
+                            }
+                        } catch (e: Exception) {
+                            Log.w("ScheduledAc", "联动关遮阳帘失败: ${e.message}")
+                        }
+                    }
+                    mainHandler.post {
                         Toast.makeText(
                             this@MainActivity,
-                            if (plan.enabled) "已设置 ${plan.startTime} 定时空调" else "定时空调已关闭",
+                            "已设置 ${plan.startTime} 定时空调$extraActions",
                             Toast.LENGTH_SHORT
                         ).show()
-                    } else {
-                        Toast.makeText(this@MainActivity, if (plan.enabled) "定时空调设置已保存至本地" else "取消定时空调失败，请重试", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    mainHandler.post {
+                        if (success) {
+                            Toast.makeText(this@MainActivity, "定时空调已关闭", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(this@MainActivity, if (plan.enabled) "定时空调设置已保存至本地" else "取消定时空调失败，请重试", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             } catch (e: Exception) {

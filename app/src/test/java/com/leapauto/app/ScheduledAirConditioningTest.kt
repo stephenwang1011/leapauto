@@ -158,4 +158,27 @@ class ScheduledAirConditioningTest {
         assertEquals("32", item.getString("temperature"))
         assertEquals("7", item.getString("windlevel"))
     }
+
+    @Test
+    fun `plan defaults closeWindows and closeSunshade to true and wire payload strictly excludes extra fields`() {
+        val defaultPlan = ScheduledAcPlan()
+        assertTrue("关闭车窗默认开启", defaultPlan.closeWindows)
+        assertTrue("关闭遮阳帘默认开启", defaultPlan.closeSunshade)
+
+        val command = Commands.buildScheduledAc(defaultPlan.copy(enabled = true), deviceId, now)
+        val item = JSONObject(command.stateJson).getJSONArray("controls").getJSONObject(0)
+        assertFalse("下发车端的 cmdid=171 协议载荷不得包含车端未定义字段 closeWindows", item.has("closeWindows"))
+        assertFalse("下发车端的 cmdid=171 协议载荷不得包含车端未定义字段 closeSunshade", item.has("closeSunshade"))
+    }
+
+    @Test
+    fun `editorPlan preserves user local preferences for closeWindows and closeSunshade`() {
+        val remotePlan = plan().copy(startTime = "08:00")
+        val localPreferences = plan().copy(closeWindows = false, closeSunshade = false)
+
+        val editorPlan = ScheduledAcState(hasSchedule = true, plan = remotePlan).editorPlan(localPreferences)
+        assertEquals("08:00", editorPlan.startTime)
+        assertFalse("编辑器应保留本地用户关闭车窗选项", editorPlan.closeWindows)
+        assertFalse("编辑器应保留本地用户关闭遮阳帘选项", editorPlan.closeSunshade)
+    }
 }

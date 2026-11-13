@@ -9,27 +9,30 @@ import java.io.File
 class SupportAuthorModuleTest {
 
     @Test
-    fun `support author card is placed after version update card and before open source card in settings`() {
+    fun `support author card is placed before open source card in settings and version card is removed`() {
         val screenSource = readSourceFile("app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt")
 
         val settingsSource = screenSource.substringAfter("private fun MyContent(")
-        val versionCardIndex = settingsSource.indexOf("VersionUpdateCard(")
         val supportCardIndex = settingsSource.indexOf("SupportAuthorCard(")
         val openSourceCardIndex = settingsSource.indexOf("OpenSourceCodeCard()")
 
-        assertTrue("VersionUpdateCard must be present", versionCardIndex >= 0)
+        // 验证已从设置列表中移除独立版本更新卡片
+        assertFalse("VersionUpdateCard must be removed from settings", settingsSource.substringBefore("if (showProfileThemeDialog)").contains("VersionUpdateCard("))
         assertTrue("SupportAuthorCard must be present", supportCardIndex >= 0)
         assertTrue("OpenSourceCodeCard must be present", openSourceCardIndex >= 0)
-
-        // 严格保证在设置界面下，“当前版本”模块后面加一个“支持作者”模块，再紧接着开源代码仓库
-        assertTrue(
-            "SupportAuthorCard must be located after VersionUpdateCard",
-            supportCardIndex > versionCardIndex
-        )
         assertTrue(
             "SupportAuthorCard must be located before OpenSourceCodeCard",
             supportCardIndex < openSourceCardIndex
         )
+    }
+
+    @Test
+    fun `open source card displays current version with highlighted green text`() {
+        val screenSource = readSourceFile("app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt")
+        val openSourceBlock = screenSource.substringAfter("fun OpenSourceCodeCard(").substringBefore("fun ModifyNicknameDialog(")
+        assertTrue("Must construct annotated string", openSourceBlock.contains("buildAnnotatedString"))
+        assertTrue("Must include current version", openSourceBlock.contains("append(\"v\$currentVersion\")"))
+        assertTrue("Must use statusGood green color", openSourceBlock.contains("MaterialTheme.statusGood"))
     }
 
     @Test

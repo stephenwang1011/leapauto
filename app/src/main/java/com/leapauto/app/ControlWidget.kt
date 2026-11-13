@@ -53,7 +53,8 @@ class ControlWidget : AppWidgetProvider() {
                 val shouldUpdateSlots = acEnabled != null || locked != null
                 if (shouldUpdateSlots) {
                     val store = SessionStore(context)
-                    val snapshot = store.loadWidgetSnapshot(store.load().selectedVin)
+                    val currentVin = store.load().selectedVin
+                    val snapshot = store.loadWidgetSnapshot(currentVin)
                     val effectiveLocked = locked ?: snapshot?.locked
                     applyActionSlots(
                         context = themeContext,
@@ -64,7 +65,8 @@ class ControlWidget : AppWidgetProvider() {
                         sentryEnabled = snapshot?.sentryEnabled,
                         acEnabled = acEnabled ?: snapshot?.acEnabled,
                         acTone = acTone,
-                        windowOpen = snapshot?.windowOpen
+                        windowOpen = snapshot?.windowOpen,
+                        scheduledAcEnabled = store.loadScheduledAcEnabled(currentVin)
                     )
                 }
             }
@@ -278,7 +280,8 @@ class ControlWidget : AppWidgetProvider() {
                 sentryEnabled = snapshot?.sentryEnabled,
                 acEnabled = snapshot?.acEnabled,
                 acTone = snapshot?.acTone ?: ClimateTemperatureTone.DEFAULT,
-                windowOpen = snapshot?.windowOpen
+                windowOpen = snapshot?.windowOpen,
+                scheduledAcEnabled = store.loadScheduledAcEnabled(session.selectedVin)
             )
         }
 
@@ -352,7 +355,8 @@ class ControlWidget : AppWidgetProvider() {
                 acEnabled = acEnabled,
                 acTone = acTone,
                 preheatEnabled = BatteryPreheatState.fromRaw(displayStatus.opt("batteryThermalRequest")),
-                windowOpen = openWin
+                windowOpen = openWin,
+                scheduledAcEnabled = store.loadScheduledAcEnabled(session.selectedVin)
             )
         }
 
@@ -428,7 +432,8 @@ class ControlWidget : AppWidgetProvider() {
                 sentryEnabled = snapshot.sentryEnabled,
                 acEnabled = snapshot.acEnabled,
                 acTone = snapshot.acTone,
-                windowOpen = snapshot.windowOpen
+                windowOpen = snapshot.windowOpen,
+                scheduledAcEnabled = store.loadScheduledAcEnabled(session.selectedVin)
             )
         }
 
@@ -442,7 +447,8 @@ class ControlWidget : AppWidgetProvider() {
             acEnabled: Boolean?,
             acTone: ClimateTemperatureTone,
             preheatEnabled: Boolean? = null,
-            windowOpen: Boolean? = null
+            windowOpen: Boolean? = null,
+            scheduledAcEnabled: Boolean? = null
         ) {
             val themeContext = widgetThemeContext(context)
             val iconColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
@@ -637,6 +643,23 @@ class ControlWidget : AppWidgetProvider() {
                             slotId,
                             click(context, if (preheatActive) "batteryPreheatOff" else "batteryPreheat")
                         )
+                    }
+                    "scheduledAc" -> {
+                        views.setViewVisibility(imgId, View.VISIBLE)
+                        views.setViewVisibility(coolingId, View.GONE)
+                        views.setViewVisibility(heatingId, View.GONE)
+                        views.setViewVisibility(ventId, View.GONE)
+                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_alarm)
+                        val isAcActive = scheduledAcEnabled == true
+                        val tintColor = if (isAcActive) {
+                            ContextCompat.getColor(themeContext, R.color.energy_green)
+                        } else {
+                            iconColor
+                        }
+                        setImageTint(views, imgId, tintColor)
+                        views.setFloat(imgId, "setAlpha", 1f)
+                        views.setContentDescription(slotId, if (isAcActive) "定时空调（已开启）" else "定时空调")
+                        views.setOnClickPendingIntent(slotId, openScheduledAcPendingIntent(context))
                     }
                     else -> {
                         views.setViewVisibility(slotId, View.GONE)
@@ -925,6 +948,22 @@ class ControlWidget : AppWidgetProvider() {
             return PendingIntent.getActivity(
                 context,
                 0,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        const val EXTRA_OPEN_SCHEDULED_AC = "extra_open_scheduled_ac"
+
+        internal fun openScheduledAcPendingIntent(context: Context): PendingIntent {
+            val intent = Intent(context, MainActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                putExtra(EXTRA_OPEN_SCHEDULED_AC, true)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            return PendingIntent.getActivity(
+                context,
+                171,
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )

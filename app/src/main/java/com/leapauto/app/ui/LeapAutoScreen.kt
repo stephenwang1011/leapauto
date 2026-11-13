@@ -197,6 +197,7 @@ import com.leapauto.app.ControlFeedback
 import com.leapauto.app.ControlFeedbackDisplayPolicy
 import com.leapauto.app.ControlFeedbackKind
 import com.leapauto.app.EnergyAnalyticsData
+import com.leapauto.app.AppReleaseInfo
 import com.leapauto.app.EnergyAnalyticsState
 import com.leapauto.app.EnergyCompositionPresentation
 import com.leapauto.app.EnergyHomeCardPolicy
@@ -344,6 +345,8 @@ fun LeapAutoScreen(
     onApplyScheduledPreheat: (Boolean, String, String) -> Unit = { _, _, _ -> },
     onApplyScheduledAc: (ScheduledAcPlan) -> Unit = {},
     onLoadScheduledAc: suspend () -> ScheduledAcPlan = { error("预约查询不可用") },
+    openScheduledAcSheet: Boolean = false,
+    onDismissScheduledAcSheet: () -> Unit = {},
     onRefreshChargingSettings: () -> Unit = {},
     onRefreshChargingTelemetry: () -> Unit = {},
     onChargingTelemetryActiveChange: (Boolean) -> Unit = {},
@@ -415,6 +418,13 @@ fun LeapAutoScreen(
     var showHealthyChargingSheet by rememberSaveable { mutableStateOf(false) }
     var showVehicleHealthCheckSheet by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirmationDialog by rememberSaveable { mutableStateOf(false) }
+    var showScheduledAcSheet by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(openScheduledAcSheet) {
+        if (openScheduledAcSheet) {
+            showScheduledAcSheet = true
+        }
+    }
 
     val destination = when {
         !loggedIn -> ScreenDestination.LOGIN
@@ -678,6 +688,24 @@ fun LeapAutoScreen(
         )
     }
 
+    if (showScheduledAcSheet) {
+        ScheduledAcSheet(
+            onDismissRequest = {
+                showScheduledAcSheet = false
+                onDismissScheduledAcSheet()
+            },
+            initialPlan = scheduledAcPlan,
+            onLoad = onLoadScheduledAc,
+            temperatureRange = 16..32,
+            fanRange = 1..7,
+            onConfirm = { plan ->
+                showScheduledAcSheet = false
+                onDismissScheduledAcSheet()
+                onApplyScheduledAc(plan)
+            }
+        )
+    }
+
     geetestChallenge?.let { challenge ->
         GeetestCaptchaDialog(
             challenge = challenge,
@@ -926,7 +954,8 @@ fun LeapAutoScreen(
                         scheduledAcPlan = scheduledAcPlan,
                         scheduledAcSupported = scheduledAcSupported,
                         onApplyScheduledAc = onApplyScheduledAc,
-                        onLoadScheduledAc = onLoadScheduledAc
+                        onLoadScheduledAc = onLoadScheduledAc,
+                        onOpenScheduledAc = { showScheduledAcSheet = true }
                     )
                 }
 
@@ -1339,7 +1368,8 @@ private fun HomeContent(
     scheduledAcPlan: ScheduledAcPlan = ScheduledAcPlan(),
     scheduledAcSupported: Boolean = false,
     onApplyScheduledAc: (ScheduledAcPlan) -> Unit = {},
-    onLoadScheduledAc: suspend () -> ScheduledAcPlan = { error("预约查询不可用") }
+    onLoadScheduledAc: suspend () -> ScheduledAcPlan = { error("预约查询不可用") },
+    onOpenScheduledAc: () -> Unit = {}
 ) {
     var showAddressNavigationDialog by rememberSaveable { mutableStateOf(false) }
     var showParkingDetailDialog by rememberSaveable { mutableStateOf(false) }
@@ -1378,11 +1408,12 @@ private fun HomeContent(
                 energyCardHeightPx.takeIf { it > 0 }?.toDp()
                     ?: EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP.dp
             }
+            val homeScrollState = rememberScrollState()
 
             Column(
                 Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(homeScrollState)
                     .padding(bottom = bottomPadding),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -1421,7 +1452,9 @@ private fun HomeContent(
                         onDismissControlFeedback = onDismissControlFeedback,
                         bluetoothState = bluetoothState,
                         bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled,
-                        onOpenBluetoothKey = onOpenBluetoothKey
+                        onOpenBluetoothKey = onOpenBluetoothKey,
+                        scheduledAcPlan = scheduledAcPlan,
+                        onOpenScheduledAc = onOpenScheduledAc
                     )
                 }
 
@@ -1521,14 +1554,17 @@ private fun HomeContent(
                             .fillMaxWidth()
                             .onGloballyPositioned { coordinates ->
                                 val viewportTopPx = homeViewportTopPx
-                                if (energyCardHeightPx == 0 && viewportTopPx != null) {
-                                    energyCardHeightPx = EnergyHomeCardPolicy.calculateViewportFillHeightPx(
+                                if (homeScrollState.value == 0 && viewportTopPx != null) {
+                                    val targetHeightPx = EnergyHomeCardPolicy.calculateViewportFillHeightPx(
                                         viewportHeightPx = with(density) { viewportHeight.roundToPx() },
                                         viewportTopPx = viewportTopPx,
                                         cardTopPx = coordinates.positionInWindow().y.toInt(),
                                         bottomPaddingPx = with(density) { bottomPadding.roundToPx() },
                                         minHeightPx = with(density) { EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP.dp.roundToPx() }
                                     )
+                                    if (targetHeightPx != energyCardHeightPx) {
+                                        energyCardHeightPx = targetHeightPx
+                                    }
                                 }
                             }
                             .height(dynamicCardHeight)
@@ -1839,18 +1875,7 @@ private fun MyContent(
             }
         }
 
-        // 6. 当前版本信息与检查更新
-        VersionUpdateCard(
-            currentVersion = currentVersion,
-            currentReleaseNotes = currentReleaseNotes,
-            state = versionUpdateState,
-            downloadProgress = downloadUpdateProgress,
-            onCheckForUpdate = onCheckForUpdate,
-            onOpenUpdate = onOpenUpdate,
-            onStartInAppUpdate = onStartInAppUpdate
-        )
-
-        // 6.5 支持作者
+        // 6. 支持作者
         SupportAuthorCard(
             onClick = onOpenAuthorSupport
         )
@@ -2193,8 +2218,16 @@ private fun OpenSourceCodeCard() {
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
+                val currentVersion = AppReleaseInfo.currentVersion
+                val subtitle = buildAnnotatedString {
+                    append("本应用(")
+                    withStyle(SpanStyle(color = MaterialTheme.statusGood, fontWeight = FontWeight.Bold)) {
+                        append("v$currentVersion")
+                    }
+                    append(")代码已开源 · 点击访问 GitHub 仓库")
+                }
                 Text(
-                    "本应用代码已开源 · 点击访问 GitHub 仓库",
+                    text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -4141,7 +4174,9 @@ fun VehicleHero(
     onDismissControlFeedback: () -> Unit = {},
     bluetoothState: BleConnectionState? = null,
     bluetoothKeyFeatureEnabled: Boolean = false,
-    onOpenBluetoothKey: (() -> Unit)? = null
+    onOpenBluetoothKey: (() -> Unit)? = null,
+    scheduledAcPlan: ScheduledAcPlan = ScheduledAcPlan(),
+    onOpenScheduledAc: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val remoteBitmap = remember(vehicleVin, vehicleImageVersion) {
@@ -5104,6 +5139,8 @@ fun VehicleHero(
                     activeControlCommand = activeControlCommand,
                     embedded = true,
                     onOpenHealthCheck = onOpenHealthCheck,
+                    scheduledAcPlan = scheduledAcPlan,
+                    onOpenScheduledAc = onOpenScheduledAc,
                     // Quick controls sit on the page-colored lower horizon, not the upper sky.
                     isHeroDark = isDark
                 )
@@ -6121,7 +6158,9 @@ private fun QuickVehicleActions(
     seamless: Boolean = false,
     embedded: Boolean = false,
     onOpenHealthCheck: () -> Unit = {},
-    isHeroDark: Boolean = false
+    isHeroDark: Boolean = false,
+    scheduledAcPlan: ScheduledAcPlan = ScheduledAcPlan(),
+    onOpenScheduledAc: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val sessionStore = remember(context) { SessionStore(context) }
@@ -6174,6 +6213,7 @@ private fun QuickVehicleActions(
             Cmd("trunk", "开后备箱", R.drawable.ic_phosphor_trunk_open),
             *frunkCommands.toTypedArray(),
             *extraCommands.toTypedArray(),
+            Cmd("scheduledAc", "定时空调", R.drawable.ic_phosphor_alarm),
             Cmd("batteryPreheat", "电池预热", R.drawable.ic_phosphor_battery_charging),
             Cmd("sentry", "哨兵模式", R.drawable.ic_sentry),
             Cmd("diagnostics", "诊断", R.drawable.ic_quick_diagnostics)
@@ -6503,6 +6543,27 @@ private fun QuickVehicleActions(
                                                     }
                                                 }
                                             }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        } else if (command.name == "scheduledAc") {
+                            val isAcActive = scheduledAcPlan.enabled
+                            val activeColor = MaterialTheme.statusGood
+                            QuickVehicleButton(
+                                label = if (isAcActive) "定时开启" else "定时空调",
+                                iconRes = command.iconRes,
+                                warning = false,
+                                inProgress = false,
+                                isSensitive = false,
+                                isHeroDark = isHeroDark,
+                                iconTint = if (isAcActive) activeColor else normalActionContentColor,
+                                labelTint = if (isAcActive) activeColor else normalActionLabelColor,
+                                onClick = {
+                                    handleQuickActionClick {
+                                        if (!editing) {
+                                            onOpenScheduledAc()
                                         }
                                     }
                                 },

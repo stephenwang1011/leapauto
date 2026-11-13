@@ -11,8 +11,8 @@ class EnergyHomeCardPolicyTest {
     }
 
     @Test
-    fun `bottom padding provides adequate 22dp clearance for 16dp rounded corners`() {
-        assertEquals(22, EnergyHomeCardPolicy.BOTTOM_PADDING_DP)
+    fun `bottom padding provides compact 8dp clearance for 16dp rounded corners`() {
+        assertEquals(8, EnergyHomeCardPolicy.BOTTOM_PADDING_DP)
     }
 
     @Test

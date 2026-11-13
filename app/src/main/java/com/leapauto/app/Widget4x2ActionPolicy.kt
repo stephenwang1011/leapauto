@@ -18,7 +18,8 @@ object Widget4x2ActionPolicy {
         Widget4x2Action("windowVent", "车窗通风", R.drawable.ic_window_vent),
         Widget4x2Action("windowClose", "一键关窗", R.drawable.ic_phosphor_wind),
         Widget4x2Action("sunshade", "遮阳帘", R.drawable.ic_phosphor_sun),
-        Widget4x2Action("horn", "鸣笛寻车", R.drawable.ic_phosphor_bell_ringing)
+        Widget4x2Action("horn", "鸣笛寻车", R.drawable.ic_phosphor_bell_ringing),
+        Widget4x2Action("scheduledAc", "定时空调", R.drawable.ic_phosphor_alarm)
     )
 
     val DEFAULT_ACTIONS = listOf("unlock", "lock", "sentry", "ac", "trunk")

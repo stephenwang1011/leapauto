@@ -100,6 +100,40 @@ class CompactWidgetSpecTest {
     }
 
     @Test
+    fun `wide widget is registered with compact 90dp minimum height and horizontal vertical resize support`() {
+        val projectDir = projectDirectory()
+        val manifest = File(projectDir, "app/src/main/AndroidManifest.xml").readText()
+        val provider = File(
+            projectDir,
+            "app/src/main/res/xml/appwidget_provider_info.xml"
+        ).readText()
+        val provider31 = File(
+            projectDir,
+            "app/src/main/res/xml-v31/appwidget_provider_info.xml"
+        ).readText()
+        val layout = File(
+            projectDir,
+            "app/src/main/res/layout/widget_layout.xml"
+        ).readText()
+
+        assertTrue(manifest.contains("android:name=\".ControlWidget\""))
+        assertTrue(manifest.contains("android:resource=\"@xml/appwidget_provider_info\""))
+        assertTrue(provider.contains("android:minHeight=\"90dp\""))
+        assertTrue(provider.contains("android:resizeMode=\"horizontal|vertical\""))
+        assertTrue(provider.contains("android:initialLayout=\"@layout/widget_layout\""))
+        assertTrue(provider31.contains("android:targetCellWidth=\"4\""))
+        assertTrue(provider31.contains("android:targetCellHeight=\"2\""))
+        assertTrue(provider31.contains("android:minHeight=\"90dp\""))
+        assertTrue(layout.contains("android:id=\"@+id/widgetActionRow\""))
+        assertTrue(layout.contains("android:id=\"@+id/widgetBackgroundImg\""))
+        assertTrue(layout.contains("android:layout_marginTop=\"14dp\""))
+        assertTrue(layout.contains("android:layout_marginBottom=\"14dp\""))
+        assertTrue(layout.contains("android:id=\"@+id/imgWCar\""))
+        assertTrue(layout.contains("android:paddingTop=\"3dp\""))
+        assertTrue(layout.contains("android:paddingBottom=\"3dp\""))
+    }
+
+    @Test
     fun `compact layout exposes range lock and air conditioner controls without manual refresh`() {
         val layout = File(
             projectDirectory(),

@@ -426,6 +426,26 @@ class SessionStore(context: Context) {
         prefs.edit().putBoolean("scheduled_ac_defrost_$vin", defrost).apply()
     }
 
+    fun loadScheduledAcCloseWindows(vin: String): Boolean {
+        if (vin.isBlank()) return true
+        return prefs.getBoolean("scheduled_ac_close_windows_$vin", true)
+    }
+
+    fun saveScheduledAcCloseWindows(vin: String, closeWindows: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_ac_close_windows_$vin", closeWindows).apply()
+    }
+
+    fun loadScheduledAcCloseSunshade(vin: String): Boolean {
+        if (vin.isBlank()) return true
+        return prefs.getBoolean("scheduled_ac_close_sunshade_$vin", true)
+    }
+
+    fun saveScheduledAcCloseSunshade(vin: String, closeSunshade: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_ac_close_sunshade_$vin", closeSunshade).apply()
+    }
+
     fun loadScheduledAcCapability(vin: String): ScheduledAcCapability {
         if (vin.isBlank()) return ScheduledAcCapability.UNKNOWN
         return if (appPrefs.getBoolean("scheduled_ac_supported_$vin", false)) {
