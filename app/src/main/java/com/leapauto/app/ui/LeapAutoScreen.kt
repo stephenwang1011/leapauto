@@ -1875,7 +1875,18 @@ private fun MyContent(
             }
         }
 
-        // 6. 支持作者
+        // 6. 当前版本信息与检查更新
+        VersionUpdateCard(
+            currentVersion = currentVersion,
+            currentReleaseNotes = currentReleaseNotes,
+            state = versionUpdateState,
+            downloadProgress = downloadUpdateProgress,
+            onCheckForUpdate = onCheckForUpdate,
+            onOpenUpdate = onOpenUpdate,
+            onStartInAppUpdate = onStartInAppUpdate
+        )
+
+        // 6.5 支持作者
         SupportAuthorCard(
             onClick = onOpenAuthorSupport
         )
@@ -2218,16 +2229,8 @@ private fun OpenSourceCodeCard() {
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
-                val currentVersion = AppReleaseInfo.currentVersion
-                val subtitle = buildAnnotatedString {
-                    append("本应用(")
-                    withStyle(SpanStyle(color = MaterialTheme.statusGood, fontWeight = FontWeight.Bold)) {
-                        append("v$currentVersion")
-                    }
-                    append(")代码已开源 · 点击访问 GitHub 仓库")
-                }
                 Text(
-                    text = subtitle,
+                    "本应用代码已开源 · 点击访问 GitHub 仓库",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -2538,13 +2541,22 @@ private fun VersionUpdatePromptDialog(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Text(
-                    release.updateDescription
-                        ?.takeIf { it.isNotBlank() }
-                        ?: "发现新版本，建议更新以获取最新功能和修复。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                val formattedNotes = remember(release.updateDescription) {
+                    com.leapauto.app.PgyerPageParser.formatUpdateDescription(release.updateDescription)
+                        ?: "发现新版本，建议更新以获取最新功能和修复。"
+                }
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    formattedNotes.lineSequence().filter { it.isNotBlank() }.forEach { line ->
+                        Text(
+                            text = line,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
                 if (downloadProgress != null) {
                     Spacer(Modifier.height(4.dp))
                     LinearProgressIndicator(
@@ -2704,11 +2716,16 @@ private fun VersionUpdateCard(
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary
                             )
-                            Text(
-                                updateDesc,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            val formattedUpdateDesc = remember(updateDesc) {
+                                com.leapauto.app.PgyerPageParser.formatUpdateDescription(updateDesc) ?: updateDesc
+                            }
+                            formattedUpdateDesc.lineSequence().filter { it.isNotBlank() }.forEach { line ->
+                                Text(
+                                    line,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }

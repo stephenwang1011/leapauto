@@ -64,6 +64,18 @@ class VersionUpdateTest {
     }
 
     @Test
+    fun formatsSemicolonSeparatedNumberedNotesIntoIndependentLines() {
+        val raw = "1\\. 修复定时空调到时间之后没有关闭窗户的问题；2. 优化定时空调时间选择跟手问题，同时添加震动效果；3. 优化桌面组件高度和车图扁平比（若无生效删除组件重新添加）"
+        val formatted = PgyerPageParser.formatUpdateDescription(raw)
+        assertNotNull(formatted)
+        val lines = formatted!!.lines()
+        assertEquals(3, lines.size)
+        assertTrue(lines[0].startsWith("1. 修复定时空调"))
+        assertTrue(lines[1].startsWith("2. 优化定时空调"))
+        assertTrue(lines[2].startsWith("3. 优化桌面组件"))
+    }
+
+    @Test
     fun detectsUpdateOnlyWhenLatestVersionIsHigher() {
         val newer = PgyerRelease("1.5.7", 8, "修复问题")
         val current = "1.5.6"

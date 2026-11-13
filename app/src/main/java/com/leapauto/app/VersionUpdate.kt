@@ -105,18 +105,27 @@ object PgyerPageParser {
         .replace(Regex("\\s+"), " ")
         .trim()
 
+    fun formatUpdateDescription(value: String?): String? {
+        if (value.isNullOrBlank()) return null
+        return value
+            .replace("\\\\n", "\n")
+            .replace("\\n", "\n")
+            .replace(Regex("(\\d+)\\\\([\\.、\\)])"), "$1$2")
+            .replace(Regex("(?<=[；;。])\\s*(?=\\d+[\\.、\\)])"), "\n")
+            .replace(Regex("(?<!\n|^)\\s+(?=\\d+[\\.、\\)])"), "\n")
+            .lineSequence()
+            .map { line -> line.trim().replace(Regex("[\\t ]+"), " ") }
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
+            .trim()
+            .takeIf { it.isNotBlank() }
+    }
+
     private fun normalizeUpdateDescription(value: String): String? = value
         .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), lineBreakMarker)
         .let(::htmlToText)
         .replace(lineBreakMarker, "\n")
-        .replace("\\\\n", "\n")
-        .replace("\\n", "\n")
-        .lineSequence()
-        .map { line -> line.trim().replace(Regex("[\\t ]+"), " ") }
-        .filter { it.isNotBlank() }
-        .joinToString("\n")
-        .trim()
-        .takeIf { it.isNotBlank() }
+        .let(::formatUpdateDescription)
 }
 
 object PgyerUpdateChecker {

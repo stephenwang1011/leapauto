@@ -9,17 +9,22 @@ import java.io.File
 class SupportAuthorModuleTest {
 
     @Test
-    fun `support author card is placed before open source card in settings and version card is removed`() {
+    fun `version card is restored to settings before author support card`() {
         val screenSource = readSourceFile("app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt")
 
         val settingsSource = screenSource.substringAfter("private fun MyContent(")
+        val versionCardIndex = settingsSource.indexOf("VersionUpdateCard(")
         val supportCardIndex = settingsSource.indexOf("SupportAuthorCard(")
         val openSourceCardIndex = settingsSource.indexOf("OpenSourceCodeCard()")
 
-        // 验证已从设置列表中移除独立版本更新卡片
-        assertFalse("VersionUpdateCard must be removed from settings", settingsSource.substringBefore("if (showProfileThemeDialog)").contains("VersionUpdateCard("))
+        // 验证已将独立版本更新卡片加回设置页面
+        assertTrue("VersionUpdateCard must be restored to settings", versionCardIndex >= 0)
         assertTrue("SupportAuthorCard must be present", supportCardIndex >= 0)
         assertTrue("OpenSourceCodeCard must be present", openSourceCardIndex >= 0)
+        assertTrue(
+            "VersionUpdateCard must be located before SupportAuthorCard",
+            versionCardIndex < supportCardIndex
+        )
         assertTrue(
             "SupportAuthorCard must be located before OpenSourceCodeCard",
             supportCardIndex < openSourceCardIndex
@@ -27,12 +32,11 @@ class SupportAuthorModuleTest {
     }
 
     @Test
-    fun `open source card displays current version with highlighted green text`() {
+    fun `open source card displays clean repository link text without version badge`() {
         val screenSource = readSourceFile("app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt")
         val openSourceBlock = screenSource.substringAfter("fun OpenSourceCodeCard(").substringBefore("fun ModifyNicknameDialog(")
-        assertTrue("Must construct annotated string", openSourceBlock.contains("buildAnnotatedString"))
-        assertTrue("Must include current version", openSourceBlock.contains("append(\"v\$currentVersion\")"))
-        assertTrue("Must use statusGood green color", openSourceBlock.contains("MaterialTheme.statusGood"))
+        assertTrue("Must include clean repository link text", openSourceBlock.contains("本应用代码已开源 · 点击访问 GitHub 仓库"))
+        assertFalse("Must not duplicate version display inside open source card", openSourceBlock.contains("v\$currentVersion"))
     }
 
     @Test
