@@ -86,7 +86,24 @@ jobs:
 
       - name: Run full unit test gate
         shell: pwsh
-        run: .\gradlew.bat :app:testDebugUnitTest --rerun-tasks
+        run: |
+          $previousPreference = $ErrorActionPreference
+          $ErrorActionPreference = "Continue"
+          .\gradlew.bat :app:testDebugUnitTest --rerun-tasks
+          $testExit = $LASTEXITCODE
+          $ErrorActionPreference = $previousPreference
+          if ($testExit -ne 0) {
+            Write-Host "::error::Unit tests failed! Listing failed test cases:"
+            Get-ChildItem -Path "app/build/test-results/testDebugUnitTest" -Filter "*.xml" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+              [xml]$xml = Get-Content $_.FullName
+              foreach ($testcase in $xml.testsuite.testcase) {
+                if ($testcase.failure) {
+                  Write-Host "::error file=$($testcase.classname)::TEST FAILED: $($testcase.classname) > $($testcase.name): $($testcase.failure.message)"
+                }
+              }
+            }
+            exit $testExit
+          }
 
       - name: Package signed Release APK (10 MiB gate)
         shell: pwsh
