@@ -55,10 +55,10 @@ class WidgetVehicleAppearanceTest {
         val compactSource = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/CompactControlWidget.kt").readText()
 
         org.junit.Assert.assertTrue(widgetSource.contains("targetWidth: Int = 680"))
-        org.junit.Assert.assertTrue(widgetSource.contains("scaleRatio: Float = 0.94f"))
+        org.junit.Assert.assertTrue(widgetSource.contains("scaleRatio: Float = 0.82f"))
         org.junit.Assert.assertTrue(widgetSource.contains("FILTER_BITMAP_FLAG"))
         org.junit.Assert.assertTrue(widgetSource.contains("isDither = true"))
-        org.junit.Assert.assertTrue(widgetSource.contains("scaleBitmapForWidget(remoteBitmap, 680, 0.94f)"))
+        org.junit.Assert.assertTrue(widgetSource.contains("scaleBitmapForWidget(remoteBitmap, 680, 0.82f)"))
         org.junit.Assert.assertTrue(compactSource.contains("scaleBitmapForWidget(remoteBitmap, 520, 0.94f)"))
     }
 
@@ -119,5 +119,23 @@ class WidgetVehicleAppearanceTest {
             "恢复官方默认车模后必须全量刷新外观以同步恢复桌面小组件车模",
             resetSection.contains("ControlWidget.refreshAppearance(applicationContext)")
         )
+    }
+
+    @Test
+    fun `widgetActionBackground adapts to configured opacity levels`() {
+        val dark25 = ControlWidget.widgetActionBackgroundResource(25, true)
+        val dark50 = ControlWidget.widgetActionBackgroundResource(50, true)
+        val dark75 = ControlWidget.widgetActionBackgroundResource(75, true)
+        val dark100 = ControlWidget.widgetActionBackgroundResource(100, true)
+
+        assertEquals(R.drawable.widget_action_background_25_dark, dark25)
+        assertEquals(R.drawable.widget_action_background_50_dark, dark50)
+        assertEquals(R.drawable.widget_action_background_75_dark, dark75)
+        assertEquals(R.drawable.widget_action_background_dark, dark100)
+
+        val light25 = ControlWidget.widgetActionBackgroundResource(25, false)
+        val light100 = ControlWidget.widgetActionBackgroundResource(100, false)
+        assertEquals(R.drawable.widget_action_background_25_light, light25)
+        assertEquals(R.drawable.widget_action_background_light, light100)
     }
 }

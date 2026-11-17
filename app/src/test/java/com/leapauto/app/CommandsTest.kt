@@ -745,17 +745,17 @@ class CommandsTest {
     fun steeringWheelAndMirrorHeatingCommandsMatchApiLogSpec() {
         val steer2 = Commands.buildSteeringWheelHeating(2)
         assertEquals("320", steer2.cmdid)
-        assertEquals("{\"level\":\"2\"}", steer2.stateJson)
+        assertEquals("{\"level\":2}", steer2.stateJson)
         assertEquals("方向盘加热强档", steer2.label)
 
         val steer1 = Commands.buildSteeringWheelHeating(1)
         assertEquals("320", steer1.cmdid)
-        assertEquals("{\"level\":\"1\"}", steer1.stateJson)
+        assertEquals("{\"level\":1}", steer1.stateJson)
         assertEquals("方向盘加热弱档", steer1.label)
 
         val steer0 = Commands.buildSteeringWheelHeating(0)
         assertEquals("320", steer0.cmdid)
-        assertEquals("{\"level\":\"0\"}", steer0.stateJson)
+        assertEquals("{\"level\":0}", steer0.stateJson)
         assertEquals("方向盘加热关闭", steer0.label)
 
         val mirrorOn = Commands.buildRearviewMirrorHeating(true)

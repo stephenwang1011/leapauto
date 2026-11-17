@@ -47,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -63,6 +64,7 @@ import com.leapauto.app.FridgeMode
 import com.leapauto.app.FridgeStatus
 import com.leapauto.app.FridgeStyle
 import com.leapauto.app.R
+import com.leapauto.app.ui.theme.LocalAppDarkTheme
 import com.leapauto.app.ui.theme.statusGood
 import com.leapauto.app.ui.theme.statusWarn
 import java.text.SimpleDateFormat
@@ -686,6 +688,9 @@ fun FridgeControlBottomSheet(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        val isDark = LocalAppDarkTheme.current
+                        val uncheckedTrack = if (isDark) Color(0xFF383838) else Color(0xFFDFDFDF)
+                        val uncheckedBorder = if (isDark) Color(0x26FFFFFF) else Color(0x1A000000)
                         Switch(
                             checked = parkEnable,
                             onCheckedChange = {
@@ -694,8 +699,13 @@ fun FridgeControlBottomSheet(
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.White,
-                                checkedTrackColor = MaterialTheme.statusGood
-                            )
+                                checkedTrackColor = MaterialTheme.statusGood,
+                                checkedBorderColor = Color.Transparent,
+                                uncheckedThumbColor = Color.White,
+                                uncheckedTrackColor = uncheckedTrack,
+                                uncheckedBorderColor = uncheckedBorder
+                            ),
+                            modifier = Modifier.scale(0.78f)
                         )
                     }
 

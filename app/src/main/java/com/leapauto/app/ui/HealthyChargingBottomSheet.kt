@@ -53,6 +53,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -129,6 +130,7 @@ fun HealthyChargingBottomSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     var lastToastTime by remember { mutableLongStateOf(0L) }
     val latestControlInProgress by rememberUpdatedState(controlInProgress)
     val latestRefreshTelemetry by rememberUpdatedState(onRefreshTelemetry)
@@ -254,6 +256,16 @@ fun HealthyChargingBottomSheet(
     val pageBgColor = if (isDark) Color(0xFF161616) else Color(0xFFF8F8F8)
     val cardBgColor = if (isDark) Color(0xFF202020) else Color.White
     val cardBorderColor = if (isDark) Color(0xFF2E2E2E) else Color(0xFFECECEC)
+    val uncheckedTrack = if (isDark) Color(0xFF383838) else Color(0xFFDFDFDF)
+    val uncheckedBorder = if (isDark) Color(0x26FFFFFF) else Color(0x1A000000)
+    val unifiedSwitchColors = SwitchDefaults.colors(
+        checkedThumbColor = Color.White,
+        checkedTrackColor = MaterialTheme.statusGood,
+        checkedBorderColor = Color.Transparent,
+        uncheckedThumbColor = Color.White,
+        uncheckedTrackColor = uncheckedTrack,
+        uncheckedBorderColor = uncheckedBorder
+    )
 
     // 图 1: 充电中心主界面
     ModalBottomSheet(
@@ -554,16 +566,15 @@ fun HealthyChargingBottomSheet(
                         Switch(
                             checked = healthySwitchEnabled,
                             onCheckedChange = { isChecked ->
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 healthySwitchEnabled = isChecked
                                 if (isChecked && selectedSoc >= 100f) {
                                     selectedSoc = 90f
                                     Toast.makeText(context, "已调整至健康限值 90%", Toast.LENGTH_SHORT).show()
                                 }
                             },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = MaterialTheme.statusGood
-                            )
+                            colors = unifiedSwitchColors,
+                            modifier = Modifier.scale(0.78f)
                         )
                     }
 
@@ -786,11 +797,12 @@ fun HealthyChargingBottomSheet(
                         Spacer(Modifier.width(12.dp))
                         Switch(
                             checked = scheduledChargeEnabled,
-                            onCheckedChange = { scheduledChargeEnabled = it },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = MaterialTheme.statusGood
-                            )
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                scheduledChargeEnabled = it
+                            },
+                            colors = unifiedSwitchColors,
+                            modifier = Modifier.scale(0.78f)
                         )
                     }
 
@@ -873,11 +885,12 @@ fun HealthyChargingBottomSheet(
                         Spacer(Modifier.width(12.dp))
                         Switch(
                             checked = scheduledPreheatEnabled,
-                            onCheckedChange = { scheduledPreheatEnabled = it },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = MaterialTheme.statusGood
-                            )
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                scheduledPreheatEnabled = it
+                            },
+                            colors = unifiedSwitchColors,
+                            modifier = Modifier.scale(0.78f)
                         )
                     }
 
@@ -1452,6 +1465,7 @@ private fun WheelPickerColumn(
     }
 
     var lastHapticIndex by remember { androidx.compose.runtime.mutableIntStateOf(selectedIndex) }
+    var hasScrolled by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentActualIndex) {
         if (currentActualIndex != lastHapticIndex) {
@@ -1461,7 +1475,9 @@ private fun WheelPickerColumn(
     }
 
     LaunchedEffect(listState.isScrollInProgress) {
-        if (!listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) {
+            hasScrolled = true
+        } else if (hasScrolled) {
             onIndexChanged(currentActualIndex)
         }
     }
@@ -1542,28 +1558,36 @@ internal fun OfficialDayPill(
     val bgColor = if (selected) {
         if (isDark) Color(0xFF1E3A2B) else Color(0xFFEAF7EE)
     } else {
-        if (isDark) Color(0xFF282828) else Color(0xFFF6F6F6)
+        if (isDark) Color(0xFF282828) else Color(0xFFF2F2F2)
     }
     val contentColor = if (selected) {
         MaterialTheme.statusGood
     } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
+        if (isDark) Color(0xFFE2E2E2) else Color(0xFF2E2E2E)
+    }
+    val borderColor = if (selected) {
+        MaterialTheme.statusGood.copy(alpha = 0.55f)
+    } else {
+        if (isDark) Color(0x33FFFFFF) else Color(0x22000000)
     }
 
-    Box(
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = bgColor,
+        border = BorderStroke(0.8.dp, borderColor),
         modifier = modifier
             .height(34.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(bgColor)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
     ) {
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = contentColor
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = contentColor
+            )
+        }
     }
 }
 

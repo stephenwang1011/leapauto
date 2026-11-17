@@ -169,16 +169,41 @@ class ScheduledAirConditioningTest {
         val item = JSONObject(command.stateJson).getJSONArray("controls").getJSONObject(0)
         assertFalse("下发车端的 cmdid=171 协议载荷不得包含车端未定义字段 closeWindows", item.has("closeWindows"))
         assertFalse("下发车端的 cmdid=171 协议载荷不得包含车端未定义字段 closeSunshade", item.has("closeSunshade"))
+        assertFalse("下发车端的 cmdid=171 协议载荷不得包含车端未定义字段 driverHeating", item.has("driverHeating"))
+        assertFalse("下发车端的 cmdid=171 协议载荷不得包含车端未定义字段 driverVent", item.has("driverVent"))
+        assertFalse("下发车端的 cmdid=171 协议载荷不得包含车端未定义字段 leftRearHeating", item.has("leftRearHeating"))
+        assertFalse("下发车端的 cmdid=171 协议载荷不得包含车端未定义字段 leftRearVent", item.has("leftRearVent"))
+        assertFalse("下发车端的 cmdid=171 协议载荷不得包含车端未定义字段 rightRearHeating", item.has("rightRearHeating"))
+        assertFalse("下发车端的 cmdid=171 协议载荷不得包含车端未定义字段 rightRearVent", item.has("rightRearVent"))
+        assertFalse("下发车端的 cmdid=171 协议载荷不得包含车端未定义字段 steeringWheelHeating", item.has("steeringWheelHeating"))
     }
 
     @Test
-    fun `editorPlan preserves user local preferences for closeWindows and closeSunshade`() {
+    fun `editorPlan preserves user local preferences for comfort and windows`() {
         val remotePlan = plan().copy(startTime = "08:00")
-        val localPreferences = plan().copy(closeWindows = false, closeSunshade = false)
+        val localPreferences = plan().copy(
+            closeWindows = false,
+            closeSunshade = false,
+            driverHeating = true,
+            driverVent = false,
+            passengerHeating = true,
+            leftRearHeating = true,
+            leftRearVent = false,
+            rightRearHeating = false,
+            rightRearVent = true,
+            steeringWheelHeating = true
+        )
 
         val editorPlan = ScheduledAcState(hasSchedule = true, plan = remotePlan).editorPlan(localPreferences)
         assertEquals("08:00", editorPlan.startTime)
         assertFalse("编辑器应保留本地用户关闭车窗选项", editorPlan.closeWindows)
         assertFalse("编辑器应保留本地用户关闭遮阳帘选项", editorPlan.closeSunshade)
+        assertTrue("编辑器应保留本地用户主驾加热选项", editorPlan.driverHeating)
+        assertTrue("编辑器应保留本地用户副驾加热选项", editorPlan.passengerHeating)
+        assertTrue("编辑器应保留本地用户二排左座加热选项", editorPlan.leftRearHeating)
+        assertFalse("编辑器应保留本地用户二排左座通风关闭选项", editorPlan.leftRearVent)
+        assertFalse("编辑器应保留本地用户二排右座加热关闭选项", editorPlan.rightRearHeating)
+        assertTrue("编辑器应保留本地用户二排右座通风选项", editorPlan.rightRearVent)
+        assertTrue("编辑器应保留本地用户方向盘加热选项", editorPlan.steeringWheelHeating)
     }
 }

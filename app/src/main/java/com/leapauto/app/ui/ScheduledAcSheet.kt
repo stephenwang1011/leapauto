@@ -11,6 +11,9 @@ import com.leapauto.app.ui.theme.statusGood
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,6 +29,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -38,8 +43,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.leapauto.app.AirCircle
@@ -47,24 +54,27 @@ import com.leapauto.app.ChargePlanCyclesHelper
 import com.leapauto.app.R
 import com.leapauto.app.ScheduledAcMode
 import com.leapauto.app.ScheduledAcPlan
+import com.leapauto.app.ui.theme.LocalAppDarkTheme
 import com.leapauto.app.ui.theme.glassInsetSurface
+import com.leapauto.app.ui.theme.statusWarn
 
 /**
  * 定时空调设置抽屉（cmdid=171）。
  * 默认值与官方抓包一致：制热 32℃、7 挡、内循环、前挡出风。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ScheduledAcSheet(
-    onDismissRequest: () -> Unit,
+internal fun ScheduledAcPageContent(
     initialPlan: ScheduledAcPlan,
     onLoad: suspend () -> ScheduledAcPlan,
     temperatureRange: IntRange,
     fanRange: IntRange,
-    onConfirm: (ScheduledAcPlan) -> Unit
+    onConfirm: (ScheduledAcPlan) -> Unit,
+    onCancel: (ScheduledAcPlan) -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var draft by remember { mutableStateOf(initialPlan) }
+    var draft by remember {
+        mutableStateOf(if (initialPlan.mode == ScheduledAcMode.AUTO) initialPlan.copy(mode = ScheduledAcMode.HOT) else initialPlan)
+    }
     var loading by remember { mutableStateOf(true) }
     var loadFailed by remember { mutableStateOf(false) }
     var attempt by remember { mutableStateOf(0) }
@@ -75,7 +85,8 @@ internal fun ScheduledAcSheet(
         loading = true
         loadFailed = false
         try {
-            draft = onLoad()
+            val loaded = onLoad()
+            draft = if (loaded.mode == ScheduledAcMode.AUTO) loaded.copy(mode = ScheduledAcMode.HOT) else loaded
             draftDays = ChargePlanCyclesHelper.parseToDaySet(draft.days)
         } catch (e: CancellationException) {
             throw e
@@ -86,44 +97,37 @@ internal fun ScheduledAcSheet(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        dragHandle = null,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val isDark = LocalAppDarkTheme.current
+    val pageBgColor = if (isDark) Color(0xFF141414) else MaterialTheme.colorScheme.background
+    val uncheckedTrack = if (isDark) Color(0xFF383838) else Color(0xFFDFDFDF)
+    val uncheckedBorder = if (isDark) Color(0x26FFFFFF) else Color(0x1A000000)
+    val greenSwitchColors = SwitchDefaults.colors(
+        checkedThumbColor = Color.White,
+        checkedTrackColor = MaterialTheme.statusGood,
+        checkedBorderColor = Color.Transparent,
+        uncheckedThumbColor = Color.White,
+        uncheckedTrackColor = uncheckedTrack,
+        uncheckedBorderColor = uncheckedBorder
+    )
+
+    fun syncIfEnabled(updatedDraft: ScheduledAcPlan, currentDays: Set<Int> = draftDays) {
+        draft = updatedDraft
+        onConfirm(updatedDraft.copy(days = ChargePlanCyclesHelper.toVehicleMask(currentDays)))
+    }
+
+    Surface(
+        modifier = modifier.fillMaxSize(),
+        color = pageBgColor,
+        contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "定时空调",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-                IconButton(
-                    onClick = onDismissRequest,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .align(Alignment.CenterEnd)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_phosphor_x),
-                        contentDescription = "关闭",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-
             if (loading) {
                 Surface(
                     shape = RoundedCornerShape(percent = 50),
@@ -196,7 +200,8 @@ internal fun ScheduledAcSheet(
                         Text(
                             text = "启用定时空调",
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "按设定星期与时间自动开启座舱空调",
@@ -206,7 +211,18 @@ internal fun ScheduledAcSheet(
                     }
                     Switch(
                         checked = draft.enabled,
-                        onCheckedChange = { draft = draft.copy(enabled = it) }
+                        onCheckedChange = { isChecked ->
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            val next = draft.copy(enabled = isChecked)
+                            draft = next
+                            if (isChecked) {
+                                onConfirm(next.copy(days = ChargePlanCyclesHelper.toVehicleMask(draftDays)))
+                            } else {
+                                onCancel(next.copy(days = ChargePlanCyclesHelper.toVehicleMask(draftDays)))
+                            }
+                        },
+                        colors = greenSwitchColors,
+                        modifier = Modifier.scale(0.78f)
                     )
                 }
             }
@@ -224,7 +240,7 @@ internal fun ScheduledAcSheet(
                 )
                 TimeWheelPicker(
                     timeString = draft.startTime,
-                    onTimeChanged = { draft = draft.copy(startTime = it) },
+                    onTimeChanged = { syncIfEnabled(draft.copy(startTime = it)) },
                     minuteStep = 1
                 )
             }
@@ -274,8 +290,8 @@ internal fun ScheduledAcSheet(
                 value = "${draft.temperatureC} ℃",
                 canDecrease = draft.temperatureC > temperatureRange.first,
                 canIncrease = draft.temperatureC < temperatureRange.last,
-                onDecrease = { draft = draft.copy(temperatureC = draft.temperatureC - 1) },
-                onIncrease = { draft = draft.copy(temperatureC = draft.temperatureC + 1) }
+                onDecrease = { syncIfEnabled(draft.copy(temperatureC = draft.temperatureC - 1)) },
+                onIncrease = { syncIfEnabled(draft.copy(temperatureC = draft.temperatureC + 1)) }
             )
 
             StepperRow(
@@ -283,8 +299,8 @@ internal fun ScheduledAcSheet(
                 value = "${draft.windLevel} 挡",
                 canDecrease = draft.windLevel > fanRange.first,
                 canIncrease = draft.windLevel < fanRange.last,
-                onDecrease = { draft = draft.copy(windLevel = draft.windLevel - 1) },
-                onIncrease = { draft = draft.copy(windLevel = draft.windLevel + 1) }
+                onDecrease = { syncIfEnabled(draft.copy(windLevel = draft.windLevel - 1)) },
+                onIncrease = { syncIfEnabled(draft.copy(windLevel = draft.windLevel + 1)) }
             )
 
             Column(
@@ -301,11 +317,11 @@ internal fun ScheduledAcSheet(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    ScheduledAcMode.entries.forEach { mode ->
+                    listOf(ScheduledAcMode.COLD, ScheduledAcMode.HOT).forEach { mode ->
                         ChoicePill(
                             label = mode.label,
                             selected = draft.mode == mode,
-                            onClick = { draft = draft.copy(mode = mode) },
+                            onClick = { syncIfEnabled(draft.copy(mode = mode)) },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -330,13 +346,284 @@ internal fun ScheduledAcSheet(
                         ChoicePill(
                             label = circle.displayLabel,
                             selected = draft.circle == circle,
-                            onClick = { draft = draft.copy(circle = circle) },
+                            onClick = { syncIfEnabled(draft.copy(circle = circle)) },
                             modifier = Modifier.weight(1f)
                         )
                     }
                 }
             }
 
+            // 主副驾驶座椅舒适（加热 / 通风）
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.glassInsetSurface,
+                border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "全车座椅舒适",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    val crossDividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.22f else 0.32f)
+
+                    // 一排：主驾与副驾
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // 主驾驶位
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "主驾",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                ScheduledComfortPill(
+                                    label = "加热",
+                                    iconRes = R.drawable.ic_phosphor_sun,
+                                    selected = draft.driverHeating,
+                                    activeColor = MaterialTheme.statusWarn,
+                                    onClick = {
+                                        val next = !draft.driverHeating
+                                        syncIfEnabled(
+                                            draft.copy(
+                                                driverHeating = next,
+                                                driverVent = if (next) false else draft.driverVent
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                ScheduledComfortPill(
+                                    label = "通风",
+                                    iconRes = R.drawable.ic_phosphor_snowflake,
+                                    selected = draft.driverVent,
+                                    activeColor = MaterialTheme.statusGood,
+                                    onClick = {
+                                        val next = !draft.driverVent
+                                        syncIfEnabled(
+                                            draft.copy(
+                                                driverVent = next,
+                                                driverHeating = if (next) false else draft.driverHeating
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
+                        // 纵向微晶分割线 (上半截)
+                        Box(
+                            modifier = Modifier
+                                .width(0.6.dp)
+                                .height(56.dp)
+                                .background(crossDividerColor)
+                        )
+
+                        // 副驾驶位
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "副驾",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                ScheduledComfortPill(
+                                    label = "加热",
+                                    iconRes = R.drawable.ic_phosphor_sun,
+                                    selected = draft.passengerHeating,
+                                    activeColor = MaterialTheme.statusWarn,
+                                    onClick = {
+                                        val next = !draft.passengerHeating
+                                        syncIfEnabled(
+                                            draft.copy(
+                                                passengerHeating = next,
+                                                passengerVent = if (next) false else draft.passengerVent
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                ScheduledComfortPill(
+                                    label = "通风",
+                                    iconRes = R.drawable.ic_phosphor_snowflake,
+                                    selected = draft.passengerVent,
+                                    activeColor = MaterialTheme.statusGood,
+                                    onClick = {
+                                        val next = !draft.passengerVent
+                                        syncIfEnabled(
+                                            draft.copy(
+                                                passengerVent = next,
+                                                passengerHeating = if (next) false else draft.passengerHeating
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+
+                    // 横向微晶分割线
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp)
+                            .height(0.6.dp)
+                            .background(crossDividerColor)
+                    )
+
+                    // 二排：二排左与二排右
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // 二排左座
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "二排左座(主驾后)",
+                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.5.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                ScheduledComfortPill(
+                                    label = "加热",
+                                    iconRes = R.drawable.ic_phosphor_sun,
+                                    selected = draft.leftRearHeating,
+                                    activeColor = MaterialTheme.statusWarn,
+                                    onClick = {
+                                        val next = !draft.leftRearHeating
+                                        syncIfEnabled(
+                                            draft.copy(
+                                                leftRearHeating = next,
+                                                leftRearVent = if (next) false else draft.leftRearVent
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                ScheduledComfortPill(
+                                    label = "通风",
+                                    iconRes = R.drawable.ic_phosphor_snowflake,
+                                    selected = draft.leftRearVent,
+                                    activeColor = MaterialTheme.statusGood,
+                                    onClick = {
+                                        val next = !draft.leftRearVent
+                                        syncIfEnabled(
+                                            draft.copy(
+                                                leftRearVent = next,
+                                                leftRearHeating = if (next) false else draft.leftRearHeating
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
+                        // 纵向微晶分割线 (下半截)
+                        Box(
+                            modifier = Modifier
+                                .width(0.6.dp)
+                                .height(56.dp)
+                                .background(crossDividerColor)
+                        )
+
+                        // 二排右座
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "二排右座(副驾驶后)",
+                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.5.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                ScheduledComfortPill(
+                                    label = "加热",
+                                    iconRes = R.drawable.ic_phosphor_sun,
+                                    selected = draft.rightRearHeating,
+                                    activeColor = MaterialTheme.statusWarn,
+                                    onClick = {
+                                        val next = !draft.rightRearHeating
+                                        syncIfEnabled(
+                                            draft.copy(
+                                                rightRearHeating = next,
+                                                rightRearVent = if (next) false else draft.rightRearVent
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                ScheduledComfortPill(
+                                    label = "通风",
+                                    iconRes = R.drawable.ic_phosphor_snowflake,
+                                    selected = draft.rightRearVent,
+                                    activeColor = MaterialTheme.statusGood,
+                                    onClick = {
+                                        val next = !draft.rightRearVent
+                                        syncIfEnabled(
+                                            draft.copy(
+                                                rightRearVent = next,
+                                                rightRearHeating = if (next) false else draft.rightRearHeating
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 方向盘加热
             Surface(
                 shape = RoundedCornerShape(14.dp),
                 color = MaterialTheme.glassInsetSurface,
@@ -348,15 +635,27 @@ internal fun ScheduledAcSheet(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "前挡除霜",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "方向盘加热",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "定时到点时联动开启方向盘加热",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Switch(
-                        checked = draft.windshieldDefogging,
-                        onCheckedChange = { draft = draft.copy(windshieldDefogging = it) }
+                        checked = draft.steeringWheelHeating,
+                        onCheckedChange = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            syncIfEnabled(draft.copy(steeringWheelHeating = it))
+                        },
+                        colors = greenSwitchColors,
+                        modifier = Modifier.scale(0.78f)
                     )
                 }
             }
@@ -380,7 +679,8 @@ internal fun ScheduledAcSheet(
                             Text(
                                 text = "关闭车窗",
                                 style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "定时到点时联动关闭打开的车窗，防止冷热气外泄",
@@ -390,7 +690,12 @@ internal fun ScheduledAcSheet(
                         }
                         Switch(
                             checked = draft.closeWindows,
-                            onCheckedChange = { draft = draft.copy(closeWindows = it) }
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                syncIfEnabled(draft.copy(closeWindows = it))
+                            },
+                            colors = greenSwitchColors,
+                            modifier = Modifier.scale(0.78f)
                         )
                     }
 
@@ -403,7 +708,8 @@ internal fun ScheduledAcSheet(
                             Text(
                                 text = "关闭遮阳帘",
                                 style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "定时到点时联动关闭全景天幕遮阳帘，隔绝阳光直晒",
@@ -413,31 +719,37 @@ internal fun ScheduledAcSheet(
                         }
                         Switch(
                             checked = draft.closeSunshade,
-                            onCheckedChange = { draft = draft.copy(closeSunshade = it) }
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                syncIfEnabled(draft.copy(closeSunshade = it))
+                            },
+                            colors = greenSwitchColors,
+                            modifier = Modifier.scale(0.78f)
                         )
                     }
                 }
             }
-
-            Button(
-                onClick = {
-                    onConfirm(
-                        draft.copy(days = ChargePlanCyclesHelper.toVehicleMask(draftDays))
-                    )
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Text(
-                    text = if (draft.enabled) "保存并开启" else "保存并关闭",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
-                )
-            }
+            Spacer(Modifier.height(24.dp))
         }
     }
+}
+
+@Composable
+internal fun ScheduledAcSheet(
+    onDismissRequest: () -> Unit = {},
+    initialPlan: ScheduledAcPlan,
+    onLoad: suspend () -> ScheduledAcPlan,
+    temperatureRange: IntRange,
+    fanRange: IntRange,
+    onConfirm: (ScheduledAcPlan) -> Unit
+) {
+    ScheduledAcPageContent(
+        initialPlan = initialPlan,
+        onLoad = onLoad,
+        temperatureRange = temperatureRange,
+        fanRange = fanRange,
+        onConfirm = onConfirm
+    )
 }
 
 @Composable
@@ -458,6 +770,7 @@ private fun StepperRow(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
         RoundStepButton(text = "−", enabled = canDecrease, onClick = onDecrease)
@@ -465,6 +778,7 @@ private fun StepperRow(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(horizontal = 4.dp)
         )
         RoundStepButton(text = "+", enabled = canIncrease, onClick = onIncrease)
@@ -477,12 +791,15 @@ private fun RoundStepButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
+    val isDark = LocalAppDarkTheme.current
+    val btnBg = if (isDark) Color(0xFF282828) else Color(0xFFF0F0F0)
+    val btnBorder = if (isDark) Color(0x33FFFFFF) else Color(0x28000000)
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.glassInsetSurface,
-        border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        color = btnBg,
+        border = BorderStroke(0.8.dp, btnBorder),
         modifier = Modifier
-            .size(width = 40.dp, height = 34.dp)
+            .size(width = 42.dp, height = 36.dp)
             .clip(RoundedCornerShape(10.dp))
             .clickable(enabled = enabled, onClick = onClick)
     ) {
@@ -492,9 +809,9 @@ private fun RoundStepButton(
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (enabled) {
-                    MaterialTheme.colorScheme.onSurface
+                    if (isDark) Color.White else Color(0xFF202020)
                 } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
                 }
             )
         }
@@ -508,12 +825,17 @@ private fun ChoicePill(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isDark = LocalAppDarkTheme.current
+    val unselectedBg = if (isDark) Color(0xFF282828) else Color(0xFFF2F2F2)
+    val unselectedBorder = if (isDark) Color(0x33FFFFFF) else Color(0x22000000)
+    val unselectedTextColor = if (isDark) Color(0xFFE2E2E2) else Color(0xFF2E2E2E)
+
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = if (selected) MaterialTheme.statusGood.copy(alpha = 0.14f) else MaterialTheme.glassInsetSurface,
+        color = if (selected) MaterialTheme.statusGood.copy(alpha = 0.16f) else unselectedBg,
         border = BorderStroke(
-            0.6.dp,
-            if (selected) MaterialTheme.statusGood.copy(alpha = 0.50f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+            0.8.dp,
+            if (selected) MaterialTheme.statusGood.copy(alpha = 0.60f) else unselectedBorder
         ),
         modifier = modifier
             .height(36.dp)
@@ -523,9 +845,62 @@ private fun ChoicePill(
         Box(contentAlignment = Alignment.Center) {
             Text(
                 text = label,
-                fontSize = 12.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                color = if (selected) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant
+                fontSize = 12.5.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = if (selected) MaterialTheme.statusGood else unselectedTextColor
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScheduledComfortPill(
+    label: String,
+    iconRes: Int,
+    selected: Boolean,
+    activeColor: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isDark = LocalAppDarkTheme.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val unselectedBg = if (isDark) Color(0xFF282828) else Color(0xFFF2F2F2)
+    val unselectedBorder = if (isDark) Color(0x33FFFFFF) else Color(0x22000000)
+    val unselectedContentColor = if (isDark) Color(0xFFE2E2E2) else Color(0xFF2E2E2E)
+
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = if (selected) activeColor.copy(alpha = 0.18f) else unselectedBg,
+        border = BorderStroke(
+            0.8.dp,
+            if (selected) activeColor.copy(alpha = 0.65f) else unselectedBorder
+        ),
+        shadowElevation = 0.dp,
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .clickable {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = label,
+                tint = if (selected) activeColor else unselectedContentColor,
+                modifier = Modifier.size(15.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = if (selected) activeColor else unselectedContentColor,
+                maxLines = 1
             )
         }
     }

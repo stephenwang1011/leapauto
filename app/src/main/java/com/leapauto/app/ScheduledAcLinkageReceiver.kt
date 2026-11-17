@@ -82,12 +82,108 @@ class ScheduledAcLinkageReceiver : BroadcastReceiver() {
                     }
                 }
 
-                // 3. 发送本地通知提示车主
+                // 3. 到点联动主驾驶舒适
+                if (plan.driverHeating) {
+                    try {
+                        Thread.sleep(1200)
+                        api.sendControl(Commands.build("driverSeatHeating_2"), savedPin)
+                        actionsDone.add("已开启主驾加热")
+                        Log.i(TAG, "定时到点：已成功下发主驾座椅加热")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "定时到点：联动主驾加热失败: ${e.message}")
+                    }
+                } else if (plan.driverVent) {
+                    try {
+                        Thread.sleep(1200)
+                        api.sendControl(Commands.build("driverSeatVentilation_2"), savedPin)
+                        actionsDone.add("已开启主驾通风")
+                        Log.i(TAG, "定时到点：已成功下发主驾座椅通风")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "定时到点：联动主驾通风失败: ${e.message}")
+                    }
+                }
+
+                // 4. 到点联动副驾驶舒适
+                if (plan.passengerHeating) {
+                    try {
+                        Thread.sleep(1200)
+                        api.sendControl(Commands.build("passengerSeatHeating_2"), savedPin)
+                        actionsDone.add("已开启副驾加热")
+                        Log.i(TAG, "定时到点：已成功下发副驾座椅加热")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "定时到点：联动副驾加热失败: ${e.message}")
+                    }
+                } else if (plan.passengerVent) {
+                    try {
+                        Thread.sleep(1200)
+                        api.sendControl(Commands.build("passengerSeatVentilation_2"), savedPin)
+                        actionsDone.add("已开启副驾通风")
+                        Log.i(TAG, "定时到点：已成功下发副驾座椅通风")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "定时到点：联动副驾通风失败: ${e.message}")
+                    }
+                }
+
+                // 5. 到点联动二排左座舒适
+                if (plan.leftRearHeating) {
+                    try {
+                        Thread.sleep(1200)
+                        api.sendControl(Commands.build("leftRearSeatHeating_2"), savedPin)
+                        actionsDone.add("已开启二排左加热")
+                        Log.i(TAG, "定时到点：已成功下发二排左座椅加热")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "定时到点：联动二排左加热失败: ${e.message}")
+                    }
+                } else if (plan.leftRearVent) {
+                    try {
+                        Thread.sleep(1200)
+                        api.sendControl(Commands.build("leftRearSeatVentilation_2"), savedPin)
+                        actionsDone.add("已开启二排左通风")
+                        Log.i(TAG, "定时到点：已成功下发二排左座椅通风")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "定时到点：联动二排左通风失败: ${e.message}")
+                    }
+                }
+
+                // 6. 到点联动二排右座舒适
+                if (plan.rightRearHeating) {
+                    try {
+                        Thread.sleep(1200)
+                        api.sendControl(Commands.build("rightRearSeatHeating_2"), savedPin)
+                        actionsDone.add("已开启二排右加热")
+                        Log.i(TAG, "定时到点：已成功下发二排右座椅加热")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "定时到点：联动二排右加热失败: ${e.message}")
+                    }
+                } else if (plan.rightRearVent) {
+                    try {
+                        Thread.sleep(1200)
+                        api.sendControl(Commands.build("rightRearSeatVentilation_2"), savedPin)
+                        actionsDone.add("已开启二排右通风")
+                        Log.i(TAG, "定时到点：已成功下发二排右座椅通风")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "定时到点：联动二排右通风失败: ${e.message}")
+                    }
+                }
+
+                // 7. 到点联动方向盘加热
+                if (plan.steeringWheelHeating) {
+                    try {
+                        Thread.sleep(1200)
+                        api.sendControl(Commands.build("steeringWheelHeating_2"), savedPin)
+                        actionsDone.add("已开启方向盘加热")
+                        Log.i(TAG, "定时到点：已成功下发方向盘加热")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "定时到点：联动方向盘加热失败: ${e.message}")
+                    }
+                }
+
+                // 8. 发送本地通知提示车主
                 if (actionsDone.isNotEmpty()) {
                     showNotification(appContext, "定时空调到点联动", actionsDone.joinToString("，"))
                 }
 
-                // 4. 自动注册下一次触发时间
+                // 9. 自动注册下一次触发时间
                 ScheduledAcScheduler.schedule(appContext, vin, plan)
             } catch (e: Exception) {
                 Log.e(TAG, "执行定时空调到点联动异常: ${e.message}", e)
@@ -112,7 +208,16 @@ class ScheduledAcLinkageReceiver : BroadcastReceiver() {
         circle = AirCircle.entries.firstOrNull { it.name == store.loadScheduledAcCircle(vin) } ?: AirCircle.INNER,
         windshieldDefogging = store.loadScheduledAcDefrost(vin),
         closeWindows = store.loadScheduledAcCloseWindows(vin),
-        closeSunshade = store.loadScheduledAcCloseSunshade(vin)
+        closeSunshade = store.loadScheduledAcCloseSunshade(vin),
+        driverHeating = store.loadScheduledAcDriverHeating(vin),
+        driverVent = store.loadScheduledAcDriverVent(vin),
+        passengerHeating = store.loadScheduledAcPassengerHeating(vin),
+        passengerVent = store.loadScheduledAcPassengerVent(vin),
+        leftRearHeating = store.loadScheduledAcLeftRearHeating(vin),
+        leftRearVent = store.loadScheduledAcLeftRearVent(vin),
+        rightRearHeating = store.loadScheduledAcRightRearHeating(vin),
+        rightRearVent = store.loadScheduledAcRightRearVent(vin),
+        steeringWheelHeating = store.loadScheduledAcSteeringWheelHeating(vin)
     )
 
     private fun showNotification(context: Context, title: String, content: String) {

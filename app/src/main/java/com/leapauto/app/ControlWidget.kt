@@ -898,7 +898,7 @@ class ControlWidget : AppWidgetProvider() {
         internal fun scaleBitmapForWidget(
             bitmap: android.graphics.Bitmap,
             targetWidth: Int = 680,
-            scaleRatio: Float = 0.94f
+            scaleRatio: Float = 0.82f
         ): android.graphics.Bitmap {
             val canvasW = targetWidth
             val canvasH = (bitmap.height * (targetWidth.toFloat() / bitmap.width)).toInt().coerceAtLeast(1)
@@ -933,7 +933,7 @@ class ControlWidget : AppWidgetProvider() {
                 null
             }
             if (remoteBitmap != null) {
-                val scaledBitmap = scaleBitmapForWidget(remoteBitmap, 680, 0.94f)
+                val scaledBitmap = scaleBitmapForWidget(remoteBitmap, 680, 0.82f)
                 views.setImageViewBitmap(R.id.imgWCar, scaledBitmap)
                 views.setViewVisibility(R.id.imgWCar, View.VISIBLE)
             } else {
@@ -1006,11 +1006,27 @@ class ControlWidget : AppWidgetProvider() {
             return context.createConfigurationContext(configuration)
         }
 
-        private fun widgetActionBackgroundResource(darkTheme: Boolean): Int =
-            if (darkTheme) R.drawable.widget_action_background_dark else R.drawable.widget_action_background_light
+        internal fun widgetActionBackgroundResource(opacity: Int, darkTheme: Boolean): Int = when {
+            darkTheme && opacity == 25 -> R.drawable.widget_action_background_25_dark
+            darkTheme && opacity == 50 -> R.drawable.widget_action_background_50_dark
+            darkTheme && opacity == 75 -> R.drawable.widget_action_background_75_dark
+            darkTheme -> R.drawable.widget_action_background_dark
+            opacity == 25 -> R.drawable.widget_action_background_25_light
+            opacity == 50 -> R.drawable.widget_action_background_50_light
+            opacity == 75 -> R.drawable.widget_action_background_75_light
+            else -> R.drawable.widget_action_background_light
+        }
 
-        internal fun resolveWidgetActionBackground(context: Context, darkTheme: Boolean = widgetEffectiveDarkTheme(context)): Int =
-            widgetActionBackgroundResource(darkTheme)
+        internal fun widgetActionBackgroundResource(darkTheme: Boolean): Int =
+            widgetActionBackgroundResource(100, darkTheme)
+
+        internal fun resolveWidgetActionBackground(context: Context, darkTheme: Boolean = widgetEffectiveDarkTheme(context)): Int {
+            val opacity = SessionStore(context).loadWidgetOpacity()
+            return widgetActionBackgroundResource(opacity, darkTheme)
+        }
+
+        internal fun resolveWidgetActionBackground(context: Context, opacity: Int, darkTheme: Boolean = widgetEffectiveDarkTheme(context)): Int =
+            widgetActionBackgroundResource(opacity, darkTheme)
 
         internal fun widgetBackgroundResource(opacity: Int, darkTheme: Boolean): Int = when {
             darkTheme && opacity == 75 -> R.drawable.widget_card_background_75_dark

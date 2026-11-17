@@ -276,6 +276,7 @@ private enum class ScreenDestination(val navigationOrder: Int) {
     HOME(1),
     LOCATION_DETAIL(2),
     CLIMATE_CONTROL(2),
+    SCHEDULED_AC(2),
     ACCOUNT(3),
     AUTHOR_SUPPORT(4)
 }
@@ -344,6 +345,7 @@ fun LeapAutoScreen(
     onApplyChargingSettings: (Boolean, Int, Boolean, String, String, Boolean, Int, String) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onApplyScheduledPreheat: (Boolean, String, String) -> Unit = { _, _, _ -> },
     onApplyScheduledAc: (ScheduledAcPlan) -> Unit = {},
+    onCancelScheduledAc: (ScheduledAcPlan) -> Unit = {},
     onLoadScheduledAc: suspend () -> ScheduledAcPlan = { error("预约查询不可用") },
     openScheduledAcSheet: Boolean = false,
     onDismissScheduledAcSheet: () -> Unit = {},
@@ -418,24 +420,28 @@ fun LeapAutoScreen(
     var showHealthyChargingSheet by rememberSaveable { mutableStateOf(false) }
     var showVehicleHealthCheckSheet by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirmationDialog by rememberSaveable { mutableStateOf(false) }
-    var showScheduledAcSheet by rememberSaveable { mutableStateOf(false) }
+    var showScheduledAcScreen by rememberSaveable { mutableStateOf(false) }
+    var scheduledAcReturnToClimate by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(openScheduledAcSheet) {
         if (openScheduledAcSheet) {
-            showScheduledAcSheet = true
+            showScheduledAcScreen = true
+            scheduledAcReturnToClimate = false
         }
     }
 
     val destination = when {
         !loggedIn -> ScreenDestination.LOGIN
         showAuthorSupportScreen -> ScreenDestination.AUTHOR_SUPPORT
-        showVehicleLocation && selectedTab == MainNavigationTabs.VEHICLE -> ScreenDestination.LOCATION_DETAIL
+        showScheduledAcScreen && selectedTab == MainNavigationTabs.VEHICLE -> ScreenDestination.SCHEDULED_AC
         showClimateControl && selectedTab == MainNavigationTabs.VEHICLE -> ScreenDestination.CLIMATE_CONTROL
+        showVehicleLocation && selectedTab == MainNavigationTabs.VEHICLE -> ScreenDestination.LOCATION_DETAIL
         selectedTab == MainNavigationTabs.ACCOUNT -> ScreenDestination.ACCOUNT
         else -> ScreenDestination.HOME
     }
     val appBarTitle = when {
         loggedIn && showAuthorSupportScreen -> "支持作者"
+        loggedIn && showScheduledAcScreen -> "定时空调"
         loggedIn && showVehicleLocation -> "车辆位置"
         loggedIn && showClimateControl -> "空调"
         loggedIn -> when (selectedTab) {
@@ -453,6 +459,7 @@ fun LeapAutoScreen(
     val hasSubpage = selectedTab == MainNavigationTabs.ACCOUNT ||
         showVehicleLocation ||
         showClimateControl ||
+        showScheduledAcScreen ||
         showAuthorSupportScreen
     val updatePromptRelease = (versionUpdateState as? VersionUpdateState.UpdateAvailable)?.latestRelease
     val shouldShowVersionUpdatePrompt = updatePromptRelease != null &&
@@ -471,11 +478,18 @@ fun LeapAutoScreen(
     val closeSubpage: () -> Unit = {
         if (showAuthorSupportScreen) {
             showAuthorSupportScreen = false
+        } else if (showScheduledAcScreen) {
+            showScheduledAcScreen = false
+            onDismissScheduledAcSheet()
+            if (scheduledAcReturnToClimate) {
+                showClimateControl = true
+            }
+        } else if (showClimateControl) {
+            showClimateControl = false
+        } else if (showVehicleLocation) {
+            showVehicleLocation = false
         } else if (selectedTab == MainNavigationTabs.ACCOUNT) {
             selectedTab = MainNavigationTabs.VEHICLE
-        } else {
-            showVehicleLocation = false
-            showClimateControl = false
         }
     }
 
@@ -489,6 +503,7 @@ fun LeapAutoScreen(
         if (!loggedIn) {
             showVehicleLocation = false
             showClimateControl = false
+            showScheduledAcScreen = false
             showAuthorSupportScreen = false
         }
         onAutoRefreshActiveChange(loggedIn && selectedTab == MainNavigationTabs.VEHICLE)
@@ -499,6 +514,7 @@ fun LeapAutoScreen(
             selectedTab = MainNavigationTabs.ACCOUNT
             showVehicleLocation = false
             showClimateControl = false
+            showScheduledAcScreen = false
             onOpenBluetoothKey?.invoke()
         }
     }
@@ -688,24 +704,6 @@ fun LeapAutoScreen(
         )
     }
 
-    if (showScheduledAcSheet) {
-        ScheduledAcSheet(
-            onDismissRequest = {
-                showScheduledAcSheet = false
-                onDismissScheduledAcSheet()
-            },
-            initialPlan = scheduledAcPlan,
-            onLoad = onLoadScheduledAc,
-            temperatureRange = 16..32,
-            fanRange = 1..7,
-            onConfirm = { plan ->
-                showScheduledAcSheet = false
-                onDismissScheduledAcSheet()
-                onApplyScheduledAc(plan)
-            }
-        )
-    }
-
     geetestChallenge?.let { challenge ->
         GeetestCaptchaDialog(
             challenge = challenge,
@@ -807,14 +805,14 @@ fun LeapAutoScreen(
             topBar = {
                 if (destination != ScreenDestination.HOME && destination != ScreenDestination.LOGIN) {
                     TopAppBar(
-                        navigationIcon = if (showAuthorSupportScreen || showVehicleLocation || showClimateControl ||
+                        navigationIcon = if (showAuthorSupportScreen || showVehicleLocation || showClimateControl || showScheduledAcScreen ||
                             selectedTab == MainNavigationTabs.ACCOUNT
                         ) {
                             {
                                 IconButton(onClick = closeSubpage) {
                                     Icon(
                                         painterResource(R.drawable.ic_phosphor_arrow_left),
-                                        contentDescription = if (showAuthorSupportScreen) "返回设置" else "返回爱车",
+                                        contentDescription = if (showAuthorSupportScreen) "返回设置" else if (showScheduledAcScreen && scheduledAcReturnToClimate) "返回空调" else "返回爱车",
                                         tint = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
@@ -955,7 +953,10 @@ fun LeapAutoScreen(
                         scheduledAcSupported = scheduledAcSupported,
                         onApplyScheduledAc = onApplyScheduledAc,
                         onLoadScheduledAc = onLoadScheduledAc,
-                        onOpenScheduledAc = { showScheduledAcSheet = true }
+                        onOpenScheduledAc = {
+                            showScheduledAcScreen = true
+                            scheduledAcReturnToClimate = false
+                        }
                     )
                 }
 
@@ -999,8 +1000,24 @@ fun LeapAutoScreen(
                                 onApplyClimateSettings = onApplyClimateSettings,
                                 scheduledAcPlan = scheduledAcPlan,
                                 scheduledAcSupported = scheduledAcSupported,
-                                onApplyScheduledAc = onApplyScheduledAc,
-                                onLoadScheduledAc = onLoadScheduledAc
+                                onOpenScheduledAc = {
+                                    showScheduledAcScreen = true
+                                    scheduledAcReturnToClimate = true
+                                }
+                            )
+                        }
+                        ScreenDestination.SCHEDULED_AC -> {
+                            ScheduledAcPageContent(
+                                initialPlan = scheduledAcPlan,
+                                onLoad = onLoadScheduledAc,
+                                temperatureRange = hvacCapability.temperatureMinC..hvacCapability.temperatureMaxC,
+                                fanRange = hvacCapability.effectiveUiFanRange(),
+                                onConfirm = { plan ->
+                                    onApplyScheduledAc(plan)
+                                },
+                                onCancel = { plan ->
+                                    onCancelScheduledAc(plan)
+                                }
                             )
                         }
                         ScreenDestination.ACCOUNT -> {
@@ -1374,7 +1391,6 @@ private fun HomeContent(
     var showAddressNavigationDialog by rememberSaveable { mutableStateOf(false) }
     var showParkingDetailDialog by rememberSaveable { mutableStateOf(false) }
     var showFridgeControlBottomSheet by rememberSaveable { mutableStateOf(false) }
-    var showClimateControlBottomSheet by rememberSaveable { mutableStateOf(false) }
     val homeNight = LocalAppDarkTheme.current
     val homeBackground = if (homeNight) HomeNightStyle.page else MaterialTheme.colorScheme.background
 
@@ -1500,7 +1516,7 @@ private fun HomeContent(
                             ClimateOverviewCard(
                                 status = status,
                                 liveWeather = liveWeather,
-                                onOpenClimate = { showClimateControlBottomSheet = true },
+                                onOpenClimate = onOpenClimateControl,
                                 onQuickAcToggle = onControl,
                                 controlBusy = activeControlCommand == "climate" || activeControlCommand?.startsWith("ac") == true,
                                 compact = true,
@@ -1535,7 +1551,7 @@ private fun HomeContent(
                         ClimateOverviewCard(
                             status = status,
                             liveWeather = liveWeather,
-                            onOpenClimate = { showClimateControlBottomSheet = true },
+                            onOpenClimate = onOpenClimateControl,
                             onQuickAcToggle = onControl,
                             controlBusy = activeControlCommand == "climate" || activeControlCommand?.startsWith("ac") == true,
                             compact = false,
@@ -1595,25 +1611,6 @@ private fun HomeContent(
             fridgeStatus = status.fridgeStatus,
             onApplyFridgeControl = onFridgeControl,
             busy = activeControlCommand?.startsWith("fridge") == true
-        )
-    }
-
-    if (showClimateControlBottomSheet) {
-        ClimateControlBottomSheet(
-            onDismissRequest = { showClimateControlBottomSheet = false },
-            status = status,
-            liveWeather = liveWeather,
-            busy = activeControlCommand == "climate" || activeControlCommand?.startsWith("ac") == true,
-            hvacCapability = hvacCapability,
-            vehicleModel = vehicleModel,
-            onControl = onControl,
-            onApplyClimateSettings = onApplyClimateSettings,
-            controlFeedback = controlFeedback,
-            onDismissControlFeedback = onDismissControlFeedback,
-            scheduledAcPlan = scheduledAcPlan,
-            scheduledAcSupported = scheduledAcSupported,
-            onApplyScheduledAc = onApplyScheduledAc,
-            onLoadScheduledAc = onLoadScheduledAc
         )
     }
 }
@@ -9915,7 +9912,7 @@ private fun activeClimatePresetName(status: VehicleStatus?): String? {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClimateControlBottomSheet(
-    onDismissRequest: () -> Unit,
+    onDismissRequest: () -> Unit = {},
     status: VehicleStatus?,
     liveWeather: com.leapauto.app.weather.LiveWeather? = null,
     busy: Boolean = false,
@@ -9928,13 +9925,11 @@ fun ClimateControlBottomSheet(
     scheduledAcPlan: ScheduledAcPlan = ScheduledAcPlan(),
     scheduledAcSupported: Boolean = false,
     onApplyScheduledAc: (ScheduledAcPlan) -> Unit = {},
-    onLoadScheduledAc: suspend () -> ScheduledAcPlan = { error("预约查询不可用") }
+    onLoadScheduledAc: suspend () -> ScheduledAcPlan = { error("预约查询不可用") },
+    onOpenScheduledAc: () -> Unit = {}
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    var showExtendedControls by remember { mutableStateOf(false) }
-    var showScheduledAcSheet by remember { mutableStateOf(false) }
     // 解除全局 busy 锁定：只要有车辆数据，面板按键随时响应触控，实现极致跟手性
     val actionsEnabled = status != null
     val fanRange = hvacCapability.effectiveUiFanRange()
@@ -10078,30 +10073,17 @@ fun ClimateControlBottomSheet(
     }
     val currentAcColor = if (isAcOn) activeAcColor else MaterialTheme.colorScheme.onSurfaceVariant
 
-    ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
-        BoxWithConstraints(
-            modifier = Modifier.fillMaxWidth()
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp, vertical = 6.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(11.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = maxHeight)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 4.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(11.dp)
-                ) {
-                    // 1. 顶部标题栏：图标 + 标题 + 状态标签 + 一键开关胶囊
+            // 1. 顶部标题栏：图标 + 标题 + 状态标签 + 一键开关胶囊
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -10508,7 +10490,7 @@ fun ClimateControlBottomSheet(
                         enabled = actionsEnabled,
                         onClick = {
                             haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            showScheduledAcSheet = true
+                            onOpenScheduledAc()
                         },
                         modifier = Modifier.weight(1f)
                     )
@@ -10557,121 +10539,77 @@ fun ClimateControlBottomSheet(
                         }
                     }
 
-                // 5. 展开/收起 深度控制（出风方向与座椅舒适度）
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.glassInsetSurface,
-                    border = BorderStroke(
-                        0.6.dp,
-                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-                    ),
-                    shadowElevation = 0.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            showExtendedControls = !showExtendedControls
-                        }
+                // 5. 出风方向与座椅舒适度（完全展开）
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 10.dp, horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (showExtendedControls) "收起更多设置" else "展开出风与座椅舒适",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Icon(
-                            painter = painterResource(R.drawable.ic_phosphor_caret_right),
-                            contentDescription = if (showExtendedControls) "收起" else "展开",
-                            modifier = Modifier
-                                .size(14.dp)
-                                .rotate(if (showExtendedControls) -90f else 90f),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // 折叠区域：出风方向与座椅舒适度
-                AnimatedVisibility(visible = showExtendedControls) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        // 出风方向
-                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text("出风方向", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(
-                                    if (editedOutletName == AirOutlet.ALL.name) "全车出风" else "前风挡出风",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.statusGood
-                                )
-                            }
-                            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                                SegmentedButton(
-                                    selected = editedOutletName == AirOutlet.ALL.name,
-                                    onClick = {
-                                        userLastActionEpochMs = System.currentTimeMillis()
-                                        optimisticAcSwitch = true
-                                        optimisticPresetName = null
-                                        editedOutletName = AirOutlet.ALL.name
-                                        editedDefogging = false
-                                        submitSettings(HvacOperation.ON, "已切换至全车出风")
-                                    },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                                    icon = {},
-                                    colors = SegmentedButtonDefaults.colors(
-                                        activeContainerColor = MaterialTheme.statusGood.copy(alpha = 0.14f),
-                                        activeContentColor = MaterialTheme.statusGood,
-                                        activeBorderColor = MaterialTheme.statusGood.copy(alpha = 0.60f),
-                                        inactiveContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.50f),
-                                        inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
-                                    ),
-                                    label = { Text("全车出风", style = MaterialTheme.typography.labelSmall, fontWeight = if (editedOutletName == AirOutlet.ALL.name) FontWeight.Bold else FontWeight.Normal) }
-                                )
-                                SegmentedButton(
-                                    selected = editedOutletName == AirOutlet.WINDSHIELD.name,
-                                    onClick = {
-                                        userLastActionEpochMs = System.currentTimeMillis()
-                                        optimisticAcSwitch = true
-                                        optimisticPresetName = ClimatePresetAction.WINDSHIELD_DEFROST.name
-                                        editedOutletName = AirOutlet.WINDSHIELD.name
-                                        editedDefogging = true
-                                        submitSettings(HvacOperation.ON, "前挡除霜已开启")
-                                    },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                                    icon = {},
-                                    colors = SegmentedButtonDefaults.colors(
-                                        activeContainerColor = MaterialTheme.statusGood.copy(alpha = 0.14f),
-                                        activeContentColor = MaterialTheme.statusGood,
-                                        activeBorderColor = MaterialTheme.statusGood.copy(alpha = 0.60f),
-                                        inactiveContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.50f),
-                                        inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
-                                    ),
-                                    label = { Text("前风挡出风", style = MaterialTheme.typography.labelSmall, fontWeight = if (editedOutletName == AirOutlet.WINDSHIELD.name) FontWeight.Bold else FontWeight.Normal) }
-                                )
-                            }
+                    // 出风方向
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("出风方向", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                if (editedOutletName == AirOutlet.ALL.name) "全车出风" else "前风挡出风",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.statusGood
+                            )
                         }
-
-                        // 座椅舒适度控制卡片
-                        SeatComfortControlCard(
-                            status = status,
-                            enabled = actionsEnabled,
-                            onControl = onControl,
-                            vehicleModel = vehicleModel
-                        )
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                selected = editedOutletName == AirOutlet.ALL.name,
+                                onClick = {
+                                    userLastActionEpochMs = System.currentTimeMillis()
+                                    optimisticAcSwitch = true
+                                    optimisticPresetName = null
+                                    editedOutletName = AirOutlet.ALL.name
+                                    editedDefogging = false
+                                    submitSettings(HvacOperation.ON, "已切换至全车出风")
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                icon = {},
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = MaterialTheme.statusGood.copy(alpha = 0.14f),
+                                    activeContentColor = MaterialTheme.statusGood,
+                                    activeBorderColor = MaterialTheme.statusGood.copy(alpha = 0.60f),
+                                    inactiveContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.50f),
+                                    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
+                                ),
+                                label = { Text("全车出风", style = MaterialTheme.typography.labelSmall, fontWeight = if (editedOutletName == AirOutlet.ALL.name) FontWeight.Bold else FontWeight.Normal) }
+                            )
+                            SegmentedButton(
+                                selected = editedOutletName == AirOutlet.WINDSHIELD.name,
+                                onClick = {
+                                    userLastActionEpochMs = System.currentTimeMillis()
+                                    optimisticAcSwitch = true
+                                    optimisticPresetName = ClimatePresetAction.WINDSHIELD_DEFROST.name
+                                    editedOutletName = AirOutlet.WINDSHIELD.name
+                                    editedDefogging = true
+                                    submitSettings(HvacOperation.ON, "前挡除霜已开启")
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                icon = {},
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = MaterialTheme.statusGood.copy(alpha = 0.14f),
+                                    activeContentColor = MaterialTheme.statusGood,
+                                    activeBorderColor = MaterialTheme.statusGood.copy(alpha = 0.60f),
+                                    inactiveContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.50f),
+                                    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
+                                ),
+                                label = { Text("前风挡出风", style = MaterialTheme.typography.labelSmall, fontWeight = if (editedOutletName == AirOutlet.WINDSHIELD.name) FontWeight.Bold else FontWeight.Normal) }
+                            )
+                        }
                     }
+
+                    // 座椅舒适度控制卡片
+                    SeatComfortControlCard(
+                        status = status,
+                        enabled = actionsEnabled,
+                        onControl = onControl,
+                        vehicleModel = vehicleModel
+                    )
                 }
                 Spacer(Modifier.height(16.dp))
             }
@@ -10688,22 +10626,6 @@ fun ClimateControlBottomSheet(
                 HeroControlHudPill(feedback, onDismissControlFeedback)
             }
         }
-    }
-}
-}
-
-    if (showScheduledAcSheet) {
-        ScheduledAcSheet(
-            onDismissRequest = { showScheduledAcSheet = false },
-            initialPlan = scheduledAcPlan,
-            onLoad = onLoadScheduledAc,
-            temperatureRange = hvacCapability.temperatureMinC..hvacCapability.temperatureMaxC,
-            fanRange = fanRange,
-            onConfirm = { plan ->
-                showScheduledAcSheet = false
-                onApplyScheduledAc(plan)
-            }
-        )
     }
 }
 
@@ -10784,8 +10706,7 @@ fun ClimateControlContent(
     onApplyClimateSettings: (AirConditioningCommand) -> Unit,
     scheduledAcPlan: ScheduledAcPlan = ScheduledAcPlan(),
     scheduledAcSupported: Boolean = false,
-    onApplyScheduledAc: (ScheduledAcPlan) -> Unit = {},
-    onLoadScheduledAc: suspend () -> ScheduledAcPlan = { error("预约查询不可用") }
+    onOpenScheduledAc: () -> Unit = {}
 ) {
     ClimateControlBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -10799,8 +10720,7 @@ fun ClimateControlContent(
         onDismissControlFeedback = onDismissControlFeedback,
         scheduledAcPlan = scheduledAcPlan,
         scheduledAcSupported = scheduledAcSupported,
-        onApplyScheduledAc = onApplyScheduledAc,
-        onLoadScheduledAc = onLoadScheduledAc
+        onOpenScheduledAc = onOpenScheduledAc
     )
 }
 

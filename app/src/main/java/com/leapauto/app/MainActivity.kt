@@ -504,6 +504,7 @@ class MainActivity : ComponentActivity() {
                     onApplyChargingSettings = ::applyHealthyAndScheduledCharging,
                     onApplyScheduledPreheat = ::applyScheduledBatteryPreheat,
                     onApplyScheduledAc = ::applyScheduledAirConditioning,
+                    onCancelScheduledAc = ::cancelScheduledAirConditioning,
                     onLoadScheduledAc = ::fetchScheduledAcForEditor,
                     openScheduledAcSheet = openScheduledAcOnLaunch,
                     onDismissScheduledAcSheet = { openScheduledAcOnLaunch = false },
@@ -2174,21 +2175,45 @@ class MainActivity : ComponentActivity() {
         return plan
     }
 
-    private fun loadScheduledAcPlan(vin: String): ScheduledAcPlan = ScheduledAcPlan(
-        enabled = sessionStore.loadScheduledAcEnabled(vin),
-        startTime = sessionStore.loadScheduledAcStartTime(vin),
-        days = sessionStore.loadScheduledAcDays(vin),
-        temperatureC = sessionStore.loadScheduledAcTemperature(vin),
-        windLevel = sessionStore.loadScheduledAcWindLevel(vin),
-        mode = ScheduledAcMode.fromName(sessionStore.loadScheduledAcMode(vin)),
-        circle = AirCircle.entries.firstOrNull { it.name == sessionStore.loadScheduledAcCircle(vin) }
-            ?: AirCircle.INNER,
-        windshieldDefogging = sessionStore.loadScheduledAcDefrost(vin),
-        closeWindows = sessionStore.loadScheduledAcCloseWindows(vin),
-        closeSunshade = sessionStore.loadScheduledAcCloseSunshade(vin)
-    )
+    private fun loadScheduledAcPlan(vin: String): ScheduledAcPlan {
+        val configured = sessionStore.hasScheduledAcComfortConfigured(vin)
+        val s = status
+        val defaultDriverHeating = if (!configured && s != null) (s.driverSeatHeating ?: 0) > 0 else sessionStore.loadScheduledAcDriverHeating(vin)
+        val defaultDriverVent = if (!configured && s != null) (s.driverSeatVentilation ?: 0) > 0 else sessionStore.loadScheduledAcDriverVent(vin)
+        val defaultPassengerHeating = if (!configured && s != null) (s.passengerSeatHeating ?: 0) > 0 else sessionStore.loadScheduledAcPassengerHeating(vin)
+        val defaultPassengerVent = if (!configured && s != null) (s.passengerSeatVentilation ?: 0) > 0 else sessionStore.loadScheduledAcPassengerVent(vin)
+        val defaultLeftRearHeating = if (!configured && s != null) (s.leftRearSeatHeating ?: 0) > 0 else sessionStore.loadScheduledAcLeftRearHeating(vin)
+        val defaultLeftRearVent = if (!configured && s != null) (s.leftRearSeatVentilation ?: 0) > 0 else sessionStore.loadScheduledAcLeftRearVent(vin)
+        val defaultRightRearHeating = if (!configured && s != null) (s.rightRearSeatHeating ?: 0) > 0 else sessionStore.loadScheduledAcRightRearHeating(vin)
+        val defaultRightRearVent = if (!configured && s != null) (s.rightRearSeatVentilation ?: 0) > 0 else sessionStore.loadScheduledAcRightRearVent(vin)
+        val defaultSteeringWheelHeating = if (!configured && s != null) s.steeringWheelHeating == true else sessionStore.loadScheduledAcSteeringWheelHeating(vin)
+
+        return ScheduledAcPlan(
+            enabled = sessionStore.loadScheduledAcEnabled(vin),
+            startTime = sessionStore.loadScheduledAcStartTime(vin),
+            days = sessionStore.loadScheduledAcDays(vin),
+            temperatureC = sessionStore.loadScheduledAcTemperature(vin),
+            windLevel = sessionStore.loadScheduledAcWindLevel(vin),
+            mode = ScheduledAcMode.fromName(sessionStore.loadScheduledAcMode(vin)),
+            circle = AirCircle.entries.firstOrNull { it.name == sessionStore.loadScheduledAcCircle(vin) }
+                ?: AirCircle.INNER,
+            windshieldDefogging = sessionStore.loadScheduledAcDefrost(vin),
+            closeWindows = sessionStore.loadScheduledAcCloseWindows(vin),
+            closeSunshade = sessionStore.loadScheduledAcCloseSunshade(vin),
+            driverHeating = defaultDriverHeating,
+            driverVent = defaultDriverVent,
+            passengerHeating = defaultPassengerHeating,
+            passengerVent = defaultPassengerVent,
+            leftRearHeating = defaultLeftRearHeating,
+            leftRearVent = defaultLeftRearVent,
+            rightRearHeating = defaultRightRearHeating,
+            rightRearVent = defaultRightRearVent,
+            steeringWheelHeating = defaultSteeringWheelHeating
+        )
+    }
 
     private fun persistScheduledAcPlan(vin: String, plan: ScheduledAcPlan) {
+        sessionStore.markScheduledAcComfortConfigured(vin)
         sessionStore.saveScheduledAcEnabled(vin, plan.enabled)
         sessionStore.saveScheduledAcStartTime(vin, plan.startTime)
         sessionStore.saveScheduledAcDays(vin, plan.days)
@@ -2199,21 +2224,65 @@ class MainActivity : ComponentActivity() {
         sessionStore.saveScheduledAcDefrost(vin, plan.windshieldDefogging)
         sessionStore.saveScheduledAcCloseWindows(vin, plan.closeWindows)
         sessionStore.saveScheduledAcCloseSunshade(vin, plan.closeSunshade)
+        sessionStore.saveScheduledAcDriverHeating(vin, plan.driverHeating)
+        sessionStore.saveScheduledAcDriverVent(vin, plan.driverVent)
+        sessionStore.saveScheduledAcPassengerHeating(vin, plan.passengerHeating)
+        sessionStore.saveScheduledAcPassengerVent(vin, plan.passengerVent)
+        sessionStore.saveScheduledAcLeftRearHeating(vin, plan.leftRearHeating)
+        sessionStore.saveScheduledAcLeftRearVent(vin, plan.leftRearVent)
+        sessionStore.saveScheduledAcRightRearHeating(vin, plan.rightRearHeating)
+        sessionStore.saveScheduledAcRightRearVent(vin, plan.rightRearVent)
+        sessionStore.saveScheduledAcSteeringWheelHeating(vin, plan.steeringWheelHeating)
+    }
+
+    private fun cancelScheduledAirConditioning(plan: ScheduledAcPlan) {
+        val vin = session.selectedVin
+        val generation = session.generation
+        val cancelledPlan = plan.copy(enabled = false)
+        persistScheduledAcPlan(vin, cancelledPlan)
+        scheduledAcPlan = cancelledPlan
+        ScheduledAcScheduler.cancel(applicationContext, vin)
+
+        worker.execute {
+            try {
+                Thread.sleep(1200)
+                if (session.selectedVin != vin || session.generation != generation) return@execute
+                val api = LeapmotorApi(session)
+                val savedPin = sessionStore.loadOpPassword().orEmpty()
+                val resp = api.setScheduledAirConditioning(cancelledPlan, savedPin)
+                val code = resp.optInt("code", resp.optInt("result", -1))
+                val success = code == 200 || code == 0
+                mainHandler.post {
+                    if (session.selectedVin != vin || session.generation != generation) return@post
+                    if (success) {
+                        Toast.makeText(this@MainActivity, "定时空调已关闭", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "取消请求已提交，尚未确认取消，请稍后刷新", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("ScheduledAc", "取消定时空调失败: ${e.message}")
+            }
+        }
     }
 
     private fun applyScheduledAirConditioning(plan: ScheduledAcPlan) {
         val vin = session.selectedVin
         val generation = session.generation
-        if (plan.enabled) {
-            persistScheduledAcPlan(vin, plan)
-            scheduledAcPlan = plan
+        // 始终立即持久化到本地存储，确保用户在未开启或开启态下的各项偏好均能稳定回显
+        persistScheduledAcPlan(vin, plan)
+        scheduledAcPlan = plan
+
+        // 若预约未启用，仅更新本地偏好供回显与下次开启，不向车端发起网络下发
+        if (!plan.enabled) {
+            ScheduledAcScheduler.cancel(applicationContext, vin)
+            return
         }
 
         val started = System.currentTimeMillis()
         worker.execute {
             try {
-                // 间隔 1.5 秒避开可能的并发控车锁，杜绝网关“系统繁忙”冲突
-                Thread.sleep(1500)
+                Thread.sleep(1200)
                 if (session.selectedVin != vin || session.generation != generation) return@execute
                 val api = LeapmotorApi(session)
                 val savedPin = sessionStore.loadOpPassword().orEmpty()
@@ -2221,23 +2290,7 @@ class MainActivity : ComponentActivity() {
                 val code = resp.optInt("code", resp.optInt("result", -1))
                 val msg = resp.optString("msg", resp.optString("message", ""))
                 val success = code == 200 || code == 0
-                if (!plan.enabled && success) {
-                    Thread.sleep(1500)
-                    if (session.selectedVin != vin || session.generation != generation) return@execute
-                    val confirmed = runCatching { api.getScheduledAirConditioning() }.getOrNull()
-                    mainHandler.post {
-                        if (session.selectedVin != vin || session.generation != generation) return@post
-                        if (confirmed != null && !confirmed.hasSchedule) {
-                            persistScheduledAcPlan(vin, plan)
-                            scheduledAcPlan = plan
-                            ScheduledAcScheduler.cancel(applicationContext, vin)
-                            Toast.makeText(this@MainActivity, "已取消定时空调", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(this@MainActivity, "取消请求已提交，尚未确认取消，请稍后刷新", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                    return@execute
-                }
+
                 if (!success) {
                     ErrorLogs.repository.record(
                         ErrorLogEntry(
@@ -2248,20 +2301,14 @@ class MainActivity : ComponentActivity() {
                             durationMs = System.currentTimeMillis() - started,
                             retryCount = 0,
                             appVersion = BuildConfig.VERSION_NAME,
-                            message = buildString {
-                                appendLine("定时空调下发未完成:")
-                                appendLine("VIN: $vin")
-                                appendLine("参数: enabled=${plan.enabled}, startTime=${plan.startTime}, days=${plan.days}")
-                                appendLine("状态码: code=$code, msg=$msg")
-                                appendLine("服务端完整返回: $resp")
-                            }
+                            message = "定时空调下发未完成: code=$code, msg=$msg, resp=$resp"
                         )
                     )
                 }
 
-                if (plan.enabled && success) {
+                if (success) {
                     var extraActions = ""
-                    // 第一重保障：保存开启时即刻联动密封车身
+                    // 第一重保障：保存开启时即刻联动密封车身（关窗与关遮阳帘）
                     if (plan.closeWindows) {
                         try {
                             Thread.sleep(1200)
@@ -2285,7 +2332,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    // 第二重保障：注册系统 AlarmManager 到点精准唤醒兜底
+                    // 第二重保障：注册系统 AlarmManager 到点精准唤醒（到点由 ScheduledAcLinkageReceiver 联动开启方向盘与座椅舒适度）
                     ScheduledAcScheduler.schedule(applicationContext, vin, plan)
 
                     mainHandler.post {
@@ -2296,18 +2343,12 @@ class MainActivity : ComponentActivity() {
                         ).show()
                     }
                 } else {
-                    if (!plan.enabled) {
-                        ScheduledAcScheduler.cancel(applicationContext, vin)
-                    }
                     mainHandler.post {
-                        if (success) {
-                            Toast.makeText(this@MainActivity, "定时空调已关闭", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(this@MainActivity, if (plan.enabled) "定时空调设置已保存至本地" else "取消定时空调失败，请重试", Toast.LENGTH_SHORT).show()
-                        }
+                        Toast.makeText(this@MainActivity, "定时空调设置已保存至本地", Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
+                Log.w("ScheduledAc", "定时空调下发失败: ${e.message}")
                 val apiError = e as? ApiException
                 ErrorLogs.repository.record(
                     ErrorLogEntry(
@@ -3957,7 +3998,7 @@ class MainActivity : ComponentActivity() {
             leftRearSeatVentilation = if (RearSeatComfortPolicy.supportsRearSeats(session.selectedCarType)) m.opt("leftRearSeatVentilation")?.toString()?.toIntOrNull() else null,
             rightRearSeatHeating = if (RearSeatComfortPolicy.supportsRearSeats(session.selectedCarType)) m.opt("rightRearSeatHeating")?.toString()?.toIntOrNull() else null,
             rightRearSeatVentilation = if (RearSeatComfortPolicy.supportsRearSeats(session.selectedCarType)) m.opt("rightRearSeatVentilation")?.toString()?.toIntOrNull() else null,
-            steeringWheelHeating = m.optBool("steeringWheelHeating"),
+            steeringWheelHeating = (m.opt("steeringWheelHeating")?.toString()?.toIntOrNull() ?: if (m.optBool("steeringWheelHeating") == true) 2 else 0) > 0,
             steeringWheelHeatingLevel = m.opt("steeringWheelHeating")?.toString()?.toIntOrNull()
                 ?: if (m.optBool("steeringWheelHeating") == true) 2 else 0,
             rearviewMirrorHeating = m.opt("leftMirrorHeating")?.let { it.toString() != "0" }
@@ -4772,7 +4813,12 @@ class MainActivity : ComponentActivity() {
                     Thread.sleep(ControlResultPollingPolicy.delayBeforeAttempt(i))
                     val resp = api.queryControlResult(result.msgID)
                     sessionStore.save(session)
-                    if (SentryModeControlPolicy.querySucceeded(resp.opt("result"), resp.opt("code"))) {
+                    val isConfirmed = ChargingControlPolicy.isQueryConfirmed(
+                        resp.opt("result"),
+                        resp.opt("code"),
+                        resp.opt("data")
+                    )
+                    if (isConfirmed) {
                         if (sentryTarget != null) {
                             sentryQuerySucceeded = true
                             val latest = api.getVehicleState()
@@ -4788,8 +4834,18 @@ class MainActivity : ComponentActivity() {
                         break
                     }
                 }
-                if (!completed && sentryTarget != null && sentryQuerySucceeded) {
-                    finalText = ControlFeedbackFormatter.success(commandName, command.label)
+                if (!completed) {
+                    if (sentryTarget != null && sentryQuerySucceeded) {
+                        finalText = ControlFeedbackFormatter.success(commandName, command.label)
+                        completed = true
+                    } else {
+                        finalText = "指令已发送，车端执行未确认"
+                        runOnMain(generation) {
+                            status = preControlStatus
+                            lastComfortActionEpochMs = 0L
+                            optimisticSteeringWheelHeating = null
+                        }
+                    }
                 }
                 runOnMain(generation) {
                     controlFeedback = ControlFeedback(

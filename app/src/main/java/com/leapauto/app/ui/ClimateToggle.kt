@@ -1,30 +1,16 @@
 package com.leapauto.app.ui
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.offset
+import com.leapauto.app.ui.theme.LocalAppDarkTheme
 import com.leapauto.app.ui.theme.statusGood
 
 enum class ClimateToggleGlyph {
@@ -72,76 +58,38 @@ fun ClimateToggle(
     modifier: Modifier = Modifier
 ) {
     val enabled = onCheckedChange != null
-    val visualState = ClimateToggleVisualSpec.state(checked)
-    val animationSpec = tween<Color>(
-        durationMillis = ClimateToggleVisualSpec.ANIMATION_DURATION_MS,
-        easing = FastOutSlowInEasing
-    )
-    val thumbOffset by animateDpAsState(
-        targetValue = visualState.thumbOffsetDp.dp,
-        animationSpec = tween(
-            durationMillis = ClimateToggleVisualSpec.ANIMATION_DURATION_MS,
-            easing = FastOutSlowInEasing
-        ),
-        label = "climateToggleThumbOffset"
-    )
-    // 轨道通过语义绿色表达已开启状态。
-    val trackColor by animateColorAsState(
-        targetValue = when {
-            checked -> MaterialTheme.statusGood
-            enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.20f)
-        },
-        animationSpec = animationSpec,
-        label = "climateToggleTrackColor"
-    )
-    // 滑块保持白色，沿用既有位置与禁用状态反馈。
-    val thumbColor by animateColorAsState(
-        targetValue = when {
-            checked -> Color.White
-            else -> Color.White.copy(alpha = if (enabled) 1f else 0.9f)
-        },
-        animationSpec = animationSpec,
-        label = "climateToggleThumbColor"
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val isDark = LocalAppDarkTheme.current
+    val uncheckedTrack = if (isDark) Color(0xFF383838) else Color(0xFFDFDFDF)
+    val uncheckedBorder = if (isDark) Color(0x26FFFFFF) else Color(0x1A000000)
+    val colors = SwitchDefaults.colors(
+        checkedThumbColor = Color.White,
+        checkedTrackColor = MaterialTheme.statusGood,
+        checkedBorderColor = Color.Transparent,
+        uncheckedThumbColor = Color.White,
+        uncheckedTrackColor = uncheckedTrack,
+        uncheckedBorderColor = uncheckedBorder,
+        disabledCheckedThumbColor = Color.White.copy(alpha = 0.7f),
+        disabledCheckedTrackColor = MaterialTheme.statusGood.copy(alpha = 0.5f),
+        disabledUncheckedThumbColor = Color.White.copy(alpha = 0.7f),
+        disabledUncheckedTrackColor = uncheckedTrack.copy(alpha = 0.5f)
     )
 
-    Box(
+    Switch(
+        checked = checked,
+        onCheckedChange = if (enabled) {
+            { target ->
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                onCheckedChange?.invoke(target)
+            }
+        } else null,
+        enabled = enabled,
+        colors = colors,
         modifier = modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .toggleable(
-                value = checked,
-                enabled = enabled,
-                role = Role.Switch,
-                onValueChange = { onCheckedChange?.invoke(it) }
-            )
+            .scale(0.78f)
             .semantics {
                 this.contentDescription = contentDescription
                 this.stateDescription = stateDescription
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(
-                    width = ClimateToggleVisualSpec.TRACK_WIDTH_DP.dp,
-                    height = ClimateToggleVisualSpec.TRACK_HEIGHT_DP.dp
-                )
-                .clip(RoundedCornerShape(7.dp))
-                .background(trackColor)
-        ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .offset { IntOffset(thumbOffset.roundToPx(), 0) }
-                    .size(ClimateToggleVisualSpec.THUMB_SIZE_DP.dp)
-                    .shadow(
-                        elevation = 2.dp,
-                        shape = CircleShape,
-                        clip = false
-                    )
-                    .background(thumbColor, CircleShape)
-            )
-        }
-    }
+            }
+    )
 }

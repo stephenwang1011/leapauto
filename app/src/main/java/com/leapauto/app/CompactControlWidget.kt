@@ -389,13 +389,22 @@ class CompactControlWidget : AppWidgetProvider() {
             )
         }
 
-        private fun compactActionBackgroundResource(context: Context, tone: CompactActionTone): Int {
+        private fun compactActionBackgroundResource(
+            context: Context,
+            tone: CompactActionTone,
+            opacity: Int = SessionStore(context).loadWidgetOpacity()
+        ): Int {
             val darkTheme = ControlWidget.widgetEffectiveDarkTheme(context)
             return when (tone) {
-                CompactActionTone.NEUTRAL -> if (darkTheme) {
-                    R.drawable.widget_compact_action_neutral_dark
-                } else {
-                    R.drawable.widget_compact_action_neutral_light
+                CompactActionTone.NEUTRAL -> when {
+                    darkTheme && opacity == 25 -> R.drawable.widget_compact_action_neutral_25_dark
+                    darkTheme && opacity == 50 -> R.drawable.widget_compact_action_neutral_50_dark
+                    darkTheme && opacity == 75 -> R.drawable.widget_compact_action_neutral_75_dark
+                    darkTheme -> R.drawable.widget_compact_action_neutral_dark
+                    opacity == 25 -> R.drawable.widget_compact_action_neutral_25_light
+                    opacity == 50 -> R.drawable.widget_compact_action_neutral_50_light
+                    opacity == 75 -> R.drawable.widget_compact_action_neutral_75_light
+                    else -> R.drawable.widget_compact_action_neutral_light
                 }
                 CompactActionTone.HEATING -> if (darkTheme) {
                     R.drawable.widget_compact_action_success_dark

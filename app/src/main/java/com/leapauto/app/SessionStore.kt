@@ -446,6 +446,106 @@ class SessionStore(context: Context) {
         prefs.edit().putBoolean("scheduled_ac_close_sunshade_$vin", closeSunshade).apply()
     }
 
+    fun loadScheduledAcDriverHeating(vin: String): Boolean {
+        if (vin.isBlank()) return false
+        return prefs.getBoolean("scheduled_ac_driver_heating_$vin", false)
+    }
+
+    fun saveScheduledAcDriverHeating(vin: String, enabled: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_ac_driver_heating_$vin", enabled).apply()
+    }
+
+    fun loadScheduledAcDriverVent(vin: String): Boolean {
+        if (vin.isBlank()) return false
+        return prefs.getBoolean("scheduled_ac_driver_vent_$vin", false)
+    }
+
+    fun saveScheduledAcDriverVent(vin: String, enabled: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_ac_driver_vent_$vin", enabled).apply()
+    }
+
+    fun loadScheduledAcPassengerHeating(vin: String): Boolean {
+        if (vin.isBlank()) return false
+        return prefs.getBoolean("scheduled_ac_passenger_heating_$vin", false)
+    }
+
+    fun saveScheduledAcPassengerHeating(vin: String, enabled: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_ac_passenger_heating_$vin", enabled).apply()
+    }
+
+    fun loadScheduledAcPassengerVent(vin: String): Boolean {
+        if (vin.isBlank()) return false
+        return prefs.getBoolean("scheduled_ac_passenger_vent_$vin", false)
+    }
+
+    fun saveScheduledAcPassengerVent(vin: String, enabled: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_ac_passenger_vent_$vin", enabled).apply()
+    }
+
+    fun loadScheduledAcSteeringWheelHeating(vin: String): Boolean {
+        if (vin.isBlank()) return false
+        return prefs.getBoolean("scheduled_ac_steering_wheel_heating_$vin", false)
+    }
+
+    fun saveScheduledAcSteeringWheelHeating(vin: String, enabled: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_ac_steering_wheel_heating_$vin", enabled).apply()
+    }
+
+    fun loadScheduledAcLeftRearHeating(vin: String): Boolean {
+        if (vin.isBlank()) return false
+        return prefs.getBoolean("scheduled_ac_left_rear_heating_$vin", false)
+    }
+
+    fun saveScheduledAcLeftRearHeating(vin: String, enabled: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_ac_left_rear_heating_$vin", enabled).apply()
+    }
+
+    fun loadScheduledAcLeftRearVent(vin: String): Boolean {
+        if (vin.isBlank()) return false
+        return prefs.getBoolean("scheduled_ac_left_rear_vent_$vin", false)
+    }
+
+    fun saveScheduledAcLeftRearVent(vin: String, enabled: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_ac_left_rear_vent_$vin", enabled).apply()
+    }
+
+    fun loadScheduledAcRightRearHeating(vin: String): Boolean {
+        if (vin.isBlank()) return false
+        return prefs.getBoolean("scheduled_ac_right_rear_heating_$vin", false)
+    }
+
+    fun saveScheduledAcRightRearHeating(vin: String, enabled: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_ac_right_rear_heating_$vin", enabled).apply()
+    }
+
+    fun loadScheduledAcRightRearVent(vin: String): Boolean {
+        if (vin.isBlank()) return false
+        return prefs.getBoolean("scheduled_ac_right_rear_vent_$vin", false)
+    }
+
+    fun saveScheduledAcRightRearVent(vin: String, enabled: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_ac_right_rear_vent_$vin", enabled).apply()
+    }
+
+    fun hasScheduledAcComfortConfigured(vin: String): Boolean {
+        if (vin.isBlank()) return false
+        return prefs.contains("scheduled_ac_comfort_configured_$vin")
+    }
+
+    fun markScheduledAcComfortConfigured(vin: String) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_ac_comfort_configured_$vin", true).apply()
+    }
+
     fun loadScheduledAcCapability(vin: String): ScheduledAcCapability {
         if (vin.isBlank()) return ScheduledAcCapability.UNKNOWN
         return if (appPrefs.getBoolean("scheduled_ac_supported_$vin", false)) {

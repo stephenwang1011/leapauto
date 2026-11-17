@@ -1041,9 +1041,18 @@ data class ScheduledAcPlan(
     val windLevel: Int = 7,
     val mode: ScheduledAcMode = ScheduledAcMode.HOT,
     val circle: AirCircle = AirCircle.INNER,
-    val windshieldDefogging: Boolean = true,
+    val windshieldDefogging: Boolean = false,
     val closeWindows: Boolean = true,
-    val closeSunshade: Boolean = true
+    val closeSunshade: Boolean = true,
+    val driverHeating: Boolean = false,
+    val driverVent: Boolean = false,
+    val passengerHeating: Boolean = false,
+    val passengerVent: Boolean = false,
+    val leftRearHeating: Boolean = false,
+    val leftRearVent: Boolean = false,
+    val rightRearHeating: Boolean = false,
+    val rightRearVent: Boolean = false,
+    val steeringWheelHeating: Boolean = false
 )
 
 /** 查询结果：hasSchedule=false 表示车端当前没有预约项，而不是查询失败。 */
@@ -1203,7 +1212,7 @@ object Commands {
         }
         return ControlCommand(
             "320",
-            """{"level":"$cleanLevel"}""",
+            """{"level":$cleanLevel}""",
             "方向盘加热$stateLabel"
         )
     }

@@ -14,7 +14,13 @@ object ScheduledAcScheduler {
     fun schedule(context: Context, vin: String, plan: ScheduledAcPlan) {
         val appContext = context.applicationContext
         val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
-        if (!plan.enabled || (!plan.closeWindows && !plan.closeSunshade)) {
+        val hasAnyLinkage = plan.closeWindows || plan.closeSunshade ||
+            plan.driverHeating || plan.driverVent ||
+            plan.passengerHeating || plan.passengerVent ||
+            plan.leftRearHeating || plan.leftRearVent ||
+            plan.rightRearHeating || plan.rightRearVent ||
+            plan.steeringWheelHeating
+        if (!plan.enabled || !hasAnyLinkage) {
             cancel(appContext, vin)
             return
         }
