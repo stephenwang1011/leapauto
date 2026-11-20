@@ -113,6 +113,29 @@ class EnergyHomeCardPolicyTest {
         )
     }
 
+    @Test
+    fun `barHeightRatio maps max value to 100 percent`() {
+        assertEquals(1.0f, EnergyHomeCardPolicy.barHeightRatio(18.3, 18.3), 0.001f)
+    }
+
+    @Test
+    fun `barHeightRatio maps half value proportionally between minRatio and 1`() {
+        // minRatio = 0.15f, raw = 0.5f -> 0.15 + 0.85 * 0.5 = 0.575f
+        assertEquals(0.575f, EnergyHomeCardPolicy.barHeightRatio(9.0, 18.0), 0.001f)
+    }
+
+    @Test
+    fun `barHeightRatio preserves stub minimum ratio for zero or negative values`() {
+        assertEquals(0.15f, EnergyHomeCardPolicy.barHeightRatio(0.0, 18.0), 0.001f)
+        assertEquals(0.15f, EnergyHomeCardPolicy.barHeightRatio(-5.0, 18.0), 0.001f)
+        assertEquals(0.15f, EnergyHomeCardPolicy.barHeightRatio(10.0, 0.0), 0.001f)
+    }
+
+    @Test
+    fun `barHeightRatio clamps values exceeding max to 1`() {
+        assertEquals(1.0f, EnergyHomeCardPolicy.barHeightRatio(20.0, 18.0), 0.001f)
+    }
+
     private fun energyData(
         trend: List<EnergySeriesPoint> = emptyList(),
         mileageTrend: List<EnergySeriesPoint> = emptyList()

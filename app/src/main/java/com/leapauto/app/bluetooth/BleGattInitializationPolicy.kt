@@ -9,6 +9,7 @@ package com.leapauto.app.bluetooth
 internal object BleGattInitializationPolicy {
     const val requestedMtu = 200
     const val mtuCallbackTimeoutMs = 2_500L
+    const val relinkDelayMs = 400L
 
     fun initialStep(skipMtuOnce: Boolean): BleGattInitializationStep =
         if (skipMtuOnce) BleGattInitializationStep.DISCOVER_SERVICES

@@ -55,6 +55,31 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Android Shortcuts 配置（支持长按桌面图标及小爱同学全局快捷指令索引） -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity>
+
+        <!-- 快捷指令透明中转 Activity（支持 Shortcuts 与 DeepLink 语音调用） -->
+        <activity
+            android:name=".ShortcutControlActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true">
+            <intent-filter>
+                <action android:name="com.leapauto.app.action.SHORTCUT_CONTROL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="leapauto"
+                    android:host="control" />
+            </intent-filter>
         </activity>
 
         <receiver

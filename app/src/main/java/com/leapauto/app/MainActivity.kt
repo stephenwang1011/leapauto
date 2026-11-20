@@ -30,6 +30,7 @@ import com.leapauto.app.ui.LeapAutoScreen
 import com.leapauto.app.ThemeManager
 import com.leapauto.app.ui.BluetoothKeyDialog
 import com.leapauto.app.ui.BluetoothActionConfirmation
+import com.leapauto.app.ui.CallCarBottomSheet
 import com.leapauto.app.ui.theme.LeapAutoTheme
 import com.leapauto.app.bluetooth.BleAccessPolicy
 import com.leapauto.app.bluetooth.BleConnectionPhase
@@ -303,6 +304,7 @@ class MainActivity : ComponentActivity() {
     private var bluetoothConfigurationIdentity: BleSessionIdentity? = null
     private var bluetoothSettingsRequestId by mutableStateOf(0L)
     private var showBluetoothKey by mutableStateOf(false)
+    private var showCallCarSheet by mutableStateOf(false)
     private var bluetoothPermissionsGranted by mutableStateOf(false)
     private var bluetoothKeyFeatureEnabled by mutableStateOf(false)
     private var bluetoothState by mutableStateOf(BleConnectionState())
@@ -610,7 +612,8 @@ class MainActivity : ComponentActivity() {
                         calibrationPending = bluetoothManagedKey?.pending == true &&
                             bluetoothManagedKey?.desired?.calibration == bluetoothCloudState.profile.effectiveCalibration,
                         onSaveCalibration = ::requestBluetoothCalibration,
-                        carType = session.selectedCarType
+                        carType = session.selectedCarType,
+                        onOpenStraightMove = { showCallCarSheet = true }
                     )
                 }
                 bluetoothControlConfirmation?.takeIf { showBluetoothKey && !pinSetupInProgress }?.let { confirmation ->
@@ -619,6 +622,17 @@ class MainActivity : ComponentActivity() {
                         enabled = isCurrentBluetoothConfirmation(confirmation),
                         onDismiss = { bluetoothControlConfirmation = null },
                         onConfirm = { confirmBluetoothLockControl(confirmation) }
+                    )
+                }
+                if (showCallCarSheet) {
+                    val accountId = session.oldAuth?.accountId.orEmpty()
+                    val certificate = bluetoothCertificate ?: sessionStore.loadBluetoothKeyCertificate(accountId, session.selectedVin)
+                    CallCarBottomSheet(
+                        vin = session.selectedVin,
+                        certificate = certificate,
+                        accountId = accountId,
+                        deviceId = session.deviceId,
+                        onDismiss = { showCallCarSheet = false }
                     )
                 }
             }
@@ -734,6 +748,7 @@ class MainActivity : ComponentActivity() {
         bluetoothKeyFeatureEnabled = enabled
         sessionStore.saveBluetoothKeyFeatureEnabled(enabled)
         if (enabled) {
+            bluetoothRuntime.enableFeature()
             runCatching { bluetoothRuntime.restoreBackground() }
             val accountId = session.oldAuth?.accountId.orEmpty()
             val vin = session.selectedVin
@@ -746,8 +761,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
         } else {
-            bluetoothRuntime.stopBackground()
-            bluetoothKeyController.disconnect()
+            bluetoothRuntime.disableFeature {
+                bluetoothKeyController.disconnect()
+            }
         }
     }
 
@@ -1184,6 +1200,9 @@ class MainActivity : ComponentActivity() {
         postOptimisticResponse(800L) {
             lastLockActionEpochMs = System.currentTimeMillis()
             optimisticLockState = isLock
+            if (!isLock) {
+                com.leapauto.app.trip.TripRecordStore(applicationContext).markUnlockDeparture(session.selectedVin)
+            }
             status = status?.copy(locked = isLock)
             sessionStore.updateWidgetLockState(session.selectedVin, locked = isLock)
             com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this@MainActivity)
@@ -2720,6 +2739,40 @@ class MainActivity : ComponentActivity() {
                     throw e
                 }
                 ChargeNotificationManager.process(this@MainActivity, sessionStore, session.selectedVin, signalMap)
+                // [FEATURE: TRIP_LOG] Start
+                try {
+                    val rawMileage = signalMap.opt("totalMileage") ?: signalMap.opt("1318")
+                    val mileageKm = rawMileage?.toString()?.toDoubleOrNull()
+                    val rawSoc = signalMap.opt("preciseSoc")
+                        ?: signalMap.opt("100003")
+                        ?: signalMap.opt("soc")
+                        ?: signalMap.opt("1204")
+                    val socPercent = rawSoc?.toString()?.trim()?.removeSuffix("%")?.toDoubleOrNull()
+                    val isDriving = WidgetStatusMapper.isDriving(signalMap)
+                    val gear = signalMap.optString("gearStatus").takeIf { it.isNotBlank() }
+                        ?: signalMap.optString("1010").takeIf { it.isNotBlank() }
+                        ?: parsed.gearStatus
+                    val exactCurrentLocation = locationSnapshot?.location?.let { loc ->
+                        VehicleLocationGeocoder.getCachedAddress(loc.latitude, loc.longitude)?.let {
+                            it.shortAddress ?: it.fullAddress
+                        }
+                    } ?: (vehicleAddress?.shortAddress ?: vehicleAddress?.fullAddress)
+
+                    val fuelSocPercent = VehicleStatusMapper.fuelSocPercent(signalMap)?.toDouble()
+
+                    com.leapauto.app.trip.TripReconciliationEngine.processTelemetry(
+                        context = applicationContext,
+                        vin = session.selectedVin,
+                        mileageKm = mileageKm,
+                        socPercent = socPercent,
+                        isDriving = isDriving,
+                        gear = gear,
+                        locationName = exactCurrentLocation,
+                        carType = session.selectedCarType,
+                        fuelSocPercent = fuelSocPercent
+                    )
+                } catch (_: Exception) {}
+                // [FEATURE: TRIP_LOG] End
                 sessionStore.save(session)
                 val snapshotPowerType = if (parsed.rangeExtender) SessionStore.VehiclePowerType.RANGE_EXTENDER else (VehiclePowerTypeResolver.fromStatus(
                     signalMap, vehicleConfig.powerType, session.selectedCarType
@@ -4163,6 +4216,13 @@ class MainActivity : ComponentActivity() {
             if (address != null) {
                 runOnMain(generation) {
                     vehicleAddress = address
+                    // [FEATURE: TRIP_LOG] Start
+                    val loc = address.shortAddress ?: address.fullAddress
+                    if (!loc.isNullOrBlank()) {
+                        com.leapauto.app.trip.TripRecordStore(applicationContext)
+                            .updateLatestLocation(session.selectedVin, loc)
+                    }
+                    // [FEATURE: TRIP_LOG] End
                 }
                 if (address.adcode.isNotBlank()) {
                     val currentVin = session.selectedVin
@@ -4569,6 +4629,7 @@ class MainActivity : ComponentActivity() {
                     optimisticLockState = false
                     status = status?.copy(locked = false)
                     sessionStore.updateWidgetLockState(session.selectedVin, locked = false)
+                    com.leapauto.app.trip.TripRecordStore(applicationContext).markUnlockDeparture(session.selectedVin)
                     com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this@MainActivity)
                     ControlWidget.refreshData(this@MainActivity)
                 }

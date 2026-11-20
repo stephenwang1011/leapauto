@@ -53,6 +53,9 @@ class BluetoothKeyController(
     private val chunks = ArrayDeque<ByteArray>()
     private var command = BleCommandTracker()
     private var mtu = 23
+    private var connectedDevice: BleNearbyDevice? = null
+    private var relinkedOnce = false
+    private var linkRetryRunnable: Runnable? = null
     private var writesComplete = false
     private var authenticatedReceived = false
     private var descriptorReady = false
@@ -107,8 +110,9 @@ class BluetoothKeyController(
             override fun onScanFailed(errorCode: Int) {
                 handler.post {
                     if (current == generation) {
-                        recordDiagnostic(BleDiagnosticEvent.SCAN_FAILED, errorCode)
-                        fail("蓝牙扫描失败，请稍后重新扫描")
+                        val reason = scanFailureReason(errorCode)
+                        recordDiagnostic(BleDiagnosticEvent.SCAN_FAILED, errorCode, extra = reason)
+                        fail(reason)
                     }
                 }
             }
@@ -147,6 +151,9 @@ class BluetoothKeyController(
         if (issue != null) return fail(issue)
         disconnect()
         sessionIsCurrent = isSessionCurrent
+        connectedDevice = device
+        relinkedOnce = false
+        cancelRelink()
         val current = generation
         diagnostics.record(BleDiagnosticEvent.CONNECT_STARTED, certificate.keyType, device.protocolMinor)
         diagnostics.record(BleDiagnosticEvent.PROTOCOL_SELECTED,
@@ -345,7 +352,14 @@ class BluetoothKeyController(
             dispatch(current, client) {
                 val statusText = gattStatusLabel(status)
                 recordDiagnostic(BleDiagnosticEvent.SERVICES_DISCOVERED, status, extra = statusText)
-                check(status == BluetoothGatt.GATT_SUCCESS)
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    if (!relinkedOnce) {
+                        relinkOnce("服务发现异常 status=$status ($statusText)")
+                    } else {
+                        fail("蓝牙服务发现失败 ($statusText)")
+                    }
+                    return@dispatch
+                }
                 subscribe(client)
             }
         }
@@ -443,11 +457,15 @@ class BluetoothKeyController(
         when (BleGattInitializationPolicy.afterMtuRequest(client.requestMtu(BleGattInitializationPolicy.requestedMtu))) {
             BleGattInitializationStep.WAIT_FOR_MTU -> armTimeout(BleGattInitializationPolicy.mtuCallbackTimeoutMs) {
                 if (awaitingMtu) {
-                    skipMtuOnce = true
-                    awaitingMtu = false
-                    mtu = 23
-                    recordDiagnostic(BleDiagnosticEvent.MTU_RESULT, -1, mtu, extra = "MTU协商超时，自动降级为默认23字节继续")
-                    discoverServices(client)
+                    if (!relinkedOnce) {
+                        relinkOnce("MTU协商超时未响应")
+                    } else {
+                        skipMtuOnce = true
+                        awaitingMtu = false
+                        mtu = 23
+                        recordDiagnostic(BleDiagnosticEvent.MTU_RESULT, -1, mtu, extra = "MTU协商超时，自动降级为默认23字节继续")
+                        discoverServices(client)
+                    }
                 }
             }
             BleGattInitializationStep.DISCOVER_SERVICES -> {
@@ -463,12 +481,22 @@ class BluetoothKeyController(
     private fun discoverServices(client: BluetoothGatt) {
         cancelTimeout()
         update(state.copy(phase = BleConnectionPhase.DISCOVERING, message = "正在识别车辆蓝牙服务"))
-        armTimeout(10_000L) { fail("蓝牙服务发现超时") }
+        armTimeout(10_000L) {
+            if (!relinkedOnce) {
+                relinkOnce("服务发现超时")
+            } else {
+                fail("蓝牙服务发现超时")
+            }
+        }
         if (!client.discoverServices()) {
             handler.postDelayed({
                 if (gatt === client && state.phase == BleConnectionPhase.DISCOVERING) {
                     if (!client.discoverServices()) {
-                        fail("车辆服务发现未响应，请重试")
+                        if (!relinkedOnce) {
+                            relinkOnce("系统拒绝服务发现")
+                        } else {
+                            fail("车辆服务发现未响应，请重试")
+                        }
                     }
                 }
             }, 50L)
@@ -711,12 +739,59 @@ class BluetoothKeyController(
         timeout = null
     }
 
+    private fun cancelRelink() {
+        linkRetryRunnable?.let(handler::removeCallbacks)
+        linkRetryRunnable = null
+    }
+
+    private fun relinkOnce(reason: String) {
+        val device = connectedDevice
+        if (relinkedOnce || device == null || !sessionIsCurrent()) return
+        relinkedOnce = true
+        skipMtuOnce = true
+        recordDiagnostic(BleDiagnosticEvent.MTU_RESULT, -3, mtu, extra = "$reason · 执行释放句柄自愈重试")
+        cancelTimeout()
+        cancelRelink()
+        val current = generation
+        val client = gatt
+        gatt = null
+        descriptorReady = false
+        awaitingMtu = false
+        runCatching { client?.disconnect() }
+        runCatching { client?.close() }
+        linkRetryRunnable = Runnable {
+            linkRetryRunnable = null
+            if (current == generation && sessionIsCurrent()) {
+                if (adapter?.isEnabled != true) {
+                    fail("蓝牙未开启，请在系统设置中开启")
+                    return@Runnable
+                }
+                recordDiagnostic(BleDiagnosticEvent.CONNECT_STARTED, extra = "执行自愈直连 (跳过MTU)")
+                update(state.copy(phase = BleConnectionPhase.CONNECTING, message = "连接自愈中，正在重试"))
+                armTimeout(15_000L) { fail("蓝牙连接超时，请靠近车辆后重试") }
+                connectGatt(device, current, autoConnect = false)
+            }
+        }.also { handler.postDelayed(it, BleGattInitializationPolicy.relinkDelayMs) }
+    }
+
+    internal fun scanFailureReason(errorCode: Int): String = when (errorCode) {
+        ScanCallback.SCAN_FAILED_ALREADY_STARTED -> "上一轮蓝牙扫描尚未结束"
+        ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> "应用注册扫描失败，请重启蓝牙"
+        ScanCallback.SCAN_FAILED_INTERNAL_ERROR -> "系统蓝牙内部错误"
+        ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED -> "系统不支持当前扫描模式"
+        5 -> "蓝牙硬件资源耗尽，请重启手机蓝牙"
+        6 -> "蓝牙扫描过于频繁被系统限流，请稍候 30 秒后重试"
+        else -> "蓝牙扫描失败 (错误码 $errorCode)，请稍后重试"
+    }
+
     private fun releaseConnection(): BleCommandOutcome? {
         if (gatt != null || scanCallback != null || protocolSession != null) {
             diagnostics.record(BleDiagnosticEvent.DISCONNECTED, state.phase.ordinal)
         }
         generation++
         cancelTimeout()
+        cancelRelink()
+        connectedDevice = null
         stopScan()
         val client = gatt
         gatt = null

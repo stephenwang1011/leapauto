@@ -688,24 +688,11 @@ fun FridgeControlBottomSheet(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        val isDark = LocalAppDarkTheme.current
-                        val uncheckedTrack = if (isDark) Color(0xFF383838) else Color(0xFFDFDFDF)
-                        val uncheckedBorder = if (isDark) Color(0x26FFFFFF) else Color(0x1A000000)
-                        Switch(
+                        CockpitSwitch(
                             checked = parkEnable,
                             onCheckedChange = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 parkEnable = it
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = MaterialTheme.statusGood,
-                                checkedBorderColor = Color.Transparent,
-                                uncheckedThumbColor = Color.White,
-                                uncheckedTrackColor = uncheckedTrack,
-                                uncheckedBorderColor = uncheckedBorder
-                            ),
-                            modifier = Modifier.scale(0.78f)
+                            }
                         )
                     }
 

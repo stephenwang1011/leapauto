@@ -134,6 +134,9 @@ class ControlService : Service() {
 
                     if (bleConfirmed) {
                         store.updateWidgetLockState(session.selectedVin, locked = isLock)
+                        if (!isLock) {
+                            com.leapauto.app.trip.TripRecordStore(appContext).markUnlockDeparture(session.selectedVin)
+                        }
                         com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(appContext)
                         val text = if (isLock) "蓝牙上锁成功" else "蓝牙解锁成功"
                         ControlWidget.showControlStatus(appContext, text, locked = isLock)
@@ -229,7 +232,10 @@ class ControlService : Service() {
                 }
                 val confirmedLockedState = when (effectiveCommand) {
                     "lock" -> true
-                    "unlock" -> false
+                    "unlock" -> {
+                        com.leapauto.app.trip.TripRecordStore(this).markUnlockDeparture(session.selectedVin)
+                        false
+                    }
                     else -> null
                 }
                 if (confirmedLockedState != null) {

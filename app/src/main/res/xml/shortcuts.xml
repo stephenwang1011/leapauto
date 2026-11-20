@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="shortcut_unlock"
+        android:enabled="true"
+        android:icon="@drawable/ic_phosphor_lock_open"
+        android:shortcutShortLabel="@string/shortcut_unlock_short"
+        android:shortcutLongLabel="@string/shortcut_unlock_long">
+        <intent
+            android:action="com.leapauto.app.action.SHORTCUT_CONTROL"
+            android:targetPackage="com.leapauto.app"
+            android:targetClass="com.leapauto.app.ShortcutControlActivity">
+            <extra android:name="command" android:value="unlock" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="shortcut_lock"
+        android:enabled="true"
+        android:icon="@drawable/ic_phosphor_lock"
+        android:shortcutShortLabel="@string/shortcut_lock_short"
+        android:shortcutLongLabel="@string/shortcut_lock_long">
+        <intent
+            android:action="com.leapauto.app.action.SHORTCUT_CONTROL"
+            android:targetPackage="com.leapauto.app"
+            android:targetClass="com.leapauto.app.ShortcutControlActivity">
+            <extra android:name="command" android:value="lock" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="shortcut_ac"
+        android:enabled="true"
+        android:icon="@drawable/ic_phosphor_fan"
+        android:shortcutShortLabel="@string/shortcut_ac_short"
+        android:shortcutLongLabel="@string/shortcut_ac_long">
+        <intent
+            android:action="com.leapauto.app.action.SHORTCUT_CONTROL"
+            android:targetPackage="com.leapauto.app"
+            android:targetClass="com.leapauto.app.ShortcutControlActivity">
+            <extra android:name="command" android:value="ac_on" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="shortcut_trunk"
+        android:enabled="true"
+        android:icon="@drawable/ic_phosphor_trunk_open"
+        android:shortcutShortLabel="@string/shortcut_trunk_short"
+        android:shortcutLongLabel="@string/shortcut_trunk_long">
+        <intent
+            android:action="com.leapauto.app.action.SHORTCUT_CONTROL"
+            android:targetPackage="com.leapauto.app"
+            android:targetClass="com.leapauto.app.ShortcutControlActivity">
+            <extra android:name="command" android:value="trunk" />
+        </intent>
+    </shortcut>
+</shortcuts>

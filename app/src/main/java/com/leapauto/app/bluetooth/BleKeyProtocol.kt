@@ -421,6 +421,58 @@ class BleKeySession internal constructor(
         }
     }
 
+    fun buildCallCarAuthentication(
+        certificate: BleKeyCertificate,
+        accountId: String,
+        deviceId: String,
+        epochSeconds: Long = System.currentTimeMillis() / 1_000L
+    ): ByteArray {
+        check(!closed) { "BLE session is closed" }
+        val fields = certificate.plainText.split(';').toMutableList()
+        require(fields.size >= 6 && accountId.isNotEmpty() && deviceId.isNotEmpty() &&
+            ';' !in accountId && ';' !in deviceId) { "直进直出证书无效" }
+        fields[1] = accountId
+        fields[2] = deviceId
+        val text = "$epochSeconds;${fields.joinToString(";")};".toByteArray(Charsets.UTF_8)
+        val signature = decodeBase64(certificate.signResult, "直进直出证书签名无效")
+        require(signature.isNotEmpty()) { "直进直出证书签名无效" }
+        val plain = littleEndian(text.size.toLong(), 4) + text + signature
+        val ciphertext = crypt(plain, Cipher.ENCRYPT_MODE)
+        val cipher = Base64.getEncoder().encode(ciphertext)
+        require(cipher.size + 69 <= 65535) { "直进直出认证载荷过大" }
+        val payloadLen = cipher.size + 69
+        return byteArrayOf(0xAA.toByte(), 0xAE.toByte(), 1, 1, 10) +
+            littleEndian(payloadLen.toLong(), 2) +
+            littleEndian(sessionId, 4) +
+            publicKey +
+            cipher
+    }
+
+    fun buildCallCarOrder(order: Int): ByteArray {
+        check(!closed) { "BLE session is closed" }
+        val plain = byteArrayOf(order.toByte())
+        val ciphertext = crypt(plain, Cipher.ENCRYPT_MODE)
+        val cipher = Base64.getEncoder().encode(ciphertext)
+        return byteArrayOf(0xAA.toByte(), 0xAB.toByte()) +
+            littleEndian(cipher.size.toLong(), 4) +
+            cipher
+    }
+
+    fun decodeCallCarPayload(payload: ByteArray): String? {
+        check(!closed) { "BLE session is closed" }
+        val ciphertext = decodeBase64(String(payload, Charsets.US_ASCII).trim(), "Invalid CallCar payload")
+        if (ciphertext.isEmpty()) return null
+        val plain = crypt(ciphertext, Cipher.DECRYPT_MODE)
+        return try {
+            Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(plain)).toString()
+        } catch (_: Exception) {
+            null
+        } finally {
+            plain.fill(0)
+        }
+    }
+
     override fun close() {
         closed = true
         key.fill(0)

@@ -20,5 +20,6 @@ class BleGattInitializationPolicyTest {
             BleGattInitializationPolicy.initialStep(skipMtuOnce = true))
         assertEquals(200, BleGattInitializationPolicy.requestedMtu)
         assertEquals(2_500L, BleGattInitializationPolicy.mtuCallbackTimeoutMs)
+        assertEquals(400L, BleGattInitializationPolicy.relinkDelayMs)
     }
 }

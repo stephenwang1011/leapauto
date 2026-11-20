@@ -33,6 +33,17 @@ object VehicleLocationGeocoder {
         cache.clear()
     }
 
+    fun getCachedAddress(latitude: Double, longitude: Double): GeocodedAddress? {
+        val now = System.currentTimeMillis()
+        synchronized(this) {
+            val cached = cache.firstOrNull { entry ->
+                now - entry.cachedAtEpochMs < CACHE_EXPIRY_MS &&
+                    calculateDistanceMeters(latitude, longitude, entry.latitude, entry.longitude) <= CACHE_DISTANCE_THRESHOLD_METERS
+            }
+            return cached?.address
+        }
+    }
+
     fun reverseGeocode(
         latitude: Double,
         longitude: Double,

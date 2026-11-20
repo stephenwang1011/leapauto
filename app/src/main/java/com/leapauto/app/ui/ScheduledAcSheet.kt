@@ -2,12 +2,16 @@ package com.leapauto.app.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.geometry.Offset
 import com.leapauto.app.ui.theme.statusGood
+import com.leapauto.app.ui.theme.statusWarn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -100,16 +104,6 @@ internal fun ScheduledAcPageContent(
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val isDark = LocalAppDarkTheme.current
     val pageBgColor = if (isDark) Color(0xFF141414) else MaterialTheme.colorScheme.background
-    val uncheckedTrack = if (isDark) Color(0xFF383838) else Color(0xFFDFDFDF)
-    val uncheckedBorder = if (isDark) Color(0x26FFFFFF) else Color(0x1A000000)
-    val greenSwitchColors = SwitchDefaults.colors(
-        checkedThumbColor = Color.White,
-        checkedTrackColor = MaterialTheme.statusGood,
-        checkedBorderColor = Color.Transparent,
-        uncheckedThumbColor = Color.White,
-        uncheckedTrackColor = uncheckedTrack,
-        uncheckedBorderColor = uncheckedBorder
-    )
 
     fun syncIfEnabled(updatedDraft: ScheduledAcPlan, currentDays: Set<Int> = draftDays) {
         draft = updatedDraft
@@ -124,250 +118,302 @@ internal fun ScheduledAcPageContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .padding(horizontal = 4.dp, vertical = 6.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            if (loading) {
-                Surface(
-                    shape = RoundedCornerShape(percent = 50),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                ) {
-                    Text(
-                        "正在读取服务器预约…",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            // ====== 1. 【一体化微晶定时主舱 (Scheduled Ac Master Pod)】 ======
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(
+                        shape = RoundedCornerShape(16.dp),
+                        auraColor = if (draft.enabled) MaterialTheme.statusGood.copy(alpha = 0.12f) else null,
+                        auraCenter = Offset(0.85f, 0.15f),
+                        topSpecularLine = true
                     )
-                }
-            } else if (loadFailed) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        "服务器预约读取失败，尚未确认当前状态",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    TextButton(onClick = { attempt++ }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
-                        Text("重试", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            } else {
-                Surface(
-                    shape = RoundedCornerShape(percent = 50),
-                    color = if (draft.enabled) MaterialTheme.statusGood.copy(alpha = 0.14f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
-                    border = BorderStroke(
-                        0.5.dp,
-                        if (draft.enabled) MaterialTheme.statusGood.copy(alpha = 0.40f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .background(
-                                    if (draft.enabled) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    CircleShape
-                                )
-                        )
-                        Text(
-                            text = if (draft.enabled) "已读取服务器预约" else "未预约",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (draft.enabled) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.glassInsetSurface,
-                border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                modifier = Modifier.fillMaxWidth()
+                    .border(glassCardBorder(), shape = RoundedCornerShape(16.dp))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "启用定时空调",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
+                    // 主控状态与开关行：左侧同步状态指示；右侧微晶 CockpitSwitch
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        if (loading) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "正在同步服务器预约…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else if (loadFailed) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .background(MaterialTheme.colorScheme.error, CircleShape)
+                                )
+                                Text(
+                                    text = "同步失败",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                Text(
+                                    text = "重试",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.clickable { attempt++ }
+                                )
+                            }
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .background(
+                                            if (draft.enabled) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                            CircleShape
+                                        )
+                                    )
+                                Text(
+                                    text = if (draft.enabled) "已同步云端 · 到点自动开启" else "未启用 · 云端已就绪",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (draft.enabled) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        CockpitSwitch(
+                            checked = draft.enabled,
+                            onCheckedChange = { isChecked ->
+                                val next = draft.copy(enabled = isChecked)
+                                draft = next
+                                if (isChecked) {
+                                    onConfirm(next.copy(days = ChargePlanCyclesHelper.toVehicleMask(draftDays)))
+                                } else {
+                                    onCancel(next.copy(days = ChargePlanCyclesHelper.toVehicleMask(draftDays)))
+                                }
+                            }
                         )
+                    }
+
+                    // 开启时间微晶内凹仪表舱（消除空洞留白与突兀感）
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.glassInsetSurface,
+                        border = glassInsetBorder(),
+                        shadowElevation = 0.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 10.dp, horizontal = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "开启时间",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            TimeWheelPicker(
+                                timeString = draft.startTime,
+                                onTimeChanged = { syncIfEnabled(draft.copy(startTime = it)) },
+                                minuteStep = 1
+                            )
+                        }
+                    }
+
+                    // 重复周期
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "重复周期",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = ChargePlanCyclesHelper.formatSummary(draftDays).substringBefore(" ("),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = if (draft.enabled) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        val pills = listOf(
+                            7 to "周日",
+                            1 to "周一",
+                            2 to "周二",
+                            3 to "周三",
+                            4 to "周四",
+                            5 to "周五",
+                            6 to "周六"
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            pills.forEach { (dayIndex, label) ->
+                                OfficialDayPill(
+                                    label = label,
+                                    selected = draftDays.contains(dayIndex),
+                                    onClick = {
+                                        draftDays = if (draftDays.contains(dayIndex)) {
+                                            if (draftDays.size > 1) draftDays - dayIndex else draftDays
+                                        } else {
+                                            draftDays + dayIndex
+                                        }
+                                        syncIfEnabled(draft, draftDays)
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+
+            // ====== 2. 【座舱温控工况微晶舱】 ======
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(
+                        shape = RoundedCornerShape(16.dp),
+                        topSpecularLine = true
+                    )
+                    .border(glassCardBorder(), shape = RoundedCornerShape(16.dp))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                    Text(
+                        text = "座舱温控设定",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    StepperRow(
+                        label = "设定温度",
+                        value = "${draft.temperatureC} ℃",
+                        canDecrease = draft.temperatureC > temperatureRange.first,
+                        canIncrease = draft.temperatureC < temperatureRange.last,
+                        onDecrease = { syncIfEnabled(draft.copy(temperatureC = draft.temperatureC - 1)) },
+                        onIncrease = { syncIfEnabled(draft.copy(temperatureC = draft.temperatureC + 1)) }
+                    )
+
+                    StepperRow(
+                        label = "出风风量",
+                        value = "${draft.windLevel} 挡",
+                        canDecrease = draft.windLevel > fanRange.first,
+                        canIncrease = draft.windLevel < fanRange.last,
+                        onDecrease = { syncIfEnabled(draft.copy(windLevel = draft.windLevel - 1)) },
+                        onIncrease = { syncIfEnabled(draft.copy(windLevel = draft.windLevel + 1)) }
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(0.6.dp)
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.20f))
+                    )
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Text(
-                            text = "按设定星期与时间自动开启座舱空调",
-                            style = MaterialTheme.typography.labelSmall,
+                            text = "运行模式",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                    Switch(
-                        checked = draft.enabled,
-                        onCheckedChange = { isChecked ->
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            val next = draft.copy(enabled = isChecked)
-                            draft = next
-                            if (isChecked) {
-                                onConfirm(next.copy(days = ChargePlanCyclesHelper.toVehicleMask(draftDays)))
-                            } else {
-                                onCancel(next.copy(days = ChargePlanCyclesHelper.toVehicleMask(draftDays)))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(ScheduledAcMode.COLD, ScheduledAcMode.HOT).forEach { mode ->
+                                ChoicePill(
+                                    label = mode.label,
+                                    selected = draft.mode == mode,
+                                    onClick = { syncIfEnabled(draft.copy(mode = mode)) },
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
-                        },
-                        colors = greenSwitchColors,
-                        modifier = Modifier.scale(0.78f)
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "空气循环",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            AirCircle.entries.forEach { circle ->
+                                ChoicePill(
+                                    label = circle.displayLabel,
+                                    selected = draft.circle == circle,
+                                    onClick = { syncIfEnabled(draft.copy(circle = circle)) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+
+            // ====== 3. 【舒适与全车联动微晶舱】 ======
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(
+                        shape = RoundedCornerShape(16.dp),
+                        topSpecularLine = true
                     )
-                }
-            }
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                    .border(glassCardBorder(), shape = RoundedCornerShape(16.dp))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "开启时间",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                TimeWheelPicker(
-                    timeString = draft.startTime,
-                    onTimeChanged = { syncIfEnabled(draft.copy(startTime = it)) },
-                    minuteStep = 1
-                )
-            }
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "重复",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                val pills = listOf(
-                    7 to "周日",
-                    1 to "周一",
-                    2 to "周二",
-                    3 to "周三",
-                    4 to "周四",
-                    5 to "周五",
-                    6 to "周六"
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    pills.forEach { (dayIndex, label) ->
-                        OfficialDayPill(
-                            label = label,
-                            selected = draftDays.contains(dayIndex),
-                            onClick = {
-                                draftDays = if (draftDays.contains(dayIndex)) {
-                                    if (draftDays.size > 1) draftDays - dayIndex else draftDays
-                                } else {
-                                    draftDays + dayIndex
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
-            StepperRow(
-                label = "温度",
-                value = "${draft.temperatureC} ℃",
-                canDecrease = draft.temperatureC > temperatureRange.first,
-                canIncrease = draft.temperatureC < temperatureRange.last,
-                onDecrease = { syncIfEnabled(draft.copy(temperatureC = draft.temperatureC - 1)) },
-                onIncrease = { syncIfEnabled(draft.copy(temperatureC = draft.temperatureC + 1)) }
-            )
-
-            StepperRow(
-                label = "风量",
-                value = "${draft.windLevel} 挡",
-                canDecrease = draft.windLevel > fanRange.first,
-                canIncrease = draft.windLevel < fanRange.last,
-                onDecrease = { syncIfEnabled(draft.copy(windLevel = draft.windLevel - 1)) },
-                onIncrease = { syncIfEnabled(draft.copy(windLevel = draft.windLevel + 1)) }
-            )
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "模式",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    listOf(ScheduledAcMode.COLD, ScheduledAcMode.HOT).forEach { mode ->
-                        ChoicePill(
-                            label = mode.label,
-                            selected = draft.mode == mode,
-                            onClick = { syncIfEnabled(draft.copy(mode = mode)) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "循环",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    AirCircle.entries.forEach { circle ->
-                        ChoicePill(
-                            label = circle.displayLabel,
-                            selected = draft.circle == circle,
-                            onClick = { syncIfEnabled(draft.copy(circle = circle)) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
-            // 主副驾驶座椅舒适（加热 / 通风）
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.glassInsetSurface,
-                border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
                         text = "全车座椅舒适",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     val crossDividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.22f else 0.32f)
@@ -573,7 +619,7 @@ internal fun ScheduledAcPageContent(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "二排右座(副驾驶后)",
+                                text = "二排右座(副驾后)",
                                 style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.5.sp),
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -620,111 +666,104 @@ internal fun ScheduledAcPageContent(
                             }
                         }
                     }
-                }
-            }
 
-            // 方向盘加热
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.glassInsetSurface,
-                border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "方向盘加热",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "定时到点时联动开启方向盘加热",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = draft.steeringWheelHeating,
-                        onCheckedChange = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            syncIfEnabled(draft.copy(steeringWheelHeating = it))
-                        },
-                        colors = greenSwitchColors,
-                        modifier = Modifier.scale(0.78f)
+                    // 微晶细分界线
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(0.6.dp)
+                            .background(crossDividerColor)
                     )
-                }
-            }
 
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.glassInsetSurface,
-                border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                    // 方向盘加热
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "关闭车窗",
+                                text = "方向盘加热",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "定时到点时联动关闭打开的车窗，防止冷热气外泄",
+                                text = "定时到点时联动开启方向盘加热",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Switch(
-                            checked = draft.closeWindows,
+                        CockpitSwitch(
+                            checked = draft.steeringWheelHeating,
                             onCheckedChange = {
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                syncIfEnabled(draft.copy(closeWindows = it))
-                            },
-                            colors = greenSwitchColors,
-                            modifier = Modifier.scale(0.78f)
+                                syncIfEnabled(draft.copy(steeringWheelHeating = it))
+                            }
                         )
                     }
 
-                    Row(
+                    // 微晶细分界线
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(0.6.dp)
+                            .background(crossDividerColor)
+                    )
+
+                    // 门窗与遮阳帘联动
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "关闭遮阳帘",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "定时到点时联动关闭全景天幕遮阳帘，隔绝阳光直晒",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "关闭车窗",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "定时到点时联动关闭打开的车窗，防止冷热气外泄",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            CockpitSwitch(
+                                checked = draft.closeWindows,
+                                onCheckedChange = {
+                                    syncIfEnabled(draft.copy(closeWindows = it))
+                                }
                             )
                         }
-                        Switch(
-                            checked = draft.closeSunshade,
-                            onCheckedChange = {
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "关闭遮阳帘",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "定时到点时联动关闭全景天幕遮阳帘，隔绝阳光直晒",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            CockpitSwitch(
+                                checked = draft.closeSunshade,
+                                onCheckedChange = {
                                 syncIfEnabled(draft.copy(closeSunshade = it))
-                            },
-                            colors = greenSwitchColors,
-                            modifier = Modifier.scale(0.78f)
+                            }
                         )
                     }
                 }
@@ -793,11 +832,10 @@ private fun RoundStepButton(
 ) {
     val isDark = LocalAppDarkTheme.current
     val btnBg = if (isDark) Color(0xFF282828) else Color(0xFFF0F0F0)
-    val btnBorder = if (isDark) Color(0x33FFFFFF) else Color(0x28000000)
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = btnBg,
-        border = BorderStroke(0.8.dp, btnBorder),
+        border = glassInsetBorder(),
         modifier = Modifier
             .size(width = 42.dp, height = 36.dp)
             .clip(RoundedCornerShape(10.dp))
@@ -827,16 +865,16 @@ private fun ChoicePill(
 ) {
     val isDark = LocalAppDarkTheme.current
     val unselectedBg = if (isDark) Color(0xFF282828) else Color(0xFFF2F2F2)
-    val unselectedBorder = if (isDark) Color(0x33FFFFFF) else Color(0x22000000)
     val unselectedTextColor = if (isDark) Color(0xFFE2E2E2) else Color(0xFF2E2E2E)
 
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = if (selected) MaterialTheme.statusGood.copy(alpha = 0.16f) else unselectedBg,
-        border = BorderStroke(
-            0.8.dp,
-            if (selected) MaterialTheme.statusGood.copy(alpha = 0.60f) else unselectedBorder
-        ),
+        border = if (selected) {
+            BorderStroke(0.8.dp, MaterialTheme.statusGood.copy(alpha = 0.60f))
+        } else {
+            glassInsetBorder()
+        },
         modifier = modifier
             .height(36.dp)
             .clip(RoundedCornerShape(10.dp))
@@ -865,16 +903,16 @@ private fun ScheduledComfortPill(
     val isDark = LocalAppDarkTheme.current
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val unselectedBg = if (isDark) Color(0xFF282828) else Color(0xFFF2F2F2)
-    val unselectedBorder = if (isDark) Color(0x33FFFFFF) else Color(0x22000000)
     val unselectedContentColor = if (isDark) Color(0xFFE2E2E2) else Color(0xFF2E2E2E)
 
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = if (selected) activeColor.copy(alpha = 0.18f) else unselectedBg,
-        border = BorderStroke(
-            0.8.dp,
-            if (selected) activeColor.copy(alpha = 0.65f) else unselectedBorder
-        ),
+        border = if (selected) {
+            BorderStroke(0.8.dp, activeColor.copy(alpha = 0.65f))
+        } else {
+            glassInsetBorder()
+        },
         shadowElevation = 0.dp,
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))

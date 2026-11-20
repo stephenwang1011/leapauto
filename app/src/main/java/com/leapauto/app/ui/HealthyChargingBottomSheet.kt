@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +36,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import android.widget.Toast
 import androidx.compose.runtime.Composable
@@ -126,7 +128,8 @@ fun HealthyChargingBottomSheet(
     onRefreshTelemetry: () -> Unit = {},
     onTelemetryActiveChange: (Boolean) -> Unit = {},
     controlFeedback: ControlFeedback? = null,
-    controlInProgress: Boolean = false
+    controlInProgress: Boolean = false,
+    onOpenChargeHistory: () -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
@@ -256,16 +259,6 @@ fun HealthyChargingBottomSheet(
     val pageBgColor = if (isDark) Color(0xFF161616) else Color(0xFFF8F8F8)
     val cardBgColor = if (isDark) Color(0xFF202020) else Color.White
     val cardBorderColor = if (isDark) Color(0xFF2E2E2E) else Color(0xFFECECEC)
-    val uncheckedTrack = if (isDark) Color(0xFF383838) else Color(0xFFDFDFDF)
-    val uncheckedBorder = if (isDark) Color(0x26FFFFFF) else Color(0x1A000000)
-    val unifiedSwitchColors = SwitchDefaults.colors(
-        checkedThumbColor = Color.White,
-        checkedTrackColor = MaterialTheme.statusGood,
-        checkedBorderColor = Color.Transparent,
-        uncheckedThumbColor = Color.White,
-        uncheckedTrackColor = uncheckedTrack,
-        uncheckedBorderColor = uncheckedBorder
-    )
 
     // 图 1: 充电中心主界面
     ModalBottomSheet(
@@ -530,6 +523,60 @@ fun HealthyChargingBottomSheet(
                 }
             }
 
+            // 独立卡片: 充电记录入口（位于健康充电卡片正上方）
+            Surface(
+                onClick = onOpenChargeHistory,
+                shape = RoundedCornerShape(16.dp),
+                color = Color.Transparent,
+                border = glassCardBorder(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(
+                        shape = RoundedCornerShape(16.dp),
+                        topSpecularLine = true
+                    )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "充电记录",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Icon(
+                                painter = painterResource(R.drawable.ic_phosphor_chart_bar),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Text(
+                            text = "轻松查看充电详情",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Icon(
+                        painter = painterResource(R.drawable.ic_phosphor_caret_right),
+                        contentDescription = "查看充电记录",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
             // 卡片 1: 健康充电（参考图 1）
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -563,18 +610,15 @@ fun HealthyChargingBottomSheet(
                             modifier = Modifier.weight(1f)
                         )
                         Spacer(Modifier.width(12.dp))
-                        Switch(
+                        CockpitSwitch(
                             checked = healthySwitchEnabled,
                             onCheckedChange = { isChecked ->
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 healthySwitchEnabled = isChecked
                                 if (isChecked && selectedSoc >= 100f) {
                                     selectedSoc = 90f
                                     Toast.makeText(context, "已调整至健康限值 90%", Toast.LENGTH_SHORT).show()
                                 }
-                            },
-                            colors = unifiedSwitchColors,
-                            modifier = Modifier.scale(0.78f)
+                            }
                         )
                     }
 
@@ -795,14 +839,11 @@ fun HealthyChargingBottomSheet(
                             )
                         }
                         Spacer(Modifier.width(12.dp))
-                        Switch(
+                        CockpitSwitch(
                             checked = scheduledChargeEnabled,
                             onCheckedChange = {
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 scheduledChargeEnabled = it
-                            },
-                            colors = unifiedSwitchColors,
-                            modifier = Modifier.scale(0.78f)
+                            }
                         )
                     }
 
@@ -883,14 +924,11 @@ fun HealthyChargingBottomSheet(
                             modifier = Modifier.weight(1f)
                         )
                         Spacer(Modifier.width(12.dp))
-                        Switch(
+                        CockpitSwitch(
                             checked = scheduledPreheatEnabled,
                             onCheckedChange = {
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 scheduledPreheatEnabled = it
-                            },
-                            colors = unifiedSwitchColors,
-                            modifier = Modifier.scale(0.78f)
+                            }
                         )
                     }
 

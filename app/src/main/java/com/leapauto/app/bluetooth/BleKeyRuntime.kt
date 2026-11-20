@@ -47,6 +47,12 @@ class BleKeyRuntime private constructor(context: Context) {
     private var restoreAttempted = false
     private var blockedGeneration: Long? = null
     private var inCarMediaActive = false
+    private var disableFeatureRunnable: Runnable? = null
+
+    private fun cancelDisableFeature() {
+        disableFeatureRunnable?.let(handler::removeCallbacks)
+        disableFeatureRunnable = null
+    }
 
     fun setInCarMediaActive(active: Boolean) {
         inCarMediaActive = active
@@ -135,6 +141,7 @@ class BleKeyRuntime private constructor(context: Context) {
     }
 
     fun startBackground() {
+        cancelDisableFeature()
         check(foreground && validSession())
         check(controller.hasPermissions()) { "请先开启附近设备权限" }
         check(!sessions.loadOpPassword().isNullOrBlank()) { "请先设置操控密码" }
@@ -147,6 +154,7 @@ class BleKeyRuntime private constructor(context: Context) {
     }
 
     fun restoreBackground() {
+        cancelDisableFeature()
         if (restoreAttempted || !foreground) return
         restoreAttempted = true
         if (!runningValue.value && keyValue.value?.needsBackground == true) startBackground()
@@ -180,6 +188,74 @@ class BleKeyRuntime private constructor(context: Context) {
         controller.disconnect()
         appContext.stopService(Intent(appContext, BleKeyService::class.java))
         stopping = false
+    }
+
+    fun enableFeature() {
+        cancelDisableFeature()
+        val bound = keyValue.value
+        val current = identity
+        if (bound != null && current != null && validSession() && !bound.desired.enabled) {
+            val enabledConfig = bound.desired.copy(enabled = true)
+            val requested = bound.request(enabledConfig, current.generation)
+            keys.save(requested)
+            keyValue.value = requested
+            if (runningValue.value && controller.canConfigure && !syncing) {
+                synchronizeConfiguration()
+            }
+        }
+    }
+
+    fun disableFeature(onComplete: () -> Unit = {}) {
+        cancelDisableFeature()
+        val bound = keyValue.value
+        val current = identity
+        if (bound != null && current != null && validSession() &&
+            connectionValue.value.phase == BleConnectionPhase.READY && controller.canConfigure && !syncing
+        ) {
+            val disabledConfig = bound.desired.copy(
+                enabled = false,
+                autoUnlock = false,
+                autoLock = false
+            )
+            val requested = bound.request(disabledConfig, current.generation)
+            keys.save(requested)
+            keyValue.value = requested
+            syncing = true
+            val isLeap3 = currentCarType.orEmpty().uppercase().let { it.contains("C16") || it.contains("C10") }
+            val configureMinor = if (isLeap3 && (bound.device.protocolMinor ?: 0) < BleKeyProtocol.LEAP3_PROTOCOL_MINOR) {
+                BleKeyProtocol.LEAP3_PROTOCOL_MINOR
+            } else {
+                bound.device.protocolMinor ?: BleKeyProtocol.defaultProtocolMinor(currentCarType)
+            }
+            var finished = false
+            val finishAction = Runnable {
+                if (!finished) {
+                    finished = true
+                    syncing = false
+                    disableFeatureRunnable = null
+                    stopBackground()
+                    onComplete()
+                }
+            }
+            disableFeatureRunnable = finishAction
+            controller.configure(disabledConfig, configureMinor) {
+                handler.post(finishAction)
+            }
+            handler.postDelayed(finishAction, 2_500L)
+        } else {
+            if (bound != null && current != null && validSession()) {
+                val disabledConfig = bound.desired.copy(
+                    enabled = false,
+                    autoUnlock = false,
+                    autoLock = false
+                )
+                val requested = bound.request(disabledConfig, current.generation)
+                keys.save(requested)
+                keyValue.value = requested
+            }
+            stopBackground()
+            onComplete()
+        }
     }
 
     fun endSession() {
@@ -299,7 +375,15 @@ class BleKeyRuntime private constructor(context: Context) {
             }
             override fun onScanFailed(errorCode: Int) {
                 cancelProbe()
-                connectDirect(targetDevice, certificate, bound.accountId, targetDesired, credentialScope, current)
+                val failReason = controller.scanFailureReason(errorCode)
+                controller.recordDiagnostic(BleDiagnosticEvent.SCAN_FAILED, errorCode, extra = failReason)
+                if (errorCode == 6) {
+                    consecutiveMissCount = maxOf(consecutiveMissCount, 3)
+                    controller.updateStateMessage("系统扫描限流中，30秒后恢复待命")
+                    scheduleProbeRetry(30_000L)
+                } else {
+                    connectDirect(targetDevice, certificate, bound.accountId, targetDesired, credentialScope, current)
+                }
             }
         }
         probeCallback = callback
@@ -358,9 +442,9 @@ class BleKeyRuntime private constructor(context: Context) {
         ) { identity == current && validSession() }
     }
 
-    private fun scheduleProbeRetry() {
+    private fun scheduleProbeRetry(customDelayMs: Long? = null) {
         if (retry != null || !runningValue.value) return
-        val delayMs = BleReconnectPolicy.probeDelayMillis(foreground, inCarMediaActive, consecutiveMissCount)
+        val delayMs = customDelayMs ?: BleReconnectPolicy.probeDelayMillis(foreground, inCarMediaActive, consecutiveMissCount)
         retry = Runnable {
             retry = null
             reconnectManaged()

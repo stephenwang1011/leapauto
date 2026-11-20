@@ -2280,6 +2280,156 @@ class LeapmotorApi internal constructor(
         return null
     }
 
+    // ---------------------------------------------------------------- 充电记录 (官方 App 抓包接口)
+
+    /**
+     * 充电记录：查询最早有效充电记录时间戳 (POST /carownerservice/charge/vail/startTime/query)
+     * 返回毫秒时间戳，失败时返回当前时间 1 年前的时间戳作为兜底。
+     */
+    fun queryChargeValidStartTime(vin: String = session.selectedVin): Long {
+        if (vin.isBlank()) return System.currentTimeMillis() - 365L * 86400000L
+        val params = linkedMapOf("vin" to vin)
+        val signed = oldSignedParams(params)
+        val jsonBody = org.json.JSONObject(signed as Map<*, *>)
+        val headers = combinedAppAndGatewayHeaders(signed, needLogin = true)
+        val path = "/carownerservice/charge/vail/startTime/query"
+        val route = ensureRoute()
+        val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
+        val candidates = listOf("https://appgateway.leapmotor.com$path", "$host$path").distinct()
+
+        for (url in candidates) {
+            try {
+                val resp = http(url, method = "POST", headers = headers, jsonBody = jsonBody)
+                val code = resp.optInt("code", resp.optInt("result", -1))
+                if (code == 0) {
+                    val data = resp.optJSONObject("data")
+                    val vailTime = data?.optLong("vailTime", 0L) ?: 0L
+                    if (vailTime > 0L) return vailTime
+                }
+            } catch (_: Exception) {}
+        }
+        return System.currentTimeMillis() - 365L * 86400000L
+    }
+
+    /**
+     * 充电记录：按天/按年统计数据查询 (POST /carownerservice/charge/statistic/days 或 /year)
+     */
+    fun queryChargeStatistics(
+        vin: String = session.selectedVin,
+        periodType: com.leapauto.app.charge.ChargePeriodType,
+        year: Int,
+        month: Int = 1,
+        startTimeStr: String? = null,
+        endTimeStr: String? = null
+    ): com.leapauto.app.charge.ChargeStatisticResult {
+        if (vin.isBlank()) return com.leapauto.app.charge.ChargeStatisticResult(0, 0.0, 0.0, emptyList())
+
+        val isYear = periodType == com.leapauto.app.charge.ChargePeriodType.YEAR
+        val path = if (isYear) "/carownerservice/charge/statistic/year" else "/carownerservice/charge/statistic/days"
+
+        val params = linkedMapOf<String, String>()
+        params["vin"] = vin
+        if (isYear) {
+            params["year"] = year.toString()
+        } else {
+            val (start, end) = when {
+                !startTimeStr.isNullOrBlank() && !endTimeStr.isNullOrBlank() -> Pair(startTimeStr, endTimeStr)
+                periodType == com.leapauto.app.charge.ChargePeriodType.RECENT_7_DAYS -> {
+                    val cal = java.util.Calendar.getInstance()
+                    val endDay = String.format(java.util.Locale.US, "%04d-%02d-%02d", cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH) + 1, cal.get(java.util.Calendar.DAY_OF_MONTH))
+                    cal.add(java.util.Calendar.DAY_OF_MONTH, -6)
+                    val startDay = String.format(java.util.Locale.US, "%04d-%02d-%02d", cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH) + 1, cal.get(java.util.Calendar.DAY_OF_MONTH))
+                    Pair(startDay, endDay)
+                }
+                else -> {
+                    val cal = java.util.Calendar.getInstance().apply {
+                        set(java.util.Calendar.YEAR, year)
+                        set(java.util.Calendar.MONTH, month - 1)
+                        set(java.util.Calendar.DAY_OF_MONTH, 1)
+                    }
+                    val startDay = String.format(java.util.Locale.US, "%04d-%02d-01", year, month)
+                    val maxDay = cal.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+                    val endDay = String.format(java.util.Locale.US, "%04d-%02d-%02d", year, month, maxDay)
+                    Pair(startDay, endDay)
+                }
+            }
+            params["startTime"] = start
+            params["endTime"] = end
+        }
+
+        val signed = oldSignedParams(params)
+        val jsonBody = org.json.JSONObject(signed as Map<*, *>)
+        val headers = combinedAppAndGatewayHeaders(signed, needLogin = true)
+        val route = ensureRoute()
+        val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
+        val candidates = listOf("https://appgateway.leapmotor.com$path", "$host$path").distinct()
+
+        var lastEx: Exception? = null
+        for (url in candidates) {
+            try {
+                val resp = http(url, method = "POST", headers = headers, jsonBody = jsonBody)
+                val code = resp.optInt("code", resp.optInt("result", -1))
+                if (code == 0) {
+                    val data = resp.optJSONObject("data") ?: org.json.JSONObject()
+                    return com.leapauto.app.charge.ChargeStatisticResult.fromJson(data, periodType)
+                }
+                lastEx = ApiException("查询充电统计失败: ${resp.optString("message")}")
+            } catch (e: Exception) {
+                lastEx = e
+            }
+        }
+        throw (lastEx ?: ApiException("查询充电统计失败"))
+    }
+
+    /**
+     * 充电记录：充电明细分页查询 (POST /carownerservice/charge/daily/detail/page)
+     */
+    fun queryChargeDailyDetails(
+        vin: String = session.selectedVin,
+        startTime: String,
+        endTime: String,
+        pageNum: Int = 1,
+        pageSize: Int = 50
+    ): List<com.leapauto.app.charge.ChargeDetailItem> {
+        if (vin.isBlank()) return emptyList()
+        val path = "/carownerservice/charge/daily/detail/page"
+        val params = linkedMapOf<String, String>(
+            "vin" to vin,
+            "startTime" to startTime,
+            "endTime" to endTime,
+            "pageNum" to pageNum.toString(),
+            "pageSize" to pageSize.toString()
+        )
+        val signed = oldSignedParams(params)
+        val jsonBody = org.json.JSONObject(signed as Map<*, *>)
+        val headers = combinedAppAndGatewayHeaders(signed, needLogin = true)
+        val route = ensureRoute()
+        val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
+        val candidates = listOf("https://appgateway.leapmotor.com$path", "$host$path").distinct()
+
+        var lastEx: Exception? = null
+        for (url in candidates) {
+            try {
+                val resp = http(url, method = "POST", headers = headers, jsonBody = jsonBody)
+                val code = resp.optInt("code", resp.optInt("result", -1))
+                if (code == 0) {
+                    val data = resp.optJSONObject("data") ?: return emptyList()
+                    val list = data.optJSONArray("list") ?: return emptyList()
+                    val result = ArrayList<com.leapauto.app.charge.ChargeDetailItem>(list.length())
+                    for (i in 0 until list.length()) {
+                        val item = list.optJSONObject(i) ?: continue
+                        result.add(com.leapauto.app.charge.ChargeDetailItem.fromJson(item))
+                    }
+                    return result
+                }
+                lastEx = ApiException("查询充电明细失败: ${resp.optString("message")}")
+            } catch (e: Exception) {
+                lastEx = e
+            }
+        }
+        throw (lastEx ?: ApiException("查询充电明细失败"))
+    }
+
     // ---------------------------------------------------------------- 内部
 
     private fun gatewayFetch(

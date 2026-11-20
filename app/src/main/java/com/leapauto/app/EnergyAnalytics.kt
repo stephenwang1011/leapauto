@@ -221,6 +221,12 @@ object EnergyHomeCardPolicy {
 
     fun recentMileage(data: EnergyAnalyticsData, limit: Int = 7): List<EnergySeriesPoint> =
         data.mileageTrend.takeLast(limit.coerceAtLeast(0))
+
+    fun barHeightRatio(value: Double, max: Double, minRatio: Float = 0.15f): Float {
+        if (max <= 0.0 || value <= 0.0) return minRatio
+        val rawRatio = (value / max).toFloat().coerceIn(0f, 1f)
+        return (minRatio + (1f - minRatio) * rawRatio).coerceIn(minRatio, 1f)
+    }
 }
 
 data class EnergyRankAnalytics(

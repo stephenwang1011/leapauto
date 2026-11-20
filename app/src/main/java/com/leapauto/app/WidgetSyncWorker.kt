@@ -6,6 +6,7 @@ import android.content.Context
 import android.widget.RemoteViews
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import com.leapauto.app.trip.TripReconciliationEngine
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -36,6 +37,32 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                 val config = store.loadVehicleConfig(current.selectedVin)
                 val status = LeapmotorApi(current).getVehicleState()
                 ChargeNotificationManager.process(context, store, current.selectedVin, status)
+                // [FEATURE: TRIP_LOG] Start
+                try {
+                    val rawMileage = status.opt("totalMileage") ?: status.opt("1318")
+                    val mileageKm = rawMileage?.toString()?.toDoubleOrNull()
+                    val rawSoc = status.opt("preciseSoc")
+                        ?: status.opt("100003")
+                        ?: status.opt("soc")
+                        ?: status.opt("1204")
+                    val socPercent = rawSoc?.toString()?.trim()?.removeSuffix("%")?.toDoubleOrNull()
+                    val isDriving = WidgetStatusMapper.isDriving(status)
+                    val gear = status.optString("gearStatus").takeIf { it.isNotBlank() }
+                        ?: status.optString("1010").takeIf { it.isNotBlank() }
+                    val fuelSocPercent = VehicleStatusMapper.fuelSocPercent(status)?.toDouble()
+                    TripReconciliationEngine.processTelemetry(
+                        context = context,
+                        vin = current.selectedVin,
+                        mileageKm = mileageKm,
+                        socPercent = socPercent,
+                        isDriving = isDriving,
+                        gear = gear,
+                        locationName = null,
+                        carType = current.selectedCarType,
+                        fuelSocPercent = fuelSocPercent
+                    )
+                } catch (_: Exception) {}
+                // [FEATURE: TRIP_LOG] End
 
                 val workerPowerType = VehiclePowerTypeResolver.fromStatus(
                     status, config.powerType, current.selectedCarType
