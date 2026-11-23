@@ -126,6 +126,7 @@ fun ChargeHistoryScreen(
     var showDefaultPriceDialog by remember { mutableStateOf(false) }
     var editSlowPriceInput by remember { mutableStateOf("") }
     var editFastPriceInput by remember { mutableStateOf("") }
+    var priceVersion by remember { mutableIntStateOf(0) }
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -363,77 +364,121 @@ fun ChargeHistoryScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                 )
 
-                // 核心三大指标（累计充电、充电次数、快充占比）
+                // 核心三大指标（累计充电、充电次数、周期充电金额）
                 val totalEnergy = statsResult?.totalEnergyKwh ?: 0.0
                 val totalCount = statsResult?.totalCounts ?: 0
                 val fastPercent = statsResult?.fastChargePercent ?: 0.0
+
+                val currentPriceVersion = priceVersion
+                val fastPrice = remember(currentPriceVersion) { priceStore.loadDefaultFastPrice() }
+                val slowPrice = remember(currentPriceVersion) { priceStore.loadDefaultSlowPrice() }
+                val periodCost = ChargePriceStore.computePeriodCost(totalEnergy, fastPercent, fastPrice, slowPrice)
+
+                val costMetricLabel = when (selectedPeriod) {
+                    ChargePeriodType.MONTH -> "月度金额"
+                    ChargePeriodType.YEAR -> "年度金额"
+                    ChargePeriodType.RECENT_7_DAYS -> "充电金额"
+                }
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .background(MaterialTheme.glassInsetSurface)
-                        .padding(vertical = 12.dp, horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceAround,
+                        .padding(vertical = 12.dp, horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // 指标 1: 累计充电
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    val energyStr = ChargePriceStore.formatEnergyDisplay(totalEnergy)
+                    val (energyValSize, energyUnitSize) = computeAdaptiveMetricFontSizes(energyStr.length)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Text(
                             text = buildAnnotatedString {
-                                withStyle(SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)) {
-                                    append(if (totalEnergy > 0) String.format(java.util.Locale.US, "%.1f", totalEnergy) else "0")
+                                withStyle(SpanStyle(fontSize = energyValSize, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)) {
+                                    append(energyStr)
                                 }
-                                withStyle(SpanStyle(fontSize = 12.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)) {
+                                withStyle(SpanStyle(fontSize = energyUnitSize, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)) {
                                     append(" 度")
                                 }
-                            }
+                            },
+                            maxLines = 1,
+                            softWrap = false,
+                            textAlign = TextAlign.Center
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
                             text = "累计充电",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false,
+                            textAlign = TextAlign.Center
                         )
                     }
 
                     // 指标 2: 充电次数
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    val countStr = "$totalCount"
+                    val (countValSize, countUnitSize) = computeAdaptiveMetricFontSizes(countStr.length)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Text(
                             text = buildAnnotatedString {
-                                withStyle(SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)) {
-                                    append("$totalCount")
+                                withStyle(SpanStyle(fontSize = countValSize, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)) {
+                                    append(countStr)
                                 }
-                                withStyle(SpanStyle(fontSize = 12.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)) {
+                                withStyle(SpanStyle(fontSize = countUnitSize, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)) {
                                     append(" 次")
                                 }
-                            }
+                            },
+                            maxLines = 1,
+                            softWrap = false,
+                            textAlign = TextAlign.Center
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
                             text = "充电次数",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false,
+                            textAlign = TextAlign.Center
                         )
                     }
 
-                    // 指标 3: 快充占比
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    // 指标 3: 周期充电金额 (月度金额 / 年度金额 / 充电金额)
+                    val costStr = ChargePriceStore.formatCostDisplay(periodCost)
+                    val (costValSize, costUnitSize) = computeAdaptiveMetricFontSizes(costStr.length)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Text(
                             text = buildAnnotatedString {
-                                withStyle(SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)) {
-                                    append(if (fastPercent > 0) "${fastPercent.toInt()}" else "0")
+                                withStyle(SpanStyle(fontSize = costValSize, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)) {
+                                    append(costStr)
                                 }
-                                withStyle(SpanStyle(fontSize = 12.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)) {
-                                    append(" %")
+                                withStyle(SpanStyle(fontSize = costUnitSize, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)) {
+                                    append(" 元")
                                 }
-                            }
+                            },
+                            maxLines = 1,
+                            softWrap = false,
+                            textAlign = TextAlign.Center
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            text = "快充占比",
+                            text = costMetricLabel,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -968,6 +1013,7 @@ fun ChargeHistoryScreen(
                                     itm.copy(pricePerKwh = rounded, costYuan = cost)
                                 } else itm
                             }
+                            priceVersion++
                         }
                         showItemPriceDialog = false
                     }
@@ -1037,6 +1083,7 @@ fun ChargeHistoryScreen(
                             val cost = ChargePriceStore.computeCost(itm.energyKwh, p)
                             itm.copy(pricePerKwh = p, costYuan = cost)
                         }
+                        priceVersion++
                         showDefaultPriceDialog = false
                     }
                 ) {
@@ -1047,6 +1094,15 @@ fun ChargeHistoryScreen(
                 TextButton(onClick = { showDefaultPriceDialog = false }) { Text("取消") }
             }
         )
+    }
+}
+
+/** 大数字自适应阶梯字号计算：确保三列等宽容器下数字不溢出、单位不折行 */
+private fun computeAdaptiveMetricFontSizes(valueLength: Int): Pair<androidx.compose.ui.unit.TextUnit, androidx.compose.ui.unit.TextUnit> {
+    return when {
+        valueLength >= 7 -> Pair(17.sp, 10.sp)
+        valueLength >= 6 -> Pair(20.sp, 11.sp)
+        else -> Pair(24.sp, 12.sp)
     }
 }
 

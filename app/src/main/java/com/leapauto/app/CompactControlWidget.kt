@@ -36,20 +36,7 @@ class CompactControlWidget : AppWidgetProvider() {
                     config,
                     snapshot?.carType ?: session.selectedCarType
                 )
-                val vin = session.selectedVin
-                val activeThemeId = ThemeManager.getActiveThemeId(context, vin)
-                val is3dSupported = ThemeManager.isVehicle3DSupported(context, vin)
-                val themeBgBitmap = if (VehicleThemePolicy.background(is3dSupported, activeThemeId) != VehicleThemePolicy.Background.ORIGINAL) {
-                    ThemeManager.loadWidgetBgBitmap(context, activeThemeId, is4x2 = false, darkTheme = darkTheme, vin = vin)
-                } else null
-
-                if (themeBgBitmap != null) {
-                    setImageViewBitmap(R.id.compactWidgetBackgroundImg, themeBgBitmap)
-                } else {
-                    val bgRes = ControlWidget.resolveWidgetCardBackground(context, darkTheme)
-                    setImageViewResource(R.id.compactWidgetBackgroundImg, bgRes)
-                }
-                setInt(R.id.compactWidgetRoot, "setBackgroundResource", 0)
+                applyCompactWidgetBackground(context, this, darkTheme)
                 setVehicleImage(this, appearance, session.selectedVin, context)
                 applyStaticAppearance(themeContext, this)
                 val title = ControlWidget.widgetTitle(config, appearance, session.selectedNickname, matchedVehicle?.nickname.orEmpty())
@@ -82,6 +69,25 @@ class CompactControlWidget : AppWidgetProvider() {
                 setOnClickPendingIntent(R.id.compactWidgetRoot, ControlWidget.openAppPendingIntent(context))
             }
 
+        private fun applyCompactWidgetBackground(context: Context, views: RemoteViews, darkTheme: Boolean) {
+            val store = SessionStore(context)
+            val session = store.load()
+            val vin = session.selectedVin
+            val activeThemeId = ThemeManager.getActiveThemeId(context, vin)
+            val is3dSupported = ThemeManager.isVehicle3DSupported(context, vin)
+            val themeBgBitmap = if (VehicleThemePolicy.background(is3dSupported, activeThemeId) != VehicleThemePolicy.Background.ORIGINAL) {
+                ThemeManager.loadWidgetBgBitmap(context, activeThemeId, is4x2 = false, darkTheme = darkTheme, vin = vin)
+            } else null
+
+            if (themeBgBitmap != null) {
+                views.setImageViewBitmap(R.id.compactWidgetBackgroundImg, themeBgBitmap)
+            } else {
+                val bgRes = ControlWidget.resolveWidgetCardBackground(context, darkTheme)
+                views.setImageViewResource(R.id.compactWidgetBackgroundImg, bgRes)
+            }
+            views.setInt(R.id.compactWidgetRoot, "setBackgroundResource", 0)
+        }
+
         fun refreshData(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, CompactControlWidget::class.java))
@@ -93,6 +99,8 @@ class CompactControlWidget : AppWidgetProvider() {
             RemoteViews(context.packageName, R.layout.widget_compact_layout).apply {
                 val store = SessionStore(context)
                 val themeContext = ControlWidget.widgetThemeContext(context)
+                val darkTheme = ControlWidget.widgetEffectiveDarkTheme(context)
+                applyCompactWidgetBackground(context, this, darkTheme)
                 val snapshot = store.loadSelectedWidgetSnapshot()
                 val session = store.load()
                 val vehicles = store.loadVehicles()

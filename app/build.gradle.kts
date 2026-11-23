@@ -7,7 +7,7 @@ plugins {
 }
 
 val apkDisplayName = "零跑智控"
-val apkVersionName = "5.0.0"
+val apkVersionName = "5.0.2"
 
 val localProperties = Properties().apply {
     val localPropertiesFile = rootProject.file("local.properties")
@@ -55,7 +55,7 @@ android {
         applicationId = "com.leapauto.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5000000
+        versionCode = 5000002
         versionName = apkVersionName
         buildConfigField("String", "AMAP_WEB_KEY_ENCRYPTED", "\"${obfuscateSecret(rawAmapWebKey)}\"")
         buildConfigField("String", "PGYER_API_KEY_ENCRYPTED", "\"${obfuscateSecret(rawPgyerApiKey)}\"")

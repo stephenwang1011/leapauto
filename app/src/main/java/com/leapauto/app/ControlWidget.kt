@@ -289,9 +289,8 @@ class ControlWidget : AppWidgetProvider() {
             val store = SessionStore(context)
             val themeContext = widgetThemeContext(context)
             val darkTheme = widgetEffectiveDarkTheme(context)
-            if (!partial) {
-                applyWidgetBackground(context, views, darkTheme)
-            }
+            // 增量与全量刷新均必须同步应用卡片底板，确保与当前深浅模式的文字图标颜色严格一致，杜绝日落日出深浅切换时底板与文字脱节
+            applyWidgetBackground(context, views, darkTheme)
             applyStaticAppearance(themeContext, views)
             views.setOnClickPendingIntent(R.id.widgetRoot, openAppPendingIntent(context))
             val session = store.load()
@@ -364,9 +363,8 @@ class ControlWidget : AppWidgetProvider() {
             val store = SessionStore(context)
             val themeContext = widgetThemeContext(context)
             val darkTheme = widgetEffectiveDarkTheme(context)
-            if (!partial) {
-                applyWidgetBackground(context, views, darkTheme)
-            }
+            // 增量与全量刷新均必须同步应用卡片底板，确保与当前深浅模式的文字图标颜色严格一致，杜绝日落日出深浅切换时底板与文字脱节
+            applyWidgetBackground(context, views, darkTheme)
             applyStaticAppearance(themeContext, views)
             views.setOnClickPendingIntent(R.id.widgetRoot, openAppPendingIntent(context))
             val session = store.load()

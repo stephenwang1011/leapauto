@@ -59,5 +59,38 @@ class ChargePriceStore(context: Context) {
             val total = energyKwh * pricePerKwh
             return (total * 100.0).roundToInt() / 100.0
         }
+
+        fun computePeriodCost(
+            totalEnergyKwh: Double,
+            fastChargePercent: Double,
+            fastPrice: Double,
+            slowPrice: Double
+        ): Double {
+            if (totalEnergyKwh <= 0.0) return 0.0
+            val clampedPercent = fastChargePercent.coerceIn(0.0, 100.0)
+            val fastEnergy = totalEnergyKwh * (clampedPercent / 100.0)
+            val slowEnergy = maxOf(0.0, totalEnergyKwh - fastEnergy)
+            val fastCost = computeCost(fastEnergy, fastPrice)
+            val slowCost = computeCost(slowEnergy, slowPrice)
+            return ((fastCost + slowCost) * 100.0).roundToInt() / 100.0
+        }
+
+        fun formatEnergyDisplay(energyKwh: Double): String {
+            if (energyKwh <= 0.0) return "0"
+            return if (energyKwh >= 10_000.0) {
+                String.format(java.util.Locale.US, "%.0f", energyKwh)
+            } else {
+                String.format(java.util.Locale.US, "%.1f", energyKwh)
+            }
+        }
+
+        fun formatCostDisplay(costYuan: Double): String {
+            if (costYuan <= 0.0) return "0"
+            return when {
+                costYuan >= 10_000.0 -> String.format(java.util.Locale.US, "%.0f", costYuan)
+                costYuan >= 1_000.0 -> String.format(java.util.Locale.US, "%.1f", costYuan)
+                else -> String.format(java.util.Locale.US, "%.2f", costYuan)
+            }
+        }
     }
 }

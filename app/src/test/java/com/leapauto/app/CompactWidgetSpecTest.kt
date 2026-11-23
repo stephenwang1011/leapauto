@@ -453,6 +453,17 @@ class CompactWidgetSpecTest {
         assertTrue(controlWidget.contains("R.color.widget_on_surface_high_contrast"))
     }
 
+    @Test
+    fun `both widgets synchronize card background with active dark theme in partial updates`() {
+        val projectDir = projectDirectory()
+        val wideWidget = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText().replace("\r\n", "\n")
+        val compactWidget = File(projectDir, "app/src/main/java/com/leapauto/app/CompactControlWidget.kt").readText().replace("\r\n", "\n")
+
+        assertFalse(wideWidget.contains("if (!partial) {\n                applyWidgetBackground(context, views, darkTheme)"))
+        assertTrue(wideWidget.contains("applyWidgetBackground(context, views, darkTheme)\n            applyStaticAppearance(themeContext, views)"))
+        assertTrue(compactWidget.contains("applyCompactWidgetBackground(context, this, darkTheme)"))
+    }
+
     private fun projectDirectory(): File {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         return generateSequence(File(workingDirectory)) { it.parentFile }

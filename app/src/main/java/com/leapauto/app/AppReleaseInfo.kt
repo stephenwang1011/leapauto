@@ -5,5 +5,5 @@ object AppReleaseInfo {
         get() = BuildConfig.VERSION_NAME
 
     // Update this text together with apkVersionName before each delivery package.
-    const val currentReleaseNotes = "1. 增加充电记录和行驶记录"
+    const val currentReleaseNotes = "1. 充电记录中增加月度和年度充电金额展示"
 }
