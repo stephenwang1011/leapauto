@@ -7110,7 +7110,6 @@ private fun QuickVehicleActions(
     var sunroofButtonHeight by remember { mutableStateOf(0f) }
     var batteryPreheatWarningMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var showForceBatteryPreheatButton by rememberSaveable { mutableStateOf(false) }
-    var showCallCarSheet by rememberSaveable { mutableStateOf(false) }
     val trunkState = status?.trunkState ?: TrunkState.UNKNOWN
     val isDrivingGear = VehicleDrivingSafetyPolicy.isDrivingGear(status?.gearStatus)
     val commandsPerPage = 5
@@ -7118,7 +7117,6 @@ private fun QuickVehicleActions(
         val supportsWindowGroup = !vehicleModel.contains("T03", ignoreCase = true)
         val supportsFrunk = VehicleQuickControlCapabilities.supportsFrunk(vehicleModel)
         val supportsSunroof = status?.sunroofAvailable == true
-        val supportsStraightMove = !vehicleModel.contains("T03", ignoreCase = true)
         val windowGroup = if (supportsWindowGroup) {
             listOf(Cmd("windowGroup", "车窗", R.drawable.ic_phosphor_wind))
         } else {
@@ -7126,11 +7124,6 @@ private fun QuickVehicleActions(
         }
         val sunroofCommands = if (supportsSunroof) {
             listOf(Cmd("sunroofGroup", "天窗", R.drawable.ic_sunroof))
-        } else {
-            emptyList()
-        }
-        val straightMoveCommands = if (supportsStraightMove) {
-            listOf(Cmd("straightMove", "直进直出", R.drawable.ic_inout))
         } else {
             emptyList()
         }
@@ -7150,7 +7143,6 @@ private fun QuickVehicleActions(
             *sunroofCommands.toTypedArray(),
             Cmd("trunk", "开后备箱", R.drawable.ic_phosphor_trunk_open),
             *frunkCommands.toTypedArray(),
-            *straightMoveCommands.toTypedArray(),
             *extraCommands.toTypedArray(),
             Cmd("scheduledAc", "定时空调", R.drawable.ic_phosphor_alarm),
             Cmd("batteryPreheat", "电池预热", R.drawable.ic_phosphor_battery_charging),
@@ -7503,25 +7495,6 @@ private fun QuickVehicleActions(
                                     handleQuickActionClick {
                                         if (!editing) {
                                             onOpenScheduledAc()
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        } else if (command.name == "straightMove") {
-                            QuickVehicleButton(
-                                label = "直进直出",
-                                iconRes = command.iconRes,
-                                warning = false,
-                                inProgress = false,
-                                isSensitive = true,
-                                isHeroDark = isHeroDark,
-                                iconTint = normalActionContentColor,
-                                labelTint = normalActionLabelColor,
-                                onClick = {
-                                    handleQuickActionClick {
-                                        if (!editing) {
-                                            showCallCarSheet = true
                                         }
                                     }
                                 },
@@ -7952,23 +7925,6 @@ private fun QuickVehicleActions(
                     }
                 }
             }
-        )
-    }
-
-    if (showCallCarSheet) {
-        val sessionData = remember { sessionStore.load() }
-        val accountId = sessionData.oldAuth?.accountId.orEmpty()
-        val certificate = remember(vehicleVin, accountId) {
-            if (accountId.isNotBlank() && vehicleVin.isNotBlank()) {
-                sessionStore.loadBluetoothKeyCertificate(accountId, vehicleVin)
-            } else null
-        }
-        CallCarBottomSheet(
-            vin = vehicleVin,
-            certificate = certificate,
-            accountId = accountId,
-            deviceId = sessionData.deviceId,
-            onDismiss = { showCallCarSheet = false }
         )
     }
 }
@@ -9982,126 +9938,248 @@ fun EnergyHomeSummaryPage(
     val totalMileageDisplay = data.totalMileage?.value?.trim()?.removeSuffix("km")?.trim()
         ?: vehicleTotalMileage?.trim()?.removeSuffix("km")?.trim()?.takeIf { it.isNotBlank() && it != "--" }
         ?: "—"
-    val daysHasValue = data.ownershipDays?.value != null
-    val mileageHasValue = totalMileageDisplay != "—" && totalMileageDisplay != "--"
-    val energyHasValue = data.cumulativeEnergy != null
-
+    val daysValue = data.ownershipDays?.value?.toLongOrNull()
     val daysText = data.ownershipDays?.value?.toString() ?: "--"
     val energyText = EnergyHomeCardPolicy.formatCumulativeEnergy(data.cumulativeEnergy?.value)
 
-    Row(
+    val mileageNumeric = totalMileageDisplay.replace(",", "").toDoubleOrNull()
+    val dailyMileageText = if (mileageNumeric != null && daysValue != null && daysValue > 0) {
+        String.format(java.util.Locale.US, "%.0f", mileageNumeric / daysValue)
+    } else null
+    val overallNumber = data.overallConsumption?.value?.trim()?.removeSuffix("kWh/100km")?.trim() ?: "--"
+
+    val isDark = LocalAppDarkTheme.current
+    val dividerColor = if (isDark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.08f)
+    val cyanColor = if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)
+    val energyColor = MaterialTheme.statusGood
+
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        EnergyMetricCard(
-            label = "提车时长",
-            value = daysText,
-            unit = "天",
-            valueColor = if (daysHasValue) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurfaceVariant,
-            accentColor = MaterialTheme.statusGood,
-            modifier = Modifier.weight(1f)
-        )
-        EnergyMetricCard(
-            label = "累计里程",
-            value = totalMileageDisplay,
-            unit = "km",
-            valueColor = if (mileageHasValue) MaterialTheme.statusWarn else MaterialTheme.colorScheme.onSurfaceVariant,
-            accentColor = MaterialTheme.statusWarn,
-            modifier = Modifier.weight(1f)
-        )
-        EnergyMetricCard(
-            label = "累计能耗",
-            value = energyText,
-            unit = "kWh",
-            valueColor = if (energyHasValue) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            accentColor = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.weight(1f)
-        )
+        // ====== 1. 上半部分：钛金三联主仪表 ======
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 列 1: 提车时长 (冰川天青)
+            PrecisionGaugeColumn(
+                code = "ACTIVE DAYS",
+                value = daysText,
+                unit = "天",
+                label = "提车相伴时长",
+                valueColor = cyanColor,
+                modifier = Modifier.weight(1f)
+            )
+
+            // 垂直光学切光晶线
+            Box(
+                modifier = Modifier
+                    .width(0.8.dp)
+                    .height(44.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, dividerColor, Color.Transparent)
+                        )
+                    )
+            )
+
+            // 列 2: 累计里程 (钛空冷白主资产，去除绿点)
+            PrecisionGaugeColumn(
+                code = "ODOMETER",
+                value = totalMileageDisplay,
+                unit = "km",
+                label = "累计行驶里程",
+                valueColor = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1.08f)
+            )
+
+            // 垂直光学切光晶线
+            Box(
+                modifier = Modifier
+                    .width(0.8.dp)
+                    .height(44.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, dividerColor, Color.Transparent)
+                        )
+                    )
+            )
+
+            // 列 3: 累计能耗 (生态翡翠绿)
+            PrecisionGaugeColumn(
+                code = "TOTAL ENERGY",
+                value = energyText,
+                unit = "kWh",
+                label = "累计用电总能耗",
+                valueColor = energyColor,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        // ====== 2. 下半部分：贯通式微晶能效状态条 ======
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(36.dp),
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.glassInsetSurface.copy(alpha = 0.40f),
+            border = glassInsetBorder(),
+            shadowElevation = 0.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 左侧：综合百公里能耗 (生态翡翠绿大字)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "综合能耗",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = overallNumber,
+                            style = MaterialTheme.typography.labelMedium.energyStyle().copy(fontSize = 15.5.sp),
+                            fontWeight = FontWeight.Bold,
+                            color = energyColor
+                        )
+                        Text(
+                            text = "kWh/100km",
+                            style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                            modifier = Modifier.padding(bottom = 1.dp)
+                        )
+                    }
+                }
+
+                // 中间微型切光分割点
+                Box(
+                    modifier = Modifier
+                        .size(3.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f))
+                )
+
+                // 右侧：日均行驶里程 (冰川天青大字)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "每日平均",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = dailyMileageText ?: "--",
+                            style = MaterialTheme.typography.labelMedium.energyStyle().copy(fontSize = 15.5.sp),
+                            fontWeight = FontWeight.Bold,
+                            color = cyanColor
+                        )
+                        Text(
+                            text = "km/天",
+                            style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                            modifier = Modifier.padding(bottom = 1.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun EnergyMetricCard(
-    label: String,
+private fun PrecisionGaugeColumn(
+    code: String,
     value: String,
     unit: String,
-    valueColor: Color,
-    accentColor: Color,
+    label: String,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
     modifier: Modifier = Modifier
 ) {
-    Surface(
+    Column(
         modifier = modifier
             .fillMaxHeight()
-            .frostedGlassCard(
-                shape = RoundedCornerShape(12.dp),
-                auraColor = accentColor.copy(alpha = 0.08f),
-                auraCenter = Offset(0.5f, 0.2f)
-            ),
-        shape = RoundedCornerShape(12.dp),
-        color = Color.Transparent,
-        border = glassCardBorder()
+            .padding(horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 6.dp, vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        // 1. 上层：激光刻印英文字标（极细、等宽微距，纯净对称无杂点）
+        Text(
+            text = code,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 9.sp,
+                letterSpacing = 0.8.sp,
+                lineHeight = 11.sp
+            ),
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+            maxLines = 1
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        // 2. 中层：高对比度晶体大字 + 精密基线沉降单位
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            // 1. 标题行靠顶舒展排布，明确卡片属性层级
-            Row(
-                modifier = Modifier.padding(top = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(5.dp)
-                        .clip(CircleShape)
-                        .background(accentColor)
-                )
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1
-                )
-            }
-
-            // 2. 核心数值与单位居中优雅分布，彻底消除上下紧挤压抑感
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = value,
-                    fontSize = 20.sp,
-                    lineHeight = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = valueColor,
-                    style = MaterialTheme.typography.titleMedium.energyStyle(),
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Spacer(Modifier.height(4.dp))
-
-                Text(
-                    text = unit,
-                    style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 11.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1
-                )
-            }
+            Text(
+                text = value,
+                fontSize = if (value.length > 5) 21.sp else 23.sp,
+                lineHeight = 23.sp,
+                fontWeight = FontWeight.Bold,
+                color = valueColor,
+                style = MaterialTheme.typography.titleLarge.energyStyle(),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = unit,
+                style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 11.sp),
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                modifier = Modifier.padding(bottom = 2.dp),
+                maxLines = 1
+            )
         }
+
+        Spacer(Modifier.height(5.dp))
+
+        // 3. 下层：静谧沉稳的中文字标
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp, lineHeight = 13.sp),
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.80f),
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

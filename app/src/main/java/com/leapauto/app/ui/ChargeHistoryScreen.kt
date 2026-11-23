@@ -27,13 +27,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.KeyboardType
+import com.leapauto.app.charge.ChargePriceStore
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -86,6 +90,7 @@ fun ChargeHistoryScreen(
     val effectiveApiProvider = apiProvider ?: remember(context) {
         { runCatching { LeapmotorApi(SessionStore(context).load()) }.getOrNull() }
     }
+    val priceStore = remember(context) { ChargePriceStore(context) }
     val isDark = LocalAppDarkTheme.current
     val currentCal = remember { Calendar.getInstance() }
     val thisYear = remember { currentCal.get(Calendar.YEAR) }
@@ -111,6 +116,16 @@ fun ChargeHistoryScreen(
 
     var showYearDialog by remember { mutableStateOf(false) }
     var showMonthDialog by remember { mutableStateOf(false) }
+
+    // 单条电价编辑弹窗状态
+    var showItemPriceDialog by remember { mutableStateOf(false) }
+    var editingItem by remember { mutableStateOf<ChargeDetailItem?>(null) }
+    var editPriceInput by remember { mutableStateOf("") }
+
+    // 默认基准电价弹窗状态
+    var showDefaultPriceDialog by remember { mutableStateOf(false) }
+    var editSlowPriceInput by remember { mutableStateOf("") }
+    var editFastPriceInput by remember { mutableStateOf("") }
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -170,7 +185,11 @@ fun ChargeHistoryScreen(
                     endTime = endStr
                 )
             }
-            detailsList = details
+            detailsList = details.map { item ->
+                val p = priceStore.resolvePrice(item.startTs, item.isFastCharge)
+                val cost = ChargePriceStore.computeCost(item.energyKwh, p)
+                item.copy(pricePerKwh = p, costYuan = cost)
+            }
             detailsLoading = false
         } catch (e: Exception) {
             detailsLoading = false
@@ -419,6 +438,60 @@ fun ChargeHistoryScreen(
                     }
                 }
 
+                // 预估花费汇总与默认单价设置行
+                val visibleTotalCost = detailsList.sumOf { it.costYuan ?: ChargePriceStore.computeCost(it.energyKwh, priceStore.resolvePrice(it.startTs, it.isFastCharge)) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.glassInsetSurface.copy(alpha = 0.5f))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = if (focusedLabel.isNotBlank()) "$focusedLabel 预估花费:" else "预估花费:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "¥${String.format(java.util.Locale.US, "%.2f", visibleTotalCost)}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.statusWarn
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable {
+                                editSlowPriceInput = String.format(java.util.Locale.US, "%.2f", priceStore.loadDefaultSlowPrice())
+                                editFastPriceInput = String.format(java.util.Locale.US, "%.2f", priceStore.loadDefaultFastPrice())
+                                showDefaultPriceDialog = true
+                            }
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "默认单价",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Icon(
+                            painter = painterResource(R.drawable.ic_phosphor_caret_right),
+                            contentDescription = "设置默认单价",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                }
+
                 // 交互式微晶能量柱状图
                 if (statsLoading) {
                     Box(
@@ -635,6 +708,77 @@ fun ChargeHistoryScreen(
                                                 )
                                             }
                                         }
+
+                                        // 电费单价（可点击独立修改）
+                                        val curPrice = item.pricePerKwh ?: priceStore.resolvePrice(item.startTs, item.isFastCharge)
+                                        val isCustom = priceStore.loadCustomPrice(item.startTs) != null
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .clickable {
+                                                    editingItem = item
+                                                    editPriceInput = String.format(java.util.Locale.US, "%.2f", curPrice)
+                                                    showItemPriceDialog = true
+                                                }
+                                                .padding(vertical = 2.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Text(
+                                                    "电费单价",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                if (isCustom) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(percent = 50),
+                                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                                    ) {
+                                                        Text(
+                                                            "自定",
+                                                            fontSize = 9.sp,
+                                                            color = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Text(
+                                                    "¥${String.format(java.util.Locale.US, "%.2f", curPrice)}/kWh",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Icon(
+                                                    painter = painterResource(R.drawable.ic_phosphor_caret_right),
+                                                    contentDescription = "修改单价",
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                            }
+                                        }
+
+                                        // 本次花费金额
+                                        val curCost = item.costYuan ?: ChargePriceStore.computeCost(item.energyKwh, curPrice)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                "本次花费",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                "¥${String.format(java.util.Locale.US, "%.2f", curCost)}",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.statusWarn
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -766,6 +910,141 @@ fun ChargeHistoryScreen(
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showMonthDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // 单条记录自定义电价弹窗
+    if (showItemPriceDialog && editingItem != null) {
+        val targetItem = editingItem!!
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showItemPriceDialog = false },
+            title = { Text("修改该笔充电单价", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "针对 ${targetItem.timeRangeFormatted} 该笔充电单独设定电费单价：",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = editPriceInput,
+                        onValueChange = { input ->
+                            val cleaned = input.filter { it.isDigit() || it == '.' }
+                            val parts = cleaned.split('.')
+                            if (parts.size <= 2) {
+                                val decimals = parts.getOrNull(1)
+                                if (decimals == null || decimals.length <= 2) {
+                                    editPriceInput = cleaned
+                                }
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        trailingIcon = { Text("元/kWh", style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    val inputP = editPriceInput.toDoubleOrNull() ?: 0.0
+                    if (inputP > 0.0) {
+                        val est = ChargePriceStore.computeCost(targetItem.energyKwh, inputP)
+                        Text(
+                            text = "充入 ${String.format(java.util.Locale.US, "%.1f", targetItem.energyKwh)} kWh，预计花费: ¥${String.format(java.util.Locale.US, "%.2f", est)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.statusWarn
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val p = editPriceInput.toDoubleOrNull()
+                        if (p != null && p > 0.0) {
+                            val rounded = String.format(java.util.Locale.US, "%.2f", p).toDoubleOrNull() ?: p
+                            priceStore.saveCustomPrice(targetItem.startTs, rounded)
+                            detailsList = detailsList.map { itm ->
+                                if (itm.startTs == targetItem.startTs) {
+                                    val cost = ChargePriceStore.computeCost(itm.energyKwh, rounded)
+                                    itm.copy(pricePerKwh = rounded, costYuan = cost)
+                                } else itm
+                            }
+                        }
+                        showItemPriceDialog = false
+                    }
+                ) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showItemPriceDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // 默认基准电价配置弹窗
+    if (showDefaultPriceDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDefaultPriceDialog = false },
+            title = { Text("设置默认充电单价", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "设定慢充（家充）与快充（公充）的默认计费单价，未单独设置的充电记录将自动套用：",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = editSlowPriceInput,
+                        onValueChange = { input ->
+                            val cleaned = input.filter { it.isDigit() || it == '.' }
+                            val parts = cleaned.split('.')
+                            if (parts.size <= 2 && (parts.getOrNull(1)?.length ?: 0) <= 2) {
+                                editSlowPriceInput = cleaned
+                            }
+                        },
+                        label = { Text("慢充默认单价 (交流)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        trailingIcon = { Text("元/kWh", style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editFastPriceInput,
+                        onValueChange = { input ->
+                            val cleaned = input.filter { it.isDigit() || it == '.' }
+                            val parts = cleaned.split('.')
+                            if (parts.size <= 2 && (parts.getOrNull(1)?.length ?: 0) <= 2) {
+                                editFastPriceInput = cleaned
+                            }
+                        },
+                        label = { Text("快充默认单价 (直流)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        trailingIcon = { Text("元/kWh", style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val slowP = editSlowPriceInput.toDoubleOrNull()
+                        val fastP = editFastPriceInput.toDoubleOrNull()
+                        if (slowP != null && slowP > 0.0) priceStore.saveDefaultSlowPrice(slowP)
+                        if (fastP != null && fastP > 0.0) priceStore.saveDefaultFastPrice(fastP)
+                        detailsList = detailsList.map { itm ->
+                            val p = priceStore.resolvePrice(itm.startTs, itm.isFastCharge)
+                            val cost = ChargePriceStore.computeCost(itm.energyKwh, p)
+                            itm.copy(pricePerKwh = p, costYuan = cost)
+                        }
+                        showDefaultPriceDialog = false
+                    }
+                ) {
+                    Text("保存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDefaultPriceDialog = false }) { Text("取消") }
             }
         )
     }

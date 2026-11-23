@@ -280,10 +280,6 @@ class BleKeyRuntime private constructor(context: Context) {
 
     private fun reconnectManaged() {
         if (!runningValue.value) return
-        // 关键保护：若当前连接已经处于就绪待命 (READY) 状态，严禁自杀重连掐断已活跃的连接
-        if (controller.state.phase == BleConnectionPhase.READY || controller.state.phase == BleConnectionPhase.CONFIGURING) {
-            return
-        }
         if (!validSession() || !controller.hasPermissions() || sessions.loadOpPassword().isNullOrBlank()) {
             stopBackground()
             return
@@ -294,12 +290,16 @@ class BleKeyRuntime private constructor(context: Context) {
             stopBackground()
             return
         }
+        if (controller.isMaintainingAutoConnect || controller.state.isBusy ||
+            controller.state.phase == BleConnectionPhase.READY) return
         cancelRetry()
         syncing = false
-        // Disconnect notifications must not schedule a second concurrent reconnect.
-        stopping = true
-        controller.disconnect()
-        stopping = false
+        if (!controller.isMaintainingAutoConnect) {
+            // Disconnect notifications must not schedule a second concurrent reconnect.
+            stopping = true
+            controller.disconnect()
+            stopping = false
+        }
         val current = requireNotNull(identity)
         recordTarget(bound.device, profiles.load(current))
         val credentialScope = reconnectScope(current, certificate)
@@ -322,8 +322,8 @@ class BleKeyRuntime private constructor(context: Context) {
         } else {
             bound.desired
         }
-        // 见车才连：先通过低功耗单次定向探测（3秒）确认车辆在附近，杜绝在楼上/远距离时无脑强连耗电与超时报错
-        probeTargetAndConnect(bound, targetDevice, certificate, targetDesired, credentialScope, current)
+        // Register the trusted address once; Android manages reconnection while this GATT is retained.
+        connectDirect(targetDevice, certificate, bound.accountId, targetDesired, credentialScope, current)
     }
 
     @SuppressLint("MissingPermission")
@@ -364,6 +364,9 @@ class BleKeyRuntime private constructor(context: Context) {
                     cancelProbe()
                     consecutiveMissCount = 0
                     val rssi = result.rssi
+                    if (controller.state.phase == BleConnectionPhase.READY || controller.state.phase == BleConnectionPhase.CONFIGURING) {
+                        return
+                    }
                     val effectiveDevice = if (!address.equals(bound.device.address, ignoreCase = true)) {
                         targetDevice.copy(address = address)
                     } else {
@@ -410,7 +413,7 @@ class BleKeyRuntime private constructor(context: Context) {
                     }
                     controller.recordDiagnostic(BleDiagnosticEvent.PROBE_MISSED, extra = extraDesc)
                     controller.updateStateMessage(if (foreground) "未在车辆附近 (前台待命中)" else "未在车辆附近 (后台待命中)")
-                    if (shouldAttemptDirectFallback) {
+                    if (shouldAttemptDirectFallback && !controller.isMaintainingAutoConnect) {
                         connectDirect(targetDevice, certificate, bound.accountId, targetDesired, credentialScope, current)
                     } else {
                         scheduleProbeRetry()
@@ -465,7 +468,7 @@ class BleKeyRuntime private constructor(context: Context) {
         } else if (state.phase == BleConnectionPhase.IDLE || state.phase == BleConnectionPhase.FAILED) {
             if (state.phase == BleConnectionPhase.FAILED) candidate = null
             syncing = false
-            if (runningValue.value && !stopping) scheduleReconnect()
+            if (runningValue.value && !stopping && !controller.isMaintainingAutoConnect) scheduleReconnect()
         }
     }
 

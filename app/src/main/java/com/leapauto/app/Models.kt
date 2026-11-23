@@ -1635,7 +1635,7 @@ object SensitiveControlPolicy {
 object QuickCommandOrderPolicy {
     private const val SUNSHADE_GROUP_ID = "sunshadeGroup"
     private val legacySunshadeIds = setOf("sunshadeOpen", "sunshadeClose")
-    private val retiredCommandIds = setOf("straightRemote")
+    private val retiredCommandIds = setOf("straightRemote", "straightMove")
 
     /** Keeps the first legacy sunshade position while replacing two actions with one grouped entry. */
     fun migrateSunshadeGroup(saved: List<String>?): List<String>? {

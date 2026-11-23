@@ -95,7 +95,7 @@ class QuickCommandOrderPolicyTest {
         assertEquals(
             listOf("unlock", "lock", "trunk"),
             QuickCommandOrderPolicy.migrateSunshadeGroup(
-                listOf("unlock", "straightRemote", "lock", "trunk")
+                listOf("unlock", "straightRemote", "straightMove", "lock", "trunk")
             )
         )
     }

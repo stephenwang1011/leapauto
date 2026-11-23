@@ -101,8 +101,7 @@ fun BluetoothKeyDialog(
     calibrationApplied: Boolean = false,
     calibrationPending: Boolean = false,
     onSaveCalibration: (BleCalibration?) -> Unit = {},
-    carType: String? = null,
-    onOpenStraightMove: (() -> Unit)? = null
+    carType: String? = null
 ) {
     val context = LocalContext.current
     val isBatteryIgnored = remember { BatteryOptimizationHelper.isIgnoringBatteryOptimizations(context) }
@@ -172,70 +171,6 @@ fun BluetoothKeyDialog(
                                 onScan = onScan,
                                 modifier = Modifier.fillMaxWidth().widthIn(max = 640.dp)
                             )
-                        }
-                    }
-                    val supportsStraightMove = carType?.contains("T03", ignoreCase = true) != true
-                    if (supportsStraightMove && onOpenStraightMove != null && certificateReady) {
-                        item {
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .widthIn(max = 640.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .clickable { onOpenStraightMove() }
-                                    .frostedGlassCard(RoundedCornerShape(16.dp), topSpecularLine = true),
-                                shape = RoundedCornerShape(16.dp),
-                                color = androidx.compose.ui.graphics.Color.Transparent,
-                                border = glassCardBorder(),
-                                shadowElevation = 0.dp
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(
-                                        modifier = Modifier.weight(1f),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        Surface(
-                                            modifier = Modifier.size(38.dp),
-                                            shape = CircleShape,
-                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                        ) {
-                                            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                                Icon(
-                                                    painter = painterResource(R.drawable.ic_inout),
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
-                                        }
-                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                            Text(
-                                                text = "直进直出",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.SemiBold
-                                            )
-                                            Text(
-                                                text = "狭窄车位按住手机远程遥控车辆慢速直进直出",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                    Icon(
-                                        painter = painterResource(R.drawable.ic_phosphor_caret_right),
-                                        contentDescription = "打开",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
                         }
                     }
                     item {

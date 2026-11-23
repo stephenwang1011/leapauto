@@ -27,6 +27,14 @@ data class TripRecord(
     val type: TripType = TripType.DRIVING,
     val chargedDuringTrip: Boolean = false
 ) {
+    /** 获取格式化的出发地与目的地配对（即使起终点相同也完整呈现，避免吞掉目的地） */
+    fun routeDisplayPair(): Pair<String, String>? {
+        val start = startLocation?.trim()?.takeIf { it.isNotBlank() }
+        val end = endLocation?.trim()?.takeIf { it.isNotBlank() }
+        if (start == null && end == null) return null
+        return Pair(start ?: "起始地", end ?: "目的地")
+    }
+
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
         put("vin", vin)

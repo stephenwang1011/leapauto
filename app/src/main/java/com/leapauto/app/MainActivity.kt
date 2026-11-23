@@ -30,7 +30,6 @@ import com.leapauto.app.ui.LeapAutoScreen
 import com.leapauto.app.ThemeManager
 import com.leapauto.app.ui.BluetoothKeyDialog
 import com.leapauto.app.ui.BluetoothActionConfirmation
-import com.leapauto.app.ui.CallCarBottomSheet
 import com.leapauto.app.ui.theme.LeapAutoTheme
 import com.leapauto.app.bluetooth.BleAccessPolicy
 import com.leapauto.app.bluetooth.BleConnectionPhase
@@ -304,7 +303,6 @@ class MainActivity : ComponentActivity() {
     private var bluetoothConfigurationIdentity: BleSessionIdentity? = null
     private var bluetoothSettingsRequestId by mutableStateOf(0L)
     private var showBluetoothKey by mutableStateOf(false)
-    private var showCallCarSheet by mutableStateOf(false)
     private var bluetoothPermissionsGranted by mutableStateOf(false)
     private var bluetoothKeyFeatureEnabled by mutableStateOf(false)
     private var bluetoothState by mutableStateOf(BleConnectionState())
@@ -612,8 +610,7 @@ class MainActivity : ComponentActivity() {
                         calibrationPending = bluetoothManagedKey?.pending == true &&
                             bluetoothManagedKey?.desired?.calibration == bluetoothCloudState.profile.effectiveCalibration,
                         onSaveCalibration = ::requestBluetoothCalibration,
-                        carType = session.selectedCarType,
-                        onOpenStraightMove = { showCallCarSheet = true }
+                        carType = session.selectedCarType
                     )
                 }
                 bluetoothControlConfirmation?.takeIf { showBluetoothKey && !pinSetupInProgress }?.let { confirmation ->
@@ -622,17 +619,6 @@ class MainActivity : ComponentActivity() {
                         enabled = isCurrentBluetoothConfirmation(confirmation),
                         onDismiss = { bluetoothControlConfirmation = null },
                         onConfirm = { confirmBluetoothLockControl(confirmation) }
-                    )
-                }
-                if (showCallCarSheet) {
-                    val accountId = session.oldAuth?.accountId.orEmpty()
-                    val certificate = bluetoothCertificate ?: sessionStore.loadBluetoothKeyCertificate(accountId, session.selectedVin)
-                    CallCarBottomSheet(
-                        vin = session.selectedVin,
-                        certificate = certificate,
-                        accountId = accountId,
-                        deviceId = session.deviceId,
-                        onDismiss = { showCallCarSheet = false }
                     )
                 }
             }
@@ -1383,13 +1369,16 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun updateAutoRefreshLoop() {
-        val shouldRun = activityResumed && carScreenVisible && loggedIn && status?.isDriving == true && !activityDestroyed
+        val isDrivingActive = status?.isDriving == true ||
+            VehicleDrivingSafetyPolicy.isDrivingGear(status?.gearStatus) ||
+            (parseSpeed(status?.speed) ?: 0.0) > 0.0
+        val shouldRun = activityResumed && carScreenVisible && loggedIn && isDrivingActive && !activityDestroyed
         if (!shouldRun) {
             autoRefreshScheduled = false
             mainHandler.removeCallbacks(autoRefreshRunnable)
         } else if (!autoRefreshScheduled) {
             autoRefreshScheduled = true
-            mainHandler.post(autoRefreshRunnable)
+            mainHandler.postDelayed(autoRefreshRunnable, AUTO_REFRESH_INTERVAL_MS)
         }
     }
 
@@ -1399,7 +1388,10 @@ class MainActivity : ComponentActivity() {
                 autoRefreshScheduled = false
                 return
             }
-            if (status?.isDriving != true) {
+            val isDrivingActive = status?.isDriving == true ||
+                VehicleDrivingSafetyPolicy.isDrivingGear(status?.gearStatus) ||
+                (parseSpeed(status?.speed) ?: 0.0) > 0.0
+            if (!isDrivingActive) {
                 autoRefreshScheduled = false
                 return
             }

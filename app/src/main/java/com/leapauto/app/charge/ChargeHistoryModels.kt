@@ -141,7 +141,9 @@ data class ChargeDetailItem(
     val chargeType: String,
     val energyKwh: Double,
     val longitude: String? = null,
-    val latitude: String? = null
+    val latitude: String? = null,
+    val pricePerKwh: Double? = null,
+    val costYuan: Double? = null
 ) {
     val isFastCharge: Boolean
         get() {

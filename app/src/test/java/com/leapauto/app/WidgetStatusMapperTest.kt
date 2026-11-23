@@ -205,13 +205,21 @@ class WidgetStatusMapperTest {
     }
 
     @Test
-    fun `widget refresh falls back to explicit driving gear only when speed is absent`() {
+    fun `widget refresh treats driving gear as driving even when speed is zero`() {
         assertTrue(WidgetStatusMapper.isDriving(JSONObject().put("gearStatus", "D")))
-        assertFalse(
+        assertTrue(
             WidgetStatusMapper.isDriving(
                 JSONObject().apply {
                     put("speed", 0)
                     put("gearStatus", "D")
+                }
+            )
+        )
+        assertFalse(
+            WidgetStatusMapper.isDriving(
+                JSONObject().apply {
+                    put("speed", 0)
+                    put("gearStatus", "P")
                 }
             )
         )

@@ -72,19 +72,22 @@ object WidgetStatusMapper {
     }
 
     /**
-     * The widget refresh cadence follows vehicle motion, not the door-lock
-     * state. A stopped vehicle may remain locked or unlocked for a long time;
-     * speed is therefore the source of truth when it is present. Older payloads
-     * without a speed field can still use their explicit driving gear.
+     * 判断车辆是否处于行车运行态：
+     * 1. 车辆处于前进挡或倒车挡（D挡、R挡），无论瞬间车速是否为0（如起步、等红灯）均属于行车态；
+     * 2. 车辆实时速度大于 0km/h，属于行车态。
      */
-    fun isDriving(status: JSONObject): Boolean = when {
-        status.has("speed") -> parseSpeed(status.opt("speed"))?.let { it > 0.0 } == true
-        else -> isDrivingGear(status.opt("gearStatus"))
+    fun isDriving(status: JSONObject): Boolean {
+        val speedValue = parseSpeed(status.opt("speed") ?: status.opt("1319"))
+        val hasPositiveSpeed = speedValue != null && speedValue > 0.0
+        val inDrivingGear = isDrivingGear(status.opt("gearStatus") ?: status.opt("1010"))
+        return hasPositiveSpeed || inDrivingGear
     }
 
-    fun isDriving(values: Map<String, Any?>): Boolean = when {
-        values.containsKey("speed") -> parseSpeed(values["speed"])?.let { it > 0.0 } == true
-        else -> isDrivingGear(values["gearStatus"])
+    fun isDriving(values: Map<String, Any?>): Boolean {
+        val speedValue = parseSpeed(values["speed"] ?: values["1319"])
+        val hasPositiveSpeed = speedValue != null && speedValue > 0.0
+        val inDrivingGear = isDrivingGear(values["gearStatus"] ?: values["1010"])
+        return hasPositiveSpeed || inDrivingGear
     }
 
     private fun label(valueForKey: (String) -> Any?): String? = when {
