@@ -243,4 +243,14 @@ object VehicleStatusMapper {
     private fun String?.isPureElectricModel(): Boolean =
         VehiclePowerTypeResolver.fromCarType(this) == SessionStore.VehiclePowerType.PURE_ELECTRIC
 
+    fun cabinTemperature(status: JSONObject): String? {
+        val raw = status.opt("interiorTemp")
+            ?: status.opt("1349")
+            ?: status.opt("minSingleTemp")
+        if (raw == null || raw == JSONObject.NULL) return null
+        val text = raw.toString().trim()
+        if (text.isBlank() || text == "--") return null
+        val numeric = text.removeSuffix("°C").removeSuffix("℃").trim().toDoubleOrNull() ?: return null
+        return "${numeric.toInt()}℃"
+    }
 }

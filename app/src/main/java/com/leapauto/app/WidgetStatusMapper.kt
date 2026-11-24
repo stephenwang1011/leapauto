@@ -30,7 +30,8 @@ object WidgetStatusMapper {
             chargeState = ChargeStatus.state(status),
             chargeRemainTime = ChargeStatus.remainingTime(status.opt("chargeRemainTime")),
             fallbackLabel = fallback,
-            soc = ChargeStatus.socPercent(status.opt("soc"))
+            soc = ChargeStatus.socPercent(status.opt("soc")),
+            chargingPower = ChargeStatus.power(status)
         )
     }
 
@@ -39,15 +40,23 @@ object WidgetStatusMapper {
         chargeState: Int?,
         chargeRemainTime: String?,
         fallbackLabel: String?,
-        soc: Int? = null
+        soc: Int? = null,
+        chargingPower: String? = null
     ): WidgetStatusPresentation {
         if (fallbackLabel?.startsWith("行驶中") == true) return WidgetStatusPresentation(fallbackLabel)
         val presentation = ChargeStatus.presentation(chargeState, soc, chargeRemainTime)
         return when (presentation.state) {
-            ChargeStatus.PresentationState.CHARGING -> WidgetStatusPresentation(
-                presentation.remainingTime?.let { "剩余$it" } ?: presentation.label,
-                showChargingIcon = true
-            )
+            ChargeStatus.PresentationState.CHARGING -> {
+                val base = presentation.remainingTime?.let { "剩余$it" } ?: presentation.label
+                val validPower = chargingPower?.trim()?.takeIf {
+                    it.isNotBlank() && !it.startsWith("0.0") && !it.startsWith("0 kW")
+                }
+                val labelWithPower = if (validPower != null) "$base · $validPower" else base
+                WidgetStatusPresentation(
+                    labelWithPower,
+                    showChargingIcon = true
+                )
+            }
             ChargeStatus.PresentationState.FULL, ChargeStatus.PresentationState.STOPPED,
             ChargeStatus.PresentationState.SCHEDULED, ChargeStatus.PresentationState.FAULT ->
                 WidgetStatusPresentation(presentation.label)

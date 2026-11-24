@@ -72,7 +72,8 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                 ControlWidget.renderStatus(context, partialViews, status, current.selectedCarType, partial = true)
                 store.save(current)
                 val updated = formatUpdatedTime()
-                partialViews.setTextViewText(R.id.txtWUpdated, updated)
+                val cabinTemp = VehicleStatusMapper.cabinTemperature(status)
+                partialViews.setTextViewText(R.id.txtWUpdated, ControlWidget.formatUpdatedWithCabinTemp(updated, cabinTemp))
                 store.saveWidgetSnapshot(
                     vin = current.selectedVin,
                     carType = current.selectedCarType,
@@ -105,7 +106,8 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                     sessionGeneration = current.generation,
                     trunkState = TrunkStateMapper.fromSignal(status.opt("bbcmBackDoorStatus")),
                     sentryEnabled = WidgetSentryMapper.state(status),
-                    windowOpen = WidgetStatusMapper.openWindowLabels(status, current.selectedCarType).isNotEmpty()
+                    windowOpen = WidgetStatusMapper.openWindowLabels(status, current.selectedCarType).isNotEmpty(),
+                    cabinTemperature = VehicleStatusMapper.cabinTemperature(status)
                 )
                 ControlWidget.updateSyncCadence(
                     context = context,

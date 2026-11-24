@@ -55,6 +55,11 @@ class Widget4x2ActionPolicyTest {
         assertTrue(scheduledAc != null)
         assertEquals("定时空调", scheduledAc?.label)
 
+        val frunk = Widget4x2ActionPolicy.findAction("frunk")
+        assertTrue(frunk != null)
+        assertEquals("前备箱", frunk?.label)
+        assertEquals(R.drawable.ic_frunk, frunk?.iconRes)
+
         val batteryPreheat = Widget4x2ActionPolicy.findAction("batteryPreheat")
         assertEquals(null, batteryPreheat)
 

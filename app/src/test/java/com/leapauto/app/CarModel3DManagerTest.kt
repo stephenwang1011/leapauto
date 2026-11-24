@@ -336,7 +336,8 @@ class CarModel3DManagerTest {
             .first { File(it, "app").isDirectory }
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
-        assertTrue(screenSource.contains("3D车模加载中..."))
+        assertTrue(screenSource.contains("车身展示底图"))
+        assertFalse(screenSource.contains("3D车模加载中..."))
         assertTrue(screenSource.contains("15_000L"))
         assertTrue(screenSource.contains("prefer2DModel"))
         assertTrue(screenSource.contains("onRetryDownload3D"))

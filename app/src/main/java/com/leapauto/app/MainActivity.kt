@@ -2798,7 +2798,8 @@ class MainActivity : ComponentActivity() {
                     driving = parsed.isDriving,
                     trunkState = parsed.trunkState,
                     sentryEnabled = parsed.sentryMode,
-                    windowOpen = parsed.windowStatusAvailable && parsed.openWindows.isNotEmpty()
+                    windowOpen = parsed.windowStatusAvailable && parsed.openWindows.isNotEmpty(),
+                    cabinTemperature = VehicleStatusMapper.cabinTemperature(signalMap)
                 )
                 ControlWidget.updateSyncCadence(this@MainActivity, parsed.isDriving)
                 ControlWidget.refreshData(this@MainActivity)

@@ -53,7 +53,8 @@ class SessionStore(context: Context) {
         val driving: Boolean? = null,
         val trunkState: TrunkState = TrunkState.UNKNOWN,
         val sentryEnabled: Boolean? = null,
-        val windowOpen: Boolean? = null
+        val windowOpen: Boolean? = null,
+        val cabinTemperature: String? = null
     )
 
     enum class WidgetAccess { NO_SESSION, CONTROL }
@@ -742,7 +743,8 @@ class SessionStore(context: Context) {
         driving: Boolean? = null,
         trunkState: TrunkState? = null,
         sentryEnabled: Boolean? = null,
-        windowOpen: Boolean? = null
+        windowOpen: Boolean? = null,
+        cabinTemperature: String? = null
     ) {
         val previousTrunkState = if (vin == prefs.getString("widget_snapshot_vin", "") &&
             prefs.contains("widget_snapshot_trunk_open")
@@ -824,6 +826,10 @@ class SessionStore(context: Context) {
                 if (windowOpen == null) remove("widget_snapshot_window_open")
                 else putBoolean("widget_snapshot_window_open", windowOpen)
             }
+            .apply {
+                if (cabinTemperature == null) remove("widget_snapshot_cabin_temp")
+                else putString("widget_snapshot_cabin_temp", cabinTemperature)
+            }
             .remove(WIDGET_AUTH_INVALID)
             .apply()
 
@@ -904,7 +910,8 @@ class SessionStore(context: Context) {
                 prefs.getBoolean("widget_snapshot_window_open", false)
             } else {
                 null
-            }
+            },
+            cabinTemperature = prefs.getString("widget_snapshot_cabin_temp", null)?.takeIf { it.isNotBlank() }
         )
     }
 
@@ -921,6 +928,27 @@ class SessionStore(context: Context) {
             .remove("widget_snapshot_trunk_open")
             .putBoolean(WIDGET_AUTH_INVALID, true)
             .apply()
+    }
+
+    fun setWidgetBusyCommand(command: String?) {
+        if (command == null) {
+            prefs.edit().remove("widget_busy_command").remove("widget_busy_time").apply()
+        } else {
+            prefs.edit()
+                .putString("widget_busy_command", command)
+                .putLong("widget_busy_time", System.currentTimeMillis())
+                .apply()
+        }
+    }
+
+    fun getWidgetBusyCommand(maxAgeMs: Long = 15_000L): String? {
+        val cmd = prefs.getString("widget_busy_command", null) ?: return null
+        val time = prefs.getLong("widget_busy_time", 0L)
+        if (System.currentTimeMillis() - time > maxAgeMs) {
+            setWidgetBusyCommand(null)
+            return null
+        }
+        return cmd
     }
 
     /** Updates only the locally cached AC state after a confirmed widget command. */

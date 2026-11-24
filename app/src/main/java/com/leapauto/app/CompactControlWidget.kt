@@ -297,28 +297,44 @@ class CompactControlWidget : AppWidgetProvider() {
         private fun applyLockPresentation(context: Context, views: RemoteViews, locked: Boolean?) {
             val presentation = CompactWidgetLockPresentationMapper.fromState(locked)
             val themeContext = ControlWidget.widgetThemeContext(context)
+            val busyCmd = SessionStore(context).getWidgetBusyCommand()
+            val isLockBusy = busyCmd == "lock" || busyCmd == "unlock"
+
             // 动作导向交互：车辆处于锁车状态时显示【解锁】按键；车辆处于解锁状态时显示【锁车】按键
             val iconResource = when (presentation.locked) {
                 true -> R.drawable.ic_phosphor_lock_open
                 false -> R.drawable.ic_phosphor_lock
                 null -> R.drawable.ic_phosphor_lock
             }
-            val iconColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
-            views.setImageViewResource(R.id.imgWCLock, iconResource)
-            ControlWidget.setImageTint(views, R.id.imgWCLock, iconColor)
-            views.setFloat(R.id.imgWCLock, "setAlpha", if (presentation.locked == null) 0.65f else 1f)
+            val (lockTone, iconColor) = when (presentation.locked) {
+                false -> CompactActionTone.ALERT to ContextCompat.getColor(themeContext, R.color.alert_red)
+                true -> CompactActionTone.ACTIVE to ContextCompat.getColor(themeContext, R.color.energy_green)
+                null -> CompactActionTone.NEUTRAL to ContextCompat.getColor(themeContext, R.color.widget_action_icon)
+            }
+
             views.setInt(
                 R.id.btnWCLock,
                 "setBackgroundResource",
-                compactActionBackgroundResource(themeContext, CompactActionTone.NEUTRAL)
+                compactActionBackgroundResource(themeContext, lockTone)
             )
+            views.setViewVisibility(R.id.progressWCLockBusy, if (isLockBusy) View.VISIBLE else View.GONE)
+            views.setViewVisibility(R.id.imgWCLock, if (isLockBusy) View.GONE else View.VISIBLE)
+
+            if (!isLockBusy) {
+                views.setImageViewResource(R.id.imgWCLock, iconResource)
+                ControlWidget.setImageTint(views, R.id.imgWCLock, iconColor)
+                views.setFloat(R.id.imgWCLock, "setAlpha", if (presentation.locked == null) 0.65f else 1f)
+                views.setOnClickPendingIntent(
+                    R.id.btnWCLock,
+                    presentation.command?.let { ControlWidget.click(context, it) }
+                        ?: ControlWidget.openAppPendingIntent(context)
+                )
+            } else {
+                views.setOnClickPendingIntent(R.id.btnWCLock, null)
+            }
+
             views.setViewVisibility(R.id.txtWCLock, View.GONE)
             views.setContentDescription(R.id.btnWCLock, presentation.contentDescription)
-            views.setOnClickPendingIntent(
-                R.id.btnWCLock,
-                presentation.command?.let { ControlWidget.click(context, it) }
-                    ?: ControlWidget.openAppPendingIntent(context)
-            )
         }
 
         private fun applyAcPresentation(
@@ -329,36 +345,53 @@ class CompactControlWidget : AppWidgetProvider() {
         ) {
             val presentation = WidgetAcMapper.presentation(acEnabled, tone)
             val themeContext = ControlWidget.widgetThemeContext(context)
-            val actionColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
-            ControlWidget.setImageTint(views, R.id.imgWCAcOff, actionColor)
-
-            val showCooling = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.COOLING
-            val showHeating = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.HEATING
-            val showVent = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.VENTILATION
-            val showOff = !presentation.showEnabledIcon
-
-            views.setViewVisibility(R.id.imgWCAcOff, if (showOff) View.VISIBLE else View.GONE)
-            views.setViewVisibility(R.id.imgWCAcOn, if (showCooling) View.VISIBLE else View.GONE)
-            views.setViewVisibility(R.id.imgWCAcOnHeating, if (showHeating) View.VISIBLE else View.GONE)
-            views.setViewVisibility(R.id.imgWCAcOnVent, if (showVent) View.VISIBLE else View.GONE)
+            val busyCmd = SessionStore(context).getWidgetBusyCommand()
+            val isAcBusy = busyCmd != null && (busyCmd == "acOn" || busyCmd == "acOff" || busyCmd.startsWith("ac"))
 
             val backgroundTone = when {
                 !presentation.showEnabledIcon -> CompactActionTone.NEUTRAL
                 presentation.tone == ClimateTemperatureTone.HEATING -> CompactActionTone.HEATING
                 else -> CompactActionTone.ACTIVE
             }
+            val actionColor = if (presentation.showEnabledIcon) {
+                ContextCompat.getColor(themeContext, R.color.energy_green)
+            } else {
+                ContextCompat.getColor(themeContext, R.color.widget_action_icon)
+            }
+
             views.setInt(
                 R.id.btnWCAc,
                 "setBackgroundResource",
                 compactActionBackgroundResource(themeContext, backgroundTone)
             )
+            views.setViewVisibility(R.id.progressWCAcBusy, if (isAcBusy) View.VISIBLE else View.GONE)
+
+            if (isAcBusy) {
+                views.setViewVisibility(R.id.imgWCAcOff, View.GONE)
+                views.setViewVisibility(R.id.imgWCAcOn, View.GONE)
+                views.setViewVisibility(R.id.imgWCAcOnHeating, View.GONE)
+                views.setViewVisibility(R.id.imgWCAcOnVent, View.GONE)
+                views.setOnClickPendingIntent(R.id.btnWCAc, null)
+            } else {
+                val showCooling = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.COOLING
+                val showHeating = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.HEATING
+                val showVent = presentation.showEnabledIcon && presentation.tone == ClimateTemperatureTone.VENTILATION
+                val showOff = !presentation.showEnabledIcon
+
+                views.setViewVisibility(R.id.imgWCAcOff, if (showOff) View.VISIBLE else View.GONE)
+                views.setViewVisibility(R.id.imgWCAcOn, if (showCooling) View.VISIBLE else View.GONE)
+                views.setViewVisibility(R.id.imgWCAcOnHeating, if (showHeating) View.VISIBLE else View.GONE)
+                views.setViewVisibility(R.id.imgWCAcOnVent, if (showVent) View.VISIBLE else View.GONE)
+                ControlWidget.setImageTint(views, R.id.imgWCAcOff, actionColor)
+
+                val pendingIntent = presentation.command
+                    ?.let { command -> ControlWidget.click(context, command) }
+                    ?: ControlWidget.openAppPendingIntent(context)
+                views.setOnClickPendingIntent(R.id.btnWCAc, pendingIntent)
+            }
+
             views.setViewVisibility(R.id.txtWCAc, View.GONE)
             views.setContentDescription(R.id.btnWCAc, presentation.contentDescription)
-            views.setOnClickPendingIntent(
-                R.id.btnWCAc,
-                presentation.command?.let { ControlWidget.click(context, it) }
-                    ?: ControlWidget.openAppPendingIntent(context)
-            )
         }
 
         private fun applyStaticAppearance(context: Context, views: RemoteViews) {
@@ -424,13 +457,19 @@ class CompactControlWidget : AppWidgetProvider() {
                 } else {
                     R.drawable.widget_compact_action_primary_light
                 }
+                CompactActionTone.ALERT -> if (darkTheme) {
+                    R.drawable.widget_compact_action_alert_dark
+                } else {
+                    R.drawable.widget_compact_action_alert_light
+                }
             }
         }
 
         private enum class CompactActionTone {
             NEUTRAL,
             HEATING,
-            ACTIVE
+            ACTIVE,
+            ALERT
         }
 
     }

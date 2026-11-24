@@ -464,6 +464,112 @@ class CompactWidgetSpecTest {
         assertTrue(compactWidget.contains("applyCompactWidgetBackground(context, this, darkTheme)"))
     }
 
+    @Test
+    fun `cabin temperature parses correctly from telemetry`() {
+        val normal = org.json.JSONObject().put("interiorTemp", "26.4")
+        val negative = org.json.JSONObject().put("minSingleTemp", "-5.0")
+        val degree = org.json.JSONObject().put("1349", "24°C")
+        val invalid = org.json.JSONObject().put("interiorTemp", "--")
+        val empty = org.json.JSONObject()
+
+        assertEquals("26℃", VehicleStatusMapper.cabinTemperature(normal))
+        assertEquals("-5℃", VehicleStatusMapper.cabinTemperature(negative))
+        assertEquals("24℃", VehicleStatusMapper.cabinTemperature(degree))
+        assertEquals(null, VehicleStatusMapper.cabinTemperature(invalid))
+        assertEquals(null, VehicleStatusMapper.cabinTemperature(empty))
+    }
+
+    @Test
+    fun `widget status presentation appends charging power when vehicle is charging`() {
+        val presentationWithPower = WidgetStatusMapper.presentation(
+            chargeState = 1,
+            chargeRemainTime = "45分钟",
+            fallbackLabel = "充电中",
+            soc = 50,
+            chargingPower = "60.5 kW"
+        )
+        assertEquals("剩余45分钟 · 60.5 kW", presentationWithPower.label)
+        assertTrue(presentationWithPower.showChargingIcon)
+
+        val presentationWithoutPower = WidgetStatusMapper.presentation(
+            chargeState = 1,
+            chargeRemainTime = "45分钟",
+            fallbackLabel = "充电中",
+            soc = 50,
+            chargingPower = null
+        )
+        assertEquals("剩余45分钟", presentationWithoutPower.label)
+
+        val presentationZeroPower = WidgetStatusMapper.presentation(
+            chargeState = 1,
+            chargeRemainTime = "45分钟",
+            fallbackLabel = "充电中",
+            soc = 50,
+            chargingPower = "0.0 kW"
+        )
+        assertEquals("剩余45分钟", presentationZeroPower.label)
+
+        val nonCharging = WidgetStatusMapper.presentation(
+            chargeState = 0,
+            chargeRemainTime = null,
+            fallbackLabel = "车门已上锁",
+            soc = 80,
+            chargingPower = "60.5 kW"
+        )
+        assertEquals("车门已上锁", nonCharging.label)
+        assertFalse(nonCharging.showChargingIcon)
+    }
+
+    @Test
+    fun `both widget layouts provide busy progress bars for responsive command feedback`() {
+        val projectDir = projectDirectory()
+        val wideLayout = File(projectDir, "app/src/main/res/layout/widget_layout.xml").readText()
+        val compactLayout = File(projectDir, "app/src/main/res/layout/widget_compact_layout.xml").readText()
+        val wideWidget = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
+        val compactWidget = File(projectDir, "app/src/main/java/com/leapauto/app/CompactControlWidget.kt").readText()
+
+        listOf("progressWSlot1Busy", "progressWSlot2Busy", "progressWSlot3Busy", "progressWSlot4Busy", "progressWSlot5Busy").forEach { id ->
+            assertTrue("Wide layout must contain $id", wideLayout.contains(id))
+        }
+        assertTrue("Compact layout must contain lock busy bar", compactLayout.contains("progressWCLockBusy"))
+        assertTrue("Compact layout must contain AC busy bar", compactLayout.contains("progressWCAcBusy"))
+        assertTrue(wideLayout.contains("widget_action_spinning_loader"))
+        assertTrue(compactLayout.contains("widget_action_spinning_loader"))
+        assertTrue(wideWidget.contains("isActionBusy"))
+        assertTrue(compactWidget.contains("isLockBusy"))
+    }
+
+    @Test
+    fun `widgets define green success and alert pink button backgrounds`() {
+        val projectDir = projectDirectory()
+        val res = File(projectDir, "app/src/main/res/drawable")
+        listOf(
+            "widget_action_slot_primary_light.xml",
+            "widget_action_slot_primary_dark.xml",
+            "widget_action_slot_alert_light.xml",
+            "widget_action_slot_alert_dark.xml",
+            "widget_compact_action_alert_light.xml",
+            "widget_compact_action_alert_dark.xml"
+        ).forEach { fileName ->
+            assertTrue("Drawable $fileName must exist", File(res, fileName).exists())
+        }
+    }
+
+    @Test
+    fun `wide widget appends cabin temperature to updated text without spaces between text and numbers`() {
+        val withTemp = ControlWidget.formatUpdatedWithCabinTemp("今天 17:41更新", "17℃")
+        assertEquals("今天17:41更新 · 车内17℃", withTemp)
+
+        val alreadyCompact = ControlWidget.formatUpdatedWithCabinTemp("今天17:41更新", "17℃")
+        assertEquals("今天17:41更新 · 车内17℃", alreadyCompact)
+
+        val withoutTemp = ControlWidget.formatUpdatedWithCabinTemp("今天 17:41更新", null)
+        assertEquals("今天17:41更新", withoutTemp)
+
+        val blankTemp = ControlWidget.formatUpdatedWithCabinTemp("今天 17:41更新", "  ")
+        assertEquals("今天17:41更新", blankTemp)
+    }
+
     private fun projectDirectory(): File {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         return generateSequence(File(workingDirectory)) { it.parentFile }

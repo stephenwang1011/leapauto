@@ -6015,7 +6015,6 @@ fun VehicleHero(
                                 .fillMaxWidth(0.82f)
                                 .aspectRatio(2.0f)
                                 .offset(y = (-10).dp)
-                                .graphicsLayer { alpha = 0.60f }
                         )
                     }
                     // 车模正上方水平居中极简 HUD 提示胶囊
@@ -6027,33 +6026,6 @@ fun VehicleHero(
                                 .zIndex(10f)
                         ) {
                             HeroControlHudPill(controlFeedback, onDismissControlFeedback)
-                        }
-                    }
-                    // 当 3D 尚未渲染完成时展示轻量加载提示
-                    if (is3dSupported && !is3DRendered && h5Key != null && !hasCustomImage && !prefer2DModel && !is3DLoadFailed && !is3DTimedOut) {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = if (isDark) Color(0xFF181818).copy(alpha = 0.70f) else Color.White.copy(alpha = 0.75f),
-                            border = BorderStroke(0.5.dp, if (isDark) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.08f)),
-                            shadowElevation = 0.dp
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    "3D车模加载中...",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
                         }
                     }
                 }
@@ -7129,8 +7101,8 @@ private fun QuickVehicleActions(
         }
         val frunkCommands = if (supportsFrunk) {
             listOf(
-                Cmd("frunkOpen", "开前备箱", R.drawable.ic_phosphor_trunk_open),
-                Cmd("frunkClose", "关前备箱", R.drawable.ic_phosphor_trunk_open)
+                Cmd("frunkOpen", "开前备箱", R.drawable.ic_frunk),
+                Cmd("frunkClose", "关前备箱", R.drawable.ic_frunk)
             )
         } else {
             emptyList()

@@ -13,7 +13,7 @@ object Widget4x2ActionPolicy {
         Widget4x2Action("sentry", "哨兵模式", R.drawable.ic_sentry),
         Widget4x2Action("ac", "空调", R.drawable.ic_phosphor_fan),
         Widget4x2Action("trunk", "后备箱", R.drawable.ic_phosphor_trunk_open),
-        Widget4x2Action("frunk", "前备箱", R.drawable.ic_phosphor_trunk_open),
+        Widget4x2Action("frunk", "前备箱", R.drawable.ic_frunk),
         Widget4x2Action("windowOpen", "车窗半开", R.drawable.ic_window_half),
         Widget4x2Action("windowVent", "车窗通风", R.drawable.ic_window_vent),
         Widget4x2Action("windowClose", "一键关窗", R.drawable.ic_phosphor_wind),

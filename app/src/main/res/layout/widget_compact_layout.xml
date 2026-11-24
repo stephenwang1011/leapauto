@@ -259,14 +259,30 @@
                 android:gravity="center"
                 android:orientation="vertical">
 
-                <ImageView
-                    android:id="@+id/imgWCLock"
+                <FrameLayout
                     android:layout_width="26dp"
-                    android:layout_height="26dp"
-                    android:contentDescription="@null"
-                    android:scaleType="fitCenter"
-                    android:src="@drawable/ic_phosphor_lock"
-                    android:tint="@color/widget_action_icon" />
+                    android:layout_height="26dp">
+
+                    <ImageView
+                        android:id="@+id/imgWCLock"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@null"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_phosphor_lock"
+                        android:tint="@color/widget_action_icon" />
+
+                    <ProgressBar
+                        android:id="@+id/progressWCLockBusy"
+                        style="@null"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:indeterminate="true"
+                        android:indeterminateOnly="true"
+                        android:indeterminateDrawable="@drawable/widget_action_spinning_loader"
+                        android:visibility="gone" />
+                </FrameLayout>
 
                 <TextView
                     android:id="@+id/txtWCLock"
@@ -339,6 +355,17 @@
                         android:indeterminate="true"
                         android:indeterminateOnly="true"
                         android:indeterminateDrawable="@drawable/widget_ac_spinning_vent"
+                        android:visibility="gone" />
+
+                    <ProgressBar
+                        android:id="@+id/progressWCAcBusy"
+                        style="@null"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:indeterminate="true"
+                        android:indeterminateOnly="true"
+                        android:indeterminateDrawable="@drawable/widget_action_spinning_loader"
                         android:visibility="gone" />
                 </FrameLayout>
 

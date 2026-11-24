@@ -197,7 +197,17 @@ class ControlWidget : AppWidgetProvider() {
         }
 
         fun formatUpdatedTime(): String =
-            SimpleDateFormat("'今天' HH:mm'更新'", Locale.CHINA).format(Date())
+            SimpleDateFormat("'今天'HH:mm'更新'", Locale.CHINA).format(Date())
+
+        internal fun formatUpdatedWithCabinTemp(updated: String, cabinTemp: String?): String {
+            val baseUpdated = updated.replace("今天 ", "今天").trim()
+            val cleanTemp = cabinTemp?.trim()?.takeIf { it.isNotBlank() }?.removePrefix("车内")?.trim()
+            return if (!cleanTemp.isNullOrBlank()) {
+                "$baseUpdated · 车内$cleanTemp"
+            } else {
+                baseUpdated
+            }
+        }
 
         internal fun baseViews(context: Context): RemoteViews = RemoteViews(context.packageName, R.layout.widget_layout).apply {
             val store = SessionStore(context)
@@ -219,6 +229,8 @@ class ControlWidget : AppWidgetProvider() {
             setVehicleImage(this, appearance, session.selectedVin, context)
             val title = widgetTitle(config, appearance, session.selectedNickname, matchedVehicle?.nickname.orEmpty())
             setTextViewText(R.id.txtWTitle, title)
+            val updatedText = formatUpdatedWithCabinTemp(snapshot?.updated ?: formatUpdatedTime(), snapshot?.cabinTemperature)
+            setTextViewText(R.id.txtWUpdated, updatedText)
             snapshot?.let { snapshot ->
                 val widgetPowerType = VehiclePowerTypeResolver.resolve(
                     configuredPowerType = config.powerType,
@@ -306,6 +318,9 @@ class ControlWidget : AppWidgetProvider() {
             val appearance = resolveWidgetAppearance(config, carType)
             val title = widgetTitle(config, appearance, session.selectedNickname, matchedVehicle?.nickname.orEmpty())
             views.setTextViewText(R.id.txtWTitle, title)
+            val cabinTemp = VehicleStatusMapper.cabinTemperature(displayStatus)
+            val updatedText = formatUpdatedWithCabinTemp(formatUpdatedTime(), cabinTemp)
+            views.setTextViewText(R.id.txtWUpdated, updatedText)
             if (!partial) {
                 setVehicleImage(views, appearance, session.selectedVin, context)
             }
@@ -417,10 +432,12 @@ class ControlWidget : AppWidgetProvider() {
                     fallbackLabel = snapshot.statusLabel.takeUnless {
                         snapshot.carType.contains("T03", ignoreCase = true) && it == "车窗未关闭"
                     },
-                    soc = snapshot.chargeSoc
+                    soc = snapshot.chargeSoc,
+                    chargingPower = snapshot.chargingPower
                 )
             )
-            views.setTextViewText(R.id.txtWUpdated, snapshot.updated)
+            val updatedText = formatUpdatedWithCabinTemp(snapshot.updated, snapshot.cabinTemperature)
+            views.setTextViewText(R.id.txtWUpdated, updatedText)
             applyActionSlots(
                 context = themeContext,
                 views = views,
@@ -451,7 +468,7 @@ class ControlWidget : AppWidgetProvider() {
             val themeContext = widgetThemeContext(context)
             val iconColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
             val darkTheme = widgetEffectiveDarkTheme(context)
-            val background = resolveWidgetActionBackground(context, darkTheme)
+            val defaultBackground = resolveWidgetActionBackground(context, darkTheme)
 
             val slotIds = listOf(R.id.slotW1, R.id.slotW2, R.id.slotW3, R.id.slotW4, R.id.slotW5)
             val btnBgIds = listOf(R.id.btnBgSlot1, R.id.btnBgSlot2, R.id.btnBgSlot3, R.id.btnBgSlot4, R.id.btnBgSlot5)
@@ -459,6 +476,9 @@ class ControlWidget : AppWidgetProvider() {
             val coolingIds = listOf(R.id.progressWSlot1AcCooling, R.id.progressWSlot2AcCooling, R.id.progressWSlot3AcCooling, R.id.progressWSlot4AcCooling, R.id.progressWSlot5AcCooling)
             val heatingIds = listOf(R.id.progressWSlot1AcHeating, R.id.progressWSlot2AcHeating, R.id.progressWSlot3AcHeating, R.id.progressWSlot4AcHeating, R.id.progressWSlot5AcHeating)
             val ventIds = listOf(R.id.progressWSlot1AcVent, R.id.progressWSlot2AcVent, R.id.progressWSlot3AcVent, R.id.progressWSlot4AcVent, R.id.progressWSlot5AcVent)
+            val busyIds = listOf(R.id.progressWSlot1Busy, R.id.progressWSlot2Busy, R.id.progressWSlot3Busy, R.id.progressWSlot4Busy, R.id.progressWSlot5Busy)
+
+            val busyCommand = SessionStore(context).getWidgetBusyCommand()
 
             val hasSpacers = actions.size <= 4
             views.setViewVisibility(R.id.spaceWActionStart, if (hasSpacers) View.VISIBLE else View.GONE)
@@ -471,6 +491,7 @@ class ControlWidget : AppWidgetProvider() {
                 val coolingId = coolingIds[i]
                 val heatingId = heatingIds[i]
                 val ventId = ventIds[i]
+                val busyId = busyIds[i]
 
                 if (i >= actions.size) {
                     views.setViewVisibility(slotId, View.GONE)
@@ -478,9 +499,24 @@ class ControlWidget : AppWidgetProvider() {
                 }
 
                 views.setViewVisibility(slotId, View.VISIBLE)
-                views.setInt(btnBgId, "setBackgroundResource", background)
-
                 val action = actions[i]
+                val isBusy = isActionBusy(action, busyCommand)
+                val tone = resolveActionTone(action, locked, trunkState, sentryEnabled, acEnabled, preheatEnabled, windowOpen)
+                val slotBg = resolveActionBackground(tone, darkTheme, defaultBackground)
+                val slotIconColor = resolveActionIconColor(tone, themeContext, iconColor)
+
+                views.setInt(btnBgId, "setBackgroundResource", slotBg)
+                views.setViewVisibility(busyId, if (isBusy) View.VISIBLE else View.GONE)
+
+                if (isBusy) {
+                    views.setViewVisibility(imgId, View.GONE)
+                    views.setViewVisibility(coolingId, View.GONE)
+                    views.setViewVisibility(heatingId, View.GONE)
+                    views.setViewVisibility(ventId, View.GONE)
+                    views.setOnClickPendingIntent(slotId, null)
+                    continue
+                }
+
                 when (action) {
                     "unlock" -> {
                         views.setViewVisibility(imgId, View.VISIBLE)
@@ -488,7 +524,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_lock_open)
-                        setImageTint(views, imgId, iconColor)
+                        setImageTint(views, imgId, slotIconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, if (locked == false) "解锁（当前已解锁）" else "解锁")
                         views.setOnClickPendingIntent(slotId, click(context, "unlock"))
@@ -499,7 +535,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_lock)
-                        setImageTint(views, imgId, iconColor)
+                        setImageTint(views, imgId, slotIconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, if (locked == true) "上锁（当前已上锁）" else "上锁")
                         views.setOnClickPendingIntent(slotId, click(context, "lock"))
@@ -511,7 +547,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(ventId, View.GONE)
                         val presentation = WidgetSentryMapper.presentation(sentryEnabled)
                         views.setImageViewResource(imgId, R.drawable.ic_sentry)
-                        setImageTint(views, imgId, iconColor)
+                        setImageTint(views, imgId, slotIconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, presentation.contentDescription)
                         views.setOnClickPendingIntent(slotId, click(context, presentation.command))
@@ -529,7 +565,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(ventId, if (showVent) View.VISIBLE else View.GONE)
 
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_fan)
-                        setImageTint(views, imgId, iconColor)
+                        setImageTint(views, imgId, slotIconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, presentation.contentDescription)
                         val pendingIntent = presentation.command
@@ -544,7 +580,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(ventId, View.GONE)
                         val presentation = TrunkControlPresentationMapper.fromState(trunkState)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_trunk_open)
-                        setImageTint(views, imgId, iconColor)
+                        setImageTint(views, imgId, slotIconColor)
                         views.setFloat(imgId, "setAlpha", if (trunkState == TrunkState.UNKNOWN) 0.65f else 1f)
                         views.setContentDescription(slotId, presentation.contentDescription)
                         views.setOnClickPendingIntent(
@@ -557,8 +593,8 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(coolingId, View.GONE)
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
-                        views.setImageViewResource(imgId, R.drawable.ic_phosphor_trunk_open)
-                        setImageTint(views, imgId, iconColor)
+                        views.setImageViewResource(imgId, R.drawable.ic_frunk)
+                        setImageTint(views, imgId, slotIconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, "开前备箱")
                         views.setOnClickPendingIntent(slotId, click(context, "frunkOpen"))
@@ -569,7 +605,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_window_half)
-                        setImageTint(views, imgId, iconColor)
+                        setImageTint(views, imgId, slotIconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         val isWinOpen = windowOpen == true
                         val targetCmd = WidgetWindowTogglePolicy.resolveCommand("windowOpen", isWinOpen)
@@ -582,7 +618,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_window_vent)
-                        setImageTint(views, imgId, iconColor)
+                        setImageTint(views, imgId, slotIconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         val isWinOpen = windowOpen == true
                         val targetCmd = WidgetWindowTogglePolicy.resolveCommand("windowVent", isWinOpen)
@@ -595,7 +631,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_wind)
-                        setImageTint(views, imgId, iconColor)
+                        setImageTint(views, imgId, slotIconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, "一键关窗")
                         views.setOnClickPendingIntent(slotId, click(context, "windowClose"))
@@ -606,7 +642,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_sun)
-                        setImageTint(views, imgId, iconColor)
+                        setImageTint(views, imgId, slotIconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, "遮阳帘")
                         views.setOnClickPendingIntent(slotId, click(context, "sunshadeOpen"))
@@ -617,7 +653,7 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_bell_ringing)
-                        setImageTint(views, imgId, iconColor)
+                        setImageTint(views, imgId, slotIconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
                         views.setContentDescription(slotId, "鸣笛寻车")
                         views.setOnClickPendingIntent(slotId, click(context, "horn"))
@@ -628,14 +664,9 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_battery_charging)
-                        val preheatActive = preheatEnabled == true
-                        val preheatColor = if (preheatActive) {
-                            ContextCompat.getColor(themeContext, R.color.energy_green)
-                        } else {
-                            iconColor
-                        }
-                        setImageTint(views, imgId, preheatColor)
+                        setImageTint(views, imgId, slotIconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
+                        val preheatActive = preheatEnabled == true
                         views.setContentDescription(slotId, if (preheatActive) "电池预热（开启中）" else "电池预热")
                         views.setOnClickPendingIntent(
                             slotId,
@@ -648,14 +679,9 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(heatingId, View.GONE)
                         views.setViewVisibility(ventId, View.GONE)
                         views.setImageViewResource(imgId, R.drawable.ic_phosphor_alarm)
-                        val isAcActive = scheduledAcEnabled == true
-                        val tintColor = if (isAcActive) {
-                            ContextCompat.getColor(themeContext, R.color.energy_green)
-                        } else {
-                            iconColor
-                        }
-                        setImageTint(views, imgId, tintColor)
+                        setImageTint(views, imgId, slotIconColor)
                         views.setFloat(imgId, "setAlpha", 1f)
+                        val isAcActive = scheduledAcEnabled == true
                         views.setContentDescription(slotId, if (isAcActive) "定时空调（已开启）" else "定时空调")
                         views.setOnClickPendingIntent(slotId, openScheduledAcPendingIntent(context))
                     }
@@ -663,6 +689,71 @@ class ControlWidget : AppWidgetProvider() {
                         views.setViewVisibility(slotId, View.GONE)
                     }
                 }
+            }
+        }
+
+        private enum class ActionTone { NEUTRAL, SUCCESS, ALERT }
+
+        private fun resolveActionTone(
+            action: String,
+            locked: Boolean?,
+            trunkState: TrunkState,
+            sentryEnabled: Boolean?,
+            acEnabled: Boolean?,
+            preheatEnabled: Boolean?,
+            windowOpen: Boolean?
+        ): ActionTone {
+            return when (action) {
+                "unlock" -> if (locked == false) ActionTone.ALERT else ActionTone.NEUTRAL
+                "lock" -> if (locked == true) ActionTone.SUCCESS else ActionTone.NEUTRAL
+                "ac" -> if (acEnabled == true) ActionTone.SUCCESS else ActionTone.NEUTRAL
+                "sentry" -> if (sentryEnabled == true) ActionTone.SUCCESS else ActionTone.NEUTRAL
+                "trunk" -> if (trunkState == TrunkState.OPEN) ActionTone.ALERT else ActionTone.NEUTRAL
+                "windowOpen", "windowVent" -> if (windowOpen == true) ActionTone.ALERT else ActionTone.NEUTRAL
+                "batteryPreheat" -> if (preheatEnabled == true) ActionTone.SUCCESS else ActionTone.NEUTRAL
+                else -> ActionTone.NEUTRAL
+            }
+        }
+
+        private fun resolveActionBackground(
+            tone: ActionTone,
+            darkTheme: Boolean,
+            defaultBg: Int
+        ): Int {
+            return when (tone) {
+                ActionTone.NEUTRAL -> defaultBg
+                ActionTone.SUCCESS -> if (darkTheme) R.drawable.widget_action_slot_primary_dark else R.drawable.widget_action_slot_primary_light
+                ActionTone.ALERT -> if (darkTheme) R.drawable.widget_action_slot_alert_dark else R.drawable.widget_action_slot_alert_light
+            }
+        }
+
+        private fun resolveActionIconColor(
+            tone: ActionTone,
+            themeContext: Context,
+            defaultColor: Int
+        ): Int {
+            return when (tone) {
+                ActionTone.NEUTRAL -> defaultColor
+                ActionTone.SUCCESS -> ContextCompat.getColor(themeContext, R.color.energy_green)
+                ActionTone.ALERT -> ContextCompat.getColor(themeContext, R.color.alert_red)
+            }
+        }
+
+        private fun isActionBusy(action: String, busyCommand: String?): Boolean {
+            if (busyCommand.isNullOrBlank()) return false
+            return when (action) {
+                "unlock" -> busyCommand == "unlock"
+                "lock" -> busyCommand == "lock"
+                "sentry" -> busyCommand == "sentryOn" || busyCommand == "sentryOff"
+                "ac" -> busyCommand == "acOn" || busyCommand == "acOff" || busyCommand.startsWith("ac")
+                "trunk" -> busyCommand == "trunkOpen" || busyCommand == "trunkClose"
+                "frunk" -> busyCommand == "frunkOpen"
+                "windowOpen", "windowVent", "windowClose" ->
+                    busyCommand == "windowOpen" || busyCommand == "windowClose" || busyCommand == "windowVent"
+                "batteryPreheat" -> busyCommand == "batteryPreheat" || busyCommand == "batteryPreheatOff"
+                "horn" -> busyCommand == "horn"
+                "sunshade" -> busyCommand == "sunshadeOpen" || busyCommand == "sunshadeClose"
+                else -> false
             }
         }
 
@@ -1177,6 +1268,8 @@ class ControlWidget : AppWidgetProvider() {
             ACTION_WIDGET_COMMAND -> {
                 val command = intent.getStringExtra(ControlService.EXTRA_COMMAND)
                 if (!command.isNullOrBlank()) {
+                    SessionStore(context).setWidgetBusyCommand(command)
+                    refreshData(context)
                     val serviceIntent = Intent(context, ControlService::class.java).apply {
                         putExtra(ControlService.EXTRA_COMMAND, command)
                     }

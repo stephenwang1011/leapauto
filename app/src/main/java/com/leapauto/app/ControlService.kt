@@ -69,6 +69,7 @@ class ControlService : Service() {
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
                     android.widget.Toast.makeText(this@ControlService, hint, android.widget.Toast.LENGTH_SHORT).show()
                 }
+                store.setWidgetBusyCommand(null)
                 ControlWidget.showControlStatus(this, hint)
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelfResult(startId)
@@ -80,13 +81,14 @@ class ControlService : Service() {
         }
 
         if (!commandInFlight.compareAndSet(false, true)) {
+            store.setWidgetBusyCommand(null)
             ControlWidget.showControlStatus(this, "已有控车指令执行中")
             notifyResult("已有控车指令执行中")
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelfResult(startId)
             return START_NOT_STICKY
         }
-        ControlWidget.showControlStatus(this, "控车中…")
+        // 按钮已具备忙碌转圈动效，执行过程中不再展示“控车中…”文本覆盖，保持桌面时间与车内温度常驻
         Thread {
             val store = SessionStore(this)
             try {
@@ -112,7 +114,6 @@ class ControlService : Service() {
                     val isLock = effectiveCommand == "lock"
                     val action = if (isLock) com.leapauto.app.bluetooth.BleLockAction.LOCK else com.leapauto.app.bluetooth.BleLockAction.UNLOCK
                     val appContext = applicationContext
-                    ControlWidget.showControlStatus(appContext, if (isLock) "蓝牙上锁中…" else "蓝牙解锁中…", locked = isLock)
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                         bleController.control(action)
                     }
@@ -174,7 +175,6 @@ class ControlService : Service() {
                         return@Thread
                     }
                     // 若蓝牙因信号受阻或车端未在 1.5 秒内确认，自动无缝平滑回退至下方 4G 云端通道进行兜底控锁
-                    ControlWidget.showControlStatus(appContext, "切换云端控车中…")
                 }
                 val api = LeapmotorApi(session)
                 val cmd = Commands.build(effectiveCommand)
@@ -285,6 +285,8 @@ class ControlService : Service() {
                 ControlWidget.showControlStatus(this, error)
                 notifyResult(error)
             } finally {
+                store.setWidgetBusyCommand(null)
+                ControlWidget.refreshData(applicationContext)
                 commandInFlight.set(false)
                 com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(applicationContext)
                 stopForeground(STOP_FOREGROUND_REMOVE)
