@@ -40,6 +40,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import com.leapauto.app.PhoneLocationHelper
@@ -1051,6 +1052,7 @@ fun LeapAutoScreen(
                         ScreenDestination.CLIMATE_CONTROL -> {
                             ClimateControlContent(
                                 status = status,
+                                liveWeather = liveWeather,
                                 statusError = statusError,
                                 busy = busy,
                                 controlFeedback = controlFeedback,
@@ -7928,6 +7930,8 @@ private fun QuickVehicleButton(
         label = "quickBtnScale"
     )
     val haptic = LocalHapticFeedback.current
+    val view = androidx.compose.ui.platform.LocalView.current
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var isHolding by remember { mutableStateOf(false) }
     val holdProgress = remember { androidx.compose.animation.core.Animatable(0f) }
@@ -7989,7 +7993,7 @@ private fun QuickVehicleButton(
                     isHolding = false
                 }
                 if (up != null && !completed) {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    HapticFeedbackHelper.performMechanicalClick(view, context)
                     onClick()
                 }
             }
@@ -8000,7 +8004,7 @@ private fun QuickVehicleButton(
             indication = null,
             enabled = !inProgress,
             onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                HapticFeedbackHelper.performMechanicalClick(view, context)
                 onClick()
             },
             onLongClick = onLongClick?.let { longClick ->
@@ -10975,7 +10979,8 @@ fun ClimateControlBottomSheet(
     onOpenScheduledAc: () -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val view = androidx.compose.ui.platform.LocalView.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     // 解除全局 busy 锁定：只要有车辆数据，面板按键随时响应触控，实现极致跟手性
     val actionsEnabled = status != null
     val fanRange = hvacCapability.effectiveUiFanRange()
@@ -10995,6 +11000,9 @@ fun ClimateControlBottomSheet(
     }
     var editedWindLevel by remember(status?.acAirVolume) {
         mutableStateOf(currentSettingWind)
+    }
+    var lastCommittedWindLevel by remember(status?.acAirVolume) {
+        mutableIntStateOf(currentSettingWind)
     }
     var editedDefogging by remember(status?.windshieldDefrost) {
         mutableStateOf(currentDefrost)
@@ -11020,6 +11028,7 @@ fun ClimateControlBottomSheet(
         if (!isProtected) {
             editedTemperature = currentSettingTemp
             editedWindLevel = currentSettingWind
+            lastCommittedWindLevel = currentSettingWind
             editedDefogging = currentDefrost
             editedOutletName = currentOutlet
             editedCircle = currentCircle
@@ -11042,6 +11051,7 @@ fun ClimateControlBottomSheet(
     fun restoreEditedClimateFromStatus() {
         editedTemperature = currentSettingTemp
         editedWindLevel = currentSettingWind
+        lastCommittedWindLevel = currentSettingWind
         editedDefogging = currentDefrost
         editedOutletName = currentOutlet
         editedCircle = currentCircle
@@ -11051,6 +11061,7 @@ fun ClimateControlBottomSheet(
 
     fun submitSettings(operation: HvacOperation, actionDescription: String? = null) {
         if (!actionsEnabled) return
+        lastCommittedWindLevel = editedWindLevel
         val command = currentCommand(operation, actionDescription)
         onApplyClimateSettings(command)
     }
@@ -11118,6 +11129,7 @@ fun ClimateControlBottomSheet(
         else -> MaterialTheme.statusGood
     }
     val currentAcColor = if (isAcOn) activeAcColor else MaterialTheme.colorScheme.onSurfaceVariant
+    val primaryTempTextColor = if (isAcOn) activeAcColor else MaterialTheme.colorScheme.onSurface
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -11125,83 +11137,228 @@ fun ClimateControlBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 4.dp, vertical = 6.dp)
+                .padding(horizontal = 10.dp, vertical = 6.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(11.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 1. 顶部标题栏：图标 + 标题 + 状态标签 + 一键开关胶囊
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // 1. 一体化座舱温控主卡（顶部状态与主开关 + 分隔晶线 + 雕塑感温控步进台）
+            val climateRingAura = if (isAcOn) activeAcColor.copy(alpha = 0.18f) else null
+            val climateRingBorder = if (isAcOn) {
+                BorderStroke(1.dp, activeAcColor.copy(alpha = 0.45f))
+            } else {
+                glassCardBorder()
+            }
+            val outdoorTemp = liveWeather?.temperature?.takeIf { it.isNotBlank() }
+            val indoorTempClean = remember(status?.indoorTemp) {
+                status?.indoorTemp?.trim()?.let { raw ->
+                    val num = raw.removeSuffix("°C").removeSuffix("℃").trim().toDoubleOrNull()
+                    if (num != null) {
+                        val numText = if (num % 1.0 == 0.0) "${num.toInt()}" else String.format(Locale.US, "%.1f", num)
+                        "${numText}℃"
+                    } else raw
+                } ?: "--"
+            }
+            val tempSubtitle = if (outdoorTemp != null) {
+                val weatherDesc = liveWeather.weather.takeIf { it.isNotBlank() }?.let { " $it" }.orEmpty()
+                "车内$indoorTempClean · 室外${outdoorTemp}℃$weatherDesc"
+            } else {
+                "车内$indoorTempClean"
+            }
+
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                border = climateRingBorder,
+                shadowElevation = 0.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(
+                        shape = RoundedCornerShape(20.dp),
+                        auraColor = climateRingAura,
+                        auraCenter = Offset(0.5f, 0.35f),
+                        auraRadiusRatio = 0.72f,
+                        topSpecularLine = true
+                    )
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                Column(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = currentAcColor.copy(alpha = if (isAcOn) 0.15f else 0.08f),
-                        border = BorderStroke(0.8.dp, currentAcColor.copy(alpha = if (isAcOn) 0.5f else 0.25f)),
-                        modifier = Modifier.size(38.dp)
+                    // 顶沿状态与主开关行
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(
-                                painter = painterResource(activeAcIcon),
-                                contentDescription = null,
-                                tint = currentAcColor,
-                                modifier = Modifier.size(20.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = if (isAcOn) activeAcColor.copy(alpha = 0.14f) else MaterialTheme.glassInsetSurface,
+                                border = BorderStroke(
+                                    0.8.dp,
+                                    if (isAcOn) activeAcColor.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                                ),
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        painter = painterResource(activeAcIcon),
+                                        contentDescription = null,
+                                        tint = currentAcColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text(
+                                    text = activeAcModeText,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isAcOn) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = tempSubtitle,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.width(8.dp))
+
+                        // 主控开关胶囊：关机态使用主色实心按钮突出首要操作；开机态使用生效语义色描边胶囊
+                        val switchContainerColor = if (isAcOn) {
+                            activeAcColor.copy(alpha = 0.15f)
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        }
+                        val switchContentColor = if (isAcOn) {
+                            activeAcColor
+                        } else {
+                            MaterialTheme.colorScheme.onPrimary
+                        }
+                        val switchBorder = if (isAcOn) {
+                            BorderStroke(0.8.dp, activeAcColor.copy(alpha = 0.55f))
+                        } else {
+                            null
+                        }
+                        Surface(
+                            shape = CircleShape,
+                            color = switchContainerColor,
+                            border = switchBorder,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable(enabled = actionsEnabled) {
+                                    HapticFeedbackHelper.performMechanicalClick(view, context)
+                                    userLastActionEpochMs = System.currentTimeMillis()
+                                    val nextOn = !isAcOn
+                                    optimisticAcSwitch = nextOn
+                                    if (!nextOn) optimisticPresetName = null
+                                    if (isAcOn) onControl("acOff") else onControl("acOn")
+                                }
+                        ) {
+                            Text(
+                                text = if (isAcOn) "关闭" else "开启",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = switchContentColor,
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
                             )
                         }
                     }
-                    Column {
-                        Text(
-                            text = activeAcModeText,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isAcOn) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+
+                    // 精密微晶分隔细线
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .height(0.6.dp)
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f))
+                    )
+
+                    // 核心温控步进区
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ClimateTempStepButton(
+                            symbol = "−",
+                            contentDescription = "降低温度",
+                            enabled = actionsEnabled && editedTemperature > hvacCapability.temperatureMinC,
+                            activeColor = if (isAcOn) activeAcColor else null,
+                            onClick = {
+                                HapticFeedbackHelper.performMechanicalClick(view, context)
+                                userLastActionEpochMs = System.currentTimeMillis()
+                                optimisticAcSwitch = true
+                                optimisticPresetName = null
+                                editedDefogging = false
+                                editedOutletName = AirOutlet.ALL.name
+                                editedTemperature = (editedTemperature - 1).coerceAtLeast(hvacCapability.temperatureMinC)
+                                pendingTemperatureJob?.cancel()
+                                pendingTemperatureJob = coroutineScope.launch {
+                                    kotlinx.coroutines.delay(400L)
+                                    submitSettings(HvacOperation.ON, "温度已调至 ${editedTemperature}°C")
+                                }
+                            }
                         )
-                        val outdoorTemp = liveWeather?.temperature?.takeIf { it.isNotBlank() }
-                        val indoorTempStr = status?.indoorTemp ?: "--"
-                        val tempSubtitle = if (outdoorTemp != null) {
-                            "车内 $indoorTempStr · 室外 $outdoorTemp℃ (${liveWeather.weather})"
-                        } else {
-                            "车内 $indoorTempStr"
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(verticalAlignment = Alignment.Top) {
+                                Text(
+                                    text = "$editedTemperature",
+                                    fontSize = 42.sp,
+                                    lineHeight = 44.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = primaryTempTextColor
+                                )
+                                Text(
+                                    text = "°C",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = primaryTempTextColor.copy(alpha = 0.78f),
+                                    modifier = Modifier.padding(start = 2.dp, top = 4.dp)
+                                )
+                            }
+                            Text(
+                                text = "设定温度",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                        Text(
-                            text = tempSubtitle,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+
+                        ClimateTempStepButton(
+                            symbol = "+",
+                            contentDescription = "升高温度",
+                            enabled = actionsEnabled && editedTemperature < hvacCapability.temperatureMaxC,
+                            activeColor = if (isAcOn) activeAcColor else null,
+                            onClick = {
+                                HapticFeedbackHelper.performMechanicalClick(view, context)
+                                userLastActionEpochMs = System.currentTimeMillis()
+                                optimisticAcSwitch = true
+                                optimisticPresetName = null
+                                editedDefogging = false
+                                editedOutletName = AirOutlet.ALL.name
+                                editedTemperature = (editedTemperature + 1).coerceAtMost(hvacCapability.temperatureMaxC)
+                                pendingTemperatureJob?.cancel()
+                                pendingTemperatureJob = coroutineScope.launch {
+                                    kotlinx.coroutines.delay(400L)
+                                    submitSettings(HvacOperation.ON, "温度已调至 ${editedTemperature}°C")
+                                }
+                            }
                         )
                     }
-                }
-
-                // 一键开启/关闭快捷触控胶囊
-                Surface(
-                    shape = CircleShape,
-                    color = if (isAcOn) MaterialTheme.statusGood.copy(alpha = 0.15f) else MaterialTheme.glassInsetSurface,
-                    border = BorderStroke(
-                        0.8.dp,
-                        if (isAcOn) MaterialTheme.statusGood.copy(alpha = 0.50f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
-                    ),
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable(enabled = actionsEnabled) {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            userLastActionEpochMs = System.currentTimeMillis()
-                            val nextOn = !isAcOn
-                            optimisticAcSwitch = nextOn
-                            if (!nextOn) optimisticPresetName = null
-                            if (isAcOn) onControl("acOff") else onControl("acOn")
-                        }
-                ) {
-                    Text(
-                        text = if (isAcOn) "关闭" else "开启",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isAcOn) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp)
-                    )
                 }
             }
 
@@ -11279,7 +11436,7 @@ fun ClimateControlBottomSheet(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable {
-                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                    HapticFeedbackHelper.performMechanicalClick(view, context)
                                     userLastActionEpochMs = System.currentTimeMillis()
                                     optimisticAcSwitch = true
                                     optimisticPresetName = smartSuggestion.preset.name
@@ -11287,7 +11444,7 @@ fun ClimateControlBottomSheet(
                                 }
                         ) {
                             Box(
-                                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 40.dp)
                                     .padding(horizontal = 10.dp, vertical = 4.5.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -11295,7 +11452,7 @@ fun ClimateControlBottomSheet(
                                     text = smartSuggestion.actionLabel,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.Normal,
+                                    fontWeight = FontWeight.Medium,
                                     color = suggestionContentColor
                                 )
                             }
@@ -11304,143 +11461,36 @@ fun ClimateControlBottomSheet(
                 }
             }
 
-            // 2. 全息光环温控主盘 (38sp 超大字 + 两侧 44dp 舒适步进触控 + 极光光晕)
-            val climateRingAura = if (isAcOn) currentAcColor.copy(alpha = 0.22f) else null
-            val climateRingBorder = if (isAcOn) {
-                BorderStroke(1.dp, currentAcColor.copy(alpha = 0.45f))
-            } else {
-                glassCardBorder()
-            }
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = Color.Transparent,
-                border = climateRingBorder,
-                shadowElevation = 0.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .frostedGlassCard(
-                        shape = RoundedCornerShape(20.dp),
-                        auraColor = climateRingAura,
-                        auraCenter = Offset(0.5f, 0.4f),
-                        auraRadiusRatio = 0.65f,
-                        topSpecularLine = true
-                    )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 11.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.glassSurface,
-                        border = if (isAcOn) BorderStroke(1.dp, currentAcColor.copy(alpha = 0.30f)) else glassInsetBorder(),
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .clickable(enabled = actionsEnabled && editedTemperature > hvacCapability.temperatureMinC) {
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                userLastActionEpochMs = System.currentTimeMillis()
-                                optimisticAcSwitch = true
-                                optimisticPresetName = null
-                                editedDefogging = false
-                                editedOutletName = AirOutlet.ALL.name
-                                editedTemperature = (editedTemperature - 1).coerceAtLeast(hvacCapability.temperatureMinC)
-                                pendingTemperatureJob?.cancel()
-                                pendingTemperatureJob = coroutineScope.launch {
-                                    kotlinx.coroutines.delay(400L)
-                                    submitSettings(HvacOperation.ON, "温度已调至 ${editedTemperature}°C")
-                                }
-                            }
-                    ) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("-", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = if (actionsEnabled && editedTemperature > hvacCapability.temperatureMinC) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
-                        }
-                    }
-
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Row(verticalAlignment = Alignment.Top) {
-                            Text(
-                                text = "$editedTemperature",
-                                fontSize = 38.sp,
-                                lineHeight = 40.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = currentAcColor
-                            )
-                            Text(
-                                text = "°C",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = currentAcColor.copy(alpha = 0.85f),
-                                modifier = Modifier.padding(start = 2.dp, top = 3.dp)
-                            )
-                        }
-                        Text(
-                            text = "设定温度",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.glassSurface,
-                        border = if (isAcOn) BorderStroke(1.dp, currentAcColor.copy(alpha = 0.30f)) else glassInsetBorder(),
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .clickable(enabled = actionsEnabled && editedTemperature < hvacCapability.temperatureMaxC) {
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                userLastActionEpochMs = System.currentTimeMillis()
-                                optimisticAcSwitch = true
-                                optimisticPresetName = null
-                                editedDefogging = false
-                                editedOutletName = AirOutlet.ALL.name
-                                editedTemperature = (editedTemperature + 1).coerceAtMost(hvacCapability.temperatureMaxC)
-                                pendingTemperatureJob?.cancel()
-                                pendingTemperatureJob = coroutineScope.launch {
-                                    kotlinx.coroutines.delay(400L)
-                                    submitSettings(HvacOperation.ON, "温度已调至 ${editedTemperature}°C")
-                                }
-                            }
-                    ) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("+", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = if (actionsEnabled && editedTemperature < hvacCapability.temperatureMaxC) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
-                        }
-                    }
-                }
-            }
-
-            // 3. 高频快捷微晶金刚键 (4 列均分：极速降温 / 一键制热 / 前挡除霜 / 内外循环)
+            // 2. 高频快捷微晶金刚键矩阵 (3 列 × 2 排，严密对称，仅空调开启或预约激活时点亮语义色)
+            // 第一排：三大核心温控预设 (极速降温 / 一键制热 / 前挡除霜)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val isCoolActive = activePresetName == ClimatePresetAction.QUICK_COOL.name
+                val isCoolActive = isAcOn && activePresetName == ClimatePresetAction.QUICK_COOL.name
                 QuickClimateCircleAction(
                     icon = R.drawable.ic_phosphor_snowflake,
                     label = "极速降温",
                     isActive = isCoolActive,
-                    activeColor = MaterialTheme.colorScheme.primary,
+                    activeColor = MaterialTheme.statusGood,
                     enabled = actionsEnabled,
                     onClick = {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        HapticFeedbackHelper.performMechanicalClick(view, context)
                         userLastActionEpochMs = System.currentTimeMillis()
                         optimisticAcSwitch = true
                         optimisticPresetName = ClimatePresetAction.QUICK_COOL.name
                         editedDefogging = false
                         editedOutletName = AirOutlet.ALL.name
                         editedCircle = AirCircle.INNER
-                        editedWindLevel = 7
+                        editedWindLevel = 7.coerceIn(fanRange)
+                        lastCommittedWindLevel = editedWindLevel
                         editedTemperature = 18
                         onControl("quickCool")
                     },
                     modifier = Modifier.weight(1f)
                 )
 
-                val isHeatActive = activePresetName == ClimatePresetAction.QUICK_HEAT.name
+                val isHeatActive = isAcOn && activePresetName == ClimatePresetAction.QUICK_HEAT.name
                 QuickClimateCircleAction(
                     icon = R.drawable.ic_phosphor_sun,
                     label = "一键制热",
@@ -11448,38 +11498,69 @@ fun ClimateControlBottomSheet(
                     activeColor = MaterialTheme.statusWarn,
                     enabled = actionsEnabled,
                     onClick = {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        HapticFeedbackHelper.performMechanicalClick(view, context)
                         userLastActionEpochMs = System.currentTimeMillis()
                         optimisticAcSwitch = true
                         optimisticPresetName = ClimatePresetAction.QUICK_HEAT.name
                         editedDefogging = false
                         editedOutletName = AirOutlet.ALL.name
                         editedCircle = AirCircle.INNER
-                        editedWindLevel = 7
+                        editedWindLevel = 7.coerceIn(fanRange)
+                        lastCommittedWindLevel = editedWindLevel
                         editedTemperature = 32
                         onControl("quickHeat")
                     },
                     modifier = Modifier.weight(1f)
                 )
 
-                val isDefrostActive = activePresetName == ClimatePresetAction.WINDSHIELD_DEFROST.name || editedDefogging || status?.windshieldDefrost == true
+                val isDefrostActive = isAcOn && (activePresetName == ClimatePresetAction.WINDSHIELD_DEFROST.name || editedDefogging || status?.windshieldDefrost == true)
                 QuickClimateCircleAction(
                     icon = R.drawable.ic_windshield_defrost,
                     label = "前挡除霜",
                     isActive = isDefrostActive,
-                    activeColor = MaterialTheme.colorScheme.primary,
+                    activeColor = MaterialTheme.statusGood,
                     enabled = actionsEnabled,
                     onClick = {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        HapticFeedbackHelper.performMechanicalClick(view, context)
                         userLastActionEpochMs = System.currentTimeMillis()
                         optimisticAcSwitch = true
                         optimisticPresetName = ClimatePresetAction.WINDSHIELD_DEFROST.name
                         editedDefogging = true
                         editedOutletName = AirOutlet.WINDSHIELD.name
                         editedCircle = AirCircle.OUTER
-                        editedWindLevel = 5
+                        editedWindLevel = 5.coerceIn(fanRange)
+                        lastCommittedWindLevel = editedWindLevel
                         editedTemperature = 24
                         onControl("defrost")
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            // 第二排：三大气流与智能场景 (快速除味 / 内外循环 / 定时空调)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val isDeodorizeActive = isAcOn && activePresetName == ClimatePresetAction.DEODORIZE.name
+                QuickClimateCircleAction(
+                    icon = R.drawable.ic_airflow,
+                    label = "快速除味",
+                    isActive = isDeodorizeActive,
+                    activeColor = MaterialTheme.statusGood,
+                    enabled = actionsEnabled,
+                    onClick = {
+                        HapticFeedbackHelper.performMechanicalClick(view, context)
+                        userLastActionEpochMs = System.currentTimeMillis()
+                        optimisticAcSwitch = true
+                        optimisticPresetName = ClimatePresetAction.DEODORIZE.name
+                        editedDefogging = false
+                        editedOutletName = AirOutlet.ALL.name
+                        editedCircle = AirCircle.OUTER
+                        editedWindLevel = 7.coerceIn(fanRange)
+                        lastCommittedWindLevel = editedWindLevel
+                        editedTemperature = 24
+                        onControl("deodorize")
                     },
                     modifier = Modifier.weight(1f)
                 )
@@ -11488,11 +11569,11 @@ fun ClimateControlBottomSheet(
                 QuickClimateCircleAction(
                     icon = R.drawable.ic_phosphor_arrow_clockwise,
                     label = if (isInner) "内循环" else "外循环",
-                    isActive = isInner,
+                    isActive = isAcOn && isInner,
                     activeColor = MaterialTheme.statusGood,
                     enabled = actionsEnabled,
                     onClick = {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        HapticFeedbackHelper.performMechanicalClick(view, context)
                         userLastActionEpochMs = System.currentTimeMillis()
                         optimisticAcSwitch = true
                         val targetCircle = if (isInner) AirCircle.OUTER else AirCircle.INNER
@@ -11501,34 +11582,6 @@ fun ClimateControlBottomSheet(
                             HvacOperation.ON,
                             if (targetCircle == AirCircle.INNER) "已切换至内循环" else "已切换至外循环"
                         )
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            // 3.1 情景控制：快速除味 / 定时空调
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val isDeodorizeActive = activePresetName == ClimatePresetAction.DEODORIZE.name
-                QuickClimateCircleAction(
-                    icon = R.drawable.ic_airflow,
-                    label = "快速除味",
-                    isActive = isDeodorizeActive,
-                    activeColor = MaterialTheme.statusGood,
-                    enabled = actionsEnabled,
-                    onClick = {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                        userLastActionEpochMs = System.currentTimeMillis()
-                        optimisticAcSwitch = true
-                        optimisticPresetName = ClimatePresetAction.DEODORIZE.name
-                        editedDefogging = false
-                        editedOutletName = AirOutlet.ALL.name
-                        editedCircle = AirCircle.OUTER
-                        editedWindLevel = 7.coerceIn(fanRange)
-                        editedTemperature = 24
-                        onControl("deodorize")
                     },
                     modifier = Modifier.weight(1f)
                 )
@@ -11541,15 +11594,17 @@ fun ClimateControlBottomSheet(
                         activeColor = MaterialTheme.statusGood,
                         enabled = actionsEnabled,
                         onClick = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            HapticFeedbackHelper.performMechanicalClick(view, context)
                             onOpenScheduledAc()
                         },
                         modifier = Modifier.weight(1f)
                     )
+                } else {
+                    Spacer(Modifier.weight(1f))
                 }
             }
 
-            // 4. 完整空调设置微晶舱 (风量滑块 / 出风方向)
+            // 3. 气流控制微晶舱 (风量滑块 / 出风方向微晶分段槽)
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = Color.Transparent,
@@ -11570,24 +11625,42 @@ fun ClimateControlBottomSheet(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     // 风量调节
+                    val windAccentColor = if (isAcOn) activeAcColor else MaterialTheme.colorScheme.onSurfaceVariant
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("风量", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                "$editedWindLevel 挡",
+                                "风量",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "${editedWindLevel}挡",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = if (actionsEnabled) MaterialTheme.statusGood else MaterialTheme.colorScheme.onSurface
+                                color = if (isAcOn) activeAcColor else MaterialTheme.colorScheme.onSurface
                             )
                         }
                         if (fanRange.first < fanRange.last) {
                             ThinClimateSlider(
                                 value = editedWindLevel.toFloat(),
-                                onValueChange = {
+                                onValueChange = { nextVal ->
                                     userLastActionEpochMs = System.currentTimeMillis()
-                                    editedWindLevel = it.roundToInt().coerceIn(fanRange)
+                                    val snapped = nextVal.roundToInt().coerceIn(fanRange)
+                                    if (snapped != editedWindLevel) {
+                                        HapticFeedbackHelper.performMechanicalClick(view, context)
+                                        editedWindLevel = snapped
+                                    }
                                 },
                                 onValueChangeFinished = {
+                                    val windChanged = editedWindLevel != lastCommittedWindLevel
+                                    if (!windChanged && isAcOn) return@ThinClimateSlider
+                                    if (!windChanged) {
+                                        HapticFeedbackHelper.performMechanicalClick(view, context)
+                                    }
                                     userLastActionEpochMs = System.currentTimeMillis()
                                     optimisticAcSwitch = true
                                     optimisticPresetName = null
@@ -11599,6 +11672,7 @@ fun ClimateControlBottomSheet(
                                 enabled = actionsEnabled,
                                 valueRange = fanRange.first.toFloat()..fanRange.last.toFloat(),
                                 steps = (fanRange.last - fanRange.first - 1).coerceAtLeast(0),
+                                activeColor = windAccentColor,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         } else {
@@ -11613,62 +11687,62 @@ fun ClimateControlBottomSheet(
                             .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.20f))
                     )
 
-                    // 出风方向
-                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("出风方向", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                if (editedOutletName == AirOutlet.ALL.name) "全车出风" else "前风挡出风",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.statusGood
-                            )
-                        }
-                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                            SegmentedButton(
-                                selected = editedOutletName == AirOutlet.ALL.name,
-                                onClick = {
-                                    userLastActionEpochMs = System.currentTimeMillis()
-                                    optimisticAcSwitch = true
-                                    optimisticPresetName = null
-                                    editedOutletName = AirOutlet.ALL.name
-                                    editedDefogging = false
-                                    submitSettings(HvacOperation.ON, "已切换至全车出风")
-                                },
-                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                                icon = {},
-                                colors = SegmentedButtonDefaults.colors(
-                                    activeContainerColor = MaterialTheme.statusGood.copy(alpha = 0.14f),
-                                    activeContentColor = MaterialTheme.statusGood,
-                                    activeBorderColor = MaterialTheme.statusGood.copy(alpha = 0.60f),
-                                    inactiveContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.50f),
-                                    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
-                                ),
-                                label = { Text("全车出风", style = MaterialTheme.typography.labelSmall, fontWeight = if (editedOutletName == AirOutlet.ALL.name) FontWeight.Bold else FontWeight.Normal) }
-                            )
-                            SegmentedButton(
-                                selected = editedOutletName == AirOutlet.WINDSHIELD.name,
-                                onClick = {
-                                    userLastActionEpochMs = System.currentTimeMillis()
-                                    optimisticAcSwitch = true
-                                    optimisticPresetName = ClimatePresetAction.WINDSHIELD_DEFROST.name
-                                    editedOutletName = AirOutlet.WINDSHIELD.name
-                                    editedDefogging = true
-                                    submitSettings(HvacOperation.ON, "前挡除霜已开启")
-                                },
-                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                                icon = {},
-                                colors = SegmentedButtonDefaults.colors(
-                                    activeContainerColor = MaterialTheme.statusGood.copy(alpha = 0.14f),
-                                    activeContentColor = MaterialTheme.statusGood,
-                                    activeBorderColor = MaterialTheme.statusGood.copy(alpha = 0.60f),
-                                    inactiveContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.50f),
-                                    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
-                                ),
-                                label = { Text("前风挡出风", style = MaterialTheme.typography.labelSmall, fontWeight = if (editedOutletName == AirOutlet.WINDSHIELD.name) FontWeight.Bold else FontWeight.Normal) }
-                            )
+                    // 出风方向（去除重复状态文字，改用与全页圆角统一的微晶分段槽）
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "出风方向",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.glassInsetSurface,
+                            border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(3.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                ClimateOutletSegmentItem(
+                                    icon = R.drawable.ic_airflow,
+                                    label = "全车出风",
+                                    selected = editedOutletName == AirOutlet.ALL.name,
+                                    acOn = isAcOn,
+                                    activeColor = activeAcColor,
+                                    enabled = actionsEnabled,
+                                    onClick = {
+                                        HapticFeedbackHelper.performMechanicalClick(view, context)
+                                        userLastActionEpochMs = System.currentTimeMillis()
+                                        optimisticAcSwitch = true
+                                        optimisticPresetName = null
+                                        editedOutletName = AirOutlet.ALL.name
+                                        editedDefogging = false
+                                        submitSettings(HvacOperation.ON, "已切换至全车出风")
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                ClimateOutletSegmentItem(
+                                    icon = R.drawable.ic_windshield_defrost,
+                                    label = "前风挡出风",
+                                    selected = editedOutletName == AirOutlet.WINDSHIELD.name,
+                                    acOn = isAcOn,
+                                    activeColor = activeAcColor,
+                                    enabled = actionsEnabled,
+                                    onClick = {
+                                        HapticFeedbackHelper.performMechanicalClick(view, context)
+                                        userLastActionEpochMs = System.currentTimeMillis()
+                                        optimisticAcSwitch = true
+                                        optimisticPresetName = ClimatePresetAction.WINDSHIELD_DEFROST.name
+                                        editedOutletName = AirOutlet.WINDSHIELD.name
+                                        editedDefogging = true
+                                        submitSettings(HvacOperation.ON, "前挡除霜已开启")
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
                 }
@@ -11699,6 +11773,127 @@ fun ClimateControlBottomSheet(
 }
 
 @Composable
+internal fun ClimateTempStepButton(
+    symbol: String,
+    contentDescription: String,
+    enabled: Boolean,
+    activeColor: Color?,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed && enabled) 0.91f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "climate-step-press"
+    )
+    val borderColor = when {
+        !enabled -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.20f)
+        activeColor != null -> activeColor.copy(alpha = 0.38f)
+        else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f)
+    }
+    val textColor = when {
+        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f)
+        activeColor != null -> activeColor
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.glassInsetSurface,
+        border = BorderStroke(1.dp, borderColor),
+        shadowElevation = 0.dp,
+        modifier = Modifier
+            .size(46.dp)
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .clip(CircleShape)
+            .clickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = null,
+                onClickLabel = contentDescription,
+                onClick = onClick
+            )
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                text = symbol,
+                fontSize = 24.sp,
+                lineHeight = 24.sp,
+                fontWeight = FontWeight.Medium,
+                color = textColor
+            )
+        }
+    }
+}
+
+@Composable
+internal fun ClimateOutletSegmentItem(
+    icon: Int,
+    label: String,
+    selected: Boolean,
+    acOn: Boolean,
+    activeColor: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val containerColor = when {
+        selected && acOn -> activeColor.copy(alpha = 0.16f)
+        selected -> MaterialTheme.glassSurface
+        else -> Color.Transparent
+    }
+    val borderStroke = when {
+        selected && acOn -> BorderStroke(0.8.dp, activeColor.copy(alpha = 0.50f))
+        selected -> BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+        else -> null
+    }
+    val contentColor = when {
+        selected && acOn -> activeColor
+        selected -> MaterialTheme.colorScheme.onSurface
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        shape = RoundedCornerShape(9.dp),
+        color = containerColor,
+        border = borderStroke,
+        shadowElevation = 0.dp,
+        modifier = modifier
+            .clip(RoundedCornerShape(9.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(15.dp)
+            )
+            Spacer(Modifier.width(5.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = contentColor,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+    }
+}
+
+@Composable
 private fun QuickClimateCircleAction(
     icon: Int,
     label: String,
@@ -11711,25 +11906,33 @@ private fun QuickClimateCircleAction(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1f,
+        targetValue = if (isPressed) 0.95f else 1f,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "climate-button-press"
     )
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = if (isActive) activeColor.copy(alpha = 0.16f) else MaterialTheme.glassInsetSurface,
+        color = if (isActive) activeColor.copy(alpha = 0.16f) else Color.Transparent,
         border = if (isActive) {
             BorderStroke(0.8.dp, activeColor.copy(alpha = 0.50f))
         } else {
-            glassInsetBorder()
+            glassCardBorder()
         },
         shadowElevation = 0.dp,
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
             .graphicsLayer {
                 scaleX = pressScale
                 scaleY = pressScale
             }
+            .then(
+                if (!isActive) {
+                    Modifier.frostedGlassCard(
+                        shape = RoundedCornerShape(14.dp),
+                        topSpecularLine = false
+                    )
+                } else Modifier
+            )
+            .clip(RoundedCornerShape(14.dp))
             .clickable(
                 enabled = enabled,
                 interactionSource = interactionSource,
@@ -11763,6 +11966,7 @@ private fun QuickClimateCircleAction(
 @Composable
 fun ClimateControlContent(
     status: VehicleStatus?,
+    liveWeather: com.leapauto.app.weather.LiveWeather? = null,
     statusError: String,
     busy: Boolean,
     controlFeedback: ControlFeedback?,
@@ -11781,6 +11985,7 @@ fun ClimateControlContent(
     ClimateControlBottomSheet(
         onDismissRequest = onDismissRequest,
         status = status,
+        liveWeather = liveWeather,
         busy = busy,
         hvacCapability = hvacCapability,
         vehicleModel = vehicleModel,
@@ -11864,6 +12069,19 @@ fun SeatComfortControlCard(
         }
     }
 
+    val activeComfortCount = listOf(
+        hasDriverHeating && driverHeating,
+        hasDriverVent && driverVent,
+        hasPassengerHeating && passengerHeating,
+        hasPassengerVent && passengerVent,
+        hasLeftRearHeating && leftRearHeating,
+        hasLeftRearVent && leftRearVent,
+        hasRightRearHeating && rightRearHeating,
+        hasRightRearVent && rightRearVent,
+        hasSteerHeating && steerHeating,
+        hasMirrorHeating && mirrorHeating
+    ).count { it }
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -11875,57 +12093,59 @@ fun SeatComfortControlCard(
         shadowElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_phosphor_sun),
-                    contentDescription = "座舱舒适",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(Modifier.width(8.dp))
                 Text(
                     text = "座椅与座舱舒适",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
+                if (activeComfortCount > 0) {
+                    Text(
+                        text = "${activeComfortCount}项已开启",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.statusGood
+                    )
+                }
             }
 
-            // ====== 1. 第一排：主驾与副驾并排双舱 ======
+            // ====== 1. 第一排：主驾与副驾无嵌套双列 ======
             if (hasFrontRow) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // 主驾驶舱
                     if (hasDriverHeating || hasDriverVent) {
-                        Surface(
+                        Column(
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.glassInsetSurface,
-                            border = glassInsetBorder()
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            Text(
+                                text = "主驾驶位",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text(
-                                    text = "主驾驶位",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
                                 if (hasDriverHeating) {
                                     SeatComfortTogglePill(
                                         icon = R.drawable.ic_phosphor_sun,
-                                        label = "座椅加热",
+                                        label = "加热",
                                         isActive = driverHeating,
                                         activeColor = MaterialTheme.statusWarn,
                                         enabled = enabled,
+                                        modifier = Modifier.weight(1f),
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             driverHeating = it
@@ -11937,10 +12157,11 @@ fun SeatComfortControlCard(
                                 if (hasDriverVent) {
                                     SeatComfortTogglePill(
                                         icon = R.drawable.ic_phosphor_snowflake,
-                                        label = "座椅通风",
+                                        label = "通风",
                                         isActive = driverVent,
-                                        activeColor = MaterialTheme.colorScheme.primary,
+                                        activeColor = MaterialTheme.statusGood,
                                         enabled = enabled,
+                                        modifier = Modifier.weight(1f),
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             driverVent = it
@@ -11953,30 +12174,29 @@ fun SeatComfortControlCard(
                         }
                     }
 
-                    // 副驾驶舱
                     if (hasPassengerHeating || hasPassengerVent) {
-                        Surface(
+                        Column(
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.glassInsetSurface,
-                            border = glassInsetBorder()
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            Text(
+                                text = "副驾驶位",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text(
-                                    text = "副驾驶位",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
                                 if (hasPassengerHeating) {
                                     SeatComfortTogglePill(
                                         icon = R.drawable.ic_phosphor_sun,
-                                        label = "座椅加热",
+                                        label = "加热",
                                         isActive = passengerHeating,
                                         activeColor = MaterialTheme.statusWarn,
                                         enabled = enabled,
+                                        modifier = Modifier.weight(1f),
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             passengerHeating = it
@@ -11988,10 +12208,11 @@ fun SeatComfortControlCard(
                                 if (hasPassengerVent) {
                                     SeatComfortTogglePill(
                                         icon = R.drawable.ic_phosphor_snowflake,
-                                        label = "座椅通风",
+                                        label = "通风",
                                         isActive = passengerVent,
-                                        activeColor = MaterialTheme.colorScheme.primary,
+                                        activeColor = MaterialTheme.statusGood,
                                         enabled = enabled,
+                                        modifier = Modifier.weight(1f),
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             passengerVent = it
@@ -12006,36 +12227,53 @@ fun SeatComfortControlCard(
                 }
             }
 
-            // ====== 2. 第二排：左后与右后并排双舱（支持车型自适应展开） ======
+            // ====== 2. 第二排：左后与右后无嵌套双列 ======
             if (hasRearRow) {
+                if (hasFrontRow) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(0.6.dp)
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.20f))
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // 二排左（主驾后）
                     if (hasLeftRearHeating || hasLeftRearVent) {
-                        Surface(
+                        Column(
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.glassInsetSurface,
-                            border = glassInsetBorder()
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
-                                    text = "二排左座 (主驾后)",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold
+                                    text = "二排左座",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                Text(
+                                    text = "主驾后",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 if (hasLeftRearHeating) {
                                     SeatComfortTogglePill(
                                         icon = R.drawable.ic_phosphor_sun,
-                                        label = "座椅加热",
+                                        label = "加热",
                                         isActive = leftRearHeating,
                                         activeColor = MaterialTheme.statusWarn,
                                         enabled = enabled,
+                                        modifier = Modifier.weight(1f),
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             leftRearHeating = it
@@ -12047,10 +12285,11 @@ fun SeatComfortControlCard(
                                 if (hasLeftRearVent) {
                                     SeatComfortTogglePill(
                                         icon = R.drawable.ic_phosphor_snowflake,
-                                        label = "座椅通风",
+                                        label = "通风",
                                         isActive = leftRearVent,
-                                        activeColor = MaterialTheme.colorScheme.primary,
+                                        activeColor = MaterialTheme.statusGood,
                                         enabled = enabled,
+                                        modifier = Modifier.weight(1f),
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             leftRearVent = it
@@ -12063,30 +12302,39 @@ fun SeatComfortControlCard(
                         }
                     }
 
-                    // 二排右（副驾后）
                     if (hasRightRearHeating || hasRightRearVent) {
-                        Surface(
+                        Column(
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.glassInsetSurface,
-                            border = glassInsetBorder()
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
-                                    text = "二排右座 (副驾后)",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold
+                                    text = "二排右座",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                Text(
+                                    text = "副驾后",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 if (hasRightRearHeating) {
                                     SeatComfortTogglePill(
                                         icon = R.drawable.ic_phosphor_sun,
-                                        label = "座椅加热",
+                                        label = "加热",
                                         isActive = rightRearHeating,
                                         activeColor = MaterialTheme.statusWarn,
                                         enabled = enabled,
+                                        modifier = Modifier.weight(1f),
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             rightRearHeating = it
@@ -12098,10 +12346,11 @@ fun SeatComfortControlCard(
                                 if (hasRightRearVent) {
                                     SeatComfortTogglePill(
                                         icon = R.drawable.ic_phosphor_snowflake,
-                                        label = "座椅通风",
+                                        label = "通风",
                                         isActive = rightRearVent,
-                                        activeColor = MaterialTheme.colorScheme.primary,
+                                        activeColor = MaterialTheme.statusGood,
                                         enabled = enabled,
+                                        modifier = Modifier.weight(1f),
                                         onToggle = {
                                             userTouchEpochMs = System.currentTimeMillis()
                                             rightRearVent = it
@@ -12116,64 +12365,50 @@ fun SeatComfortControlCard(
                 }
             }
 
-            // ====== 3. 底部外设：方向盘加热 + 后视镜加热（条件化并排/满宽/隐藏） ======
+            // ====== 3. 底部外设：方向盘加热 + 后视镜加热（去除多余嵌套灰框，直接双列齐平） ======
             if (hasSteerHeating || hasMirrorHeating) {
+                if (hasFrontRow || hasRearRow) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(0.6.dp)
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.20f))
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (hasSteerHeating) {
-                        Surface(
+                        SeatComfortTogglePill(
+                            icon = R.drawable.ic_phosphor_sun,
+                            label = "方向盘加热",
+                            isActive = steerHeating,
+                            activeColor = MaterialTheme.statusWarn,
+                            enabled = enabled,
                             modifier = if (hasMirrorHeating) Modifier.weight(1f) else Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.glassInsetSurface,
-                            border = glassInsetBorder()
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                SeatComfortTogglePill(
-                                    icon = R.drawable.ic_phosphor_sun,
-                                    label = "方向盘加热",
-                                    isActive = steerHeating,
-                                    activeColor = MaterialTheme.statusWarn,
-                                    enabled = enabled,
-                                    onToggle = {
-                                        userTouchEpochMs = System.currentTimeMillis()
-                                        steerHeating = it
-                                        onControl(if (it) "steeringWheelHeating_2" else "steeringWheelHeating_0")
-                                    }
-                                )
+                            onToggle = {
+                                userTouchEpochMs = System.currentTimeMillis()
+                                steerHeating = it
+                                onControl(if (it) "steeringWheelHeating_2" else "steeringWheelHeating_0")
                             }
-                        }
+                        )
                     }
 
                     if (hasMirrorHeating) {
-                        Surface(
+                        SeatComfortTogglePill(
+                            icon = R.drawable.ic_windshield_defrost,
+                            label = "后视镜加热",
+                            isActive = mirrorHeating,
+                            activeColor = MaterialTheme.statusWarn,
+                            enabled = enabled,
                             modifier = if (hasSteerHeating) Modifier.weight(1f) else Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.glassInsetSurface,
-                            border = glassInsetBorder()
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                SeatComfortTogglePill(
-                                    icon = R.drawable.ic_phosphor_sun,
-                                    label = "后视镜加热",
-                                    isActive = mirrorHeating,
-                                    activeColor = MaterialTheme.statusWarn,
-                                    enabled = enabled,
-                                    onToggle = {
-                                        userTouchEpochMs = System.currentTimeMillis()
-                                        mirrorHeating = it
-                                        onControl(if (it) "rearviewMirrorHeating_on" else "rearviewMirrorHeating_off")
-                                    }
-                                )
+                            onToggle = {
+                                userTouchEpochMs = System.currentTimeMillis()
+                                mirrorHeating = it
+                                onControl(if (it) "rearviewMirrorHeating_on" else "rearviewMirrorHeating_off")
                             }
-                        }
+                        )
                     }
                 }
             }
@@ -12191,20 +12426,36 @@ private fun SeatComfortTogglePill(
     onToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val view = androidx.compose.ui.platform.LocalView.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "seat-pill-press"
+    )
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = if (isActive) activeColor.copy(alpha = 0.16f) else MaterialTheme.glassSurface,
+        color = if (isActive) activeColor.copy(alpha = 0.16f) else MaterialTheme.glassInsetSurface,
         border = BorderStroke(
-            0.8.dp,
-            if (isActive) activeColor.copy(alpha = 0.50f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+            0.7.dp,
+            if (isActive) activeColor.copy(alpha = 0.55f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
         ),
         shadowElevation = 0.dp,
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = enabled) {
-                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .clickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = null
+            ) {
+                HapticFeedbackHelper.performMechanicalClick(view, context)
                 onToggle(!isActive)
             }
     ) {
@@ -12241,47 +12492,58 @@ fun ThinClimateSlider(
     enabled: Boolean,
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    activeColor: Color = MaterialTheme.statusGood
 ) {
     val isDark = LocalAppDarkTheme.current
     val latestOnValueChange by rememberUpdatedState(onValueChange)
     val latestOnValueChangeFinished by rememberUpdatedState(onValueChangeFinished)
     val latestOnValueChangeCancelled by rememberUpdatedState(onValueChangeCancelled)
-    val thumbRadiusPx = with(LocalDensity.current) { 10.dp.toPx() }
+    val thumbRadiusPx = with(LocalDensity.current) { 9.5.dp.toPx() }
     val total = valueRange.endInclusive - valueRange.start
     val fraction = if (total <= 0f) 0f else ((value - valueRange.start) / total).coerceIn(0f, 1f)
-    val enabledColor = MaterialTheme.statusGood
-    val disabledColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-    val trackColor = if (enabled) enabledColor else disabledColor
+    val disabledColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+    val trackColor = if (enabled) activeColor else disabledColor
     val trackBackground = if (enabled) {
-        if (isDark) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.08f)
+        if (isDark) Color.White.copy(alpha = 0.14f) else Color.Black.copy(alpha = 0.08f)
     } else {
         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
     }
+    val thumbCoreColor = if (isDark) Color(0xFF1E1E1E) else Color.White
+    val tickColor = if (isDark) Color.White.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.14f)
+
+    fun snapValue(x: Float, width: Int): Float {
+        val f = ClimateSliderMapping.fractionAt(
+            pointerX = x,
+            widthPx = width.toFloat(),
+            thumbRadiusPx = thumbRadiusPx
+        )
+        val raw = valueRange.start + f * total
+        return if (steps > 0) {
+            val stepSize = total / (steps + 1)
+            val snapped = valueRange.start + ((raw - valueRange.start) / stepSize).roundToInt() * stepSize
+            snapped.coerceIn(valueRange.start, valueRange.endInclusive)
+        } else {
+            raw.coerceIn(valueRange.start, valueRange.endInclusive)
+        }
+    }
+
     Box(
         modifier = modifier
-            .heightIn(min = 32.dp)
+            .heightIn(min = 34.dp)
             .pointerInput(valueRange, steps, enabled, thumbRadiusPx) {
                 if (!enabled) return@pointerInput
-                fun snap(x: Float, width: Int): Float {
-                    val f = ClimateSliderMapping.fractionAt(
-                        pointerX = x,
-                        widthPx = width.toFloat(),
-                        thumbRadiusPx = thumbRadiusPx
-                    )
-                    val raw = valueRange.start + f * total
-                    return if (steps > 0) {
-                        val stepSize = total / (steps + 1)
-                        val snapped = valueRange.start + ((raw - valueRange.start) / stepSize).roundToInt() * stepSize
-                        snapped.coerceIn(valueRange.start, valueRange.endInclusive)
-                    } else {
-                        raw.coerceIn(valueRange.start, valueRange.endInclusive)
-                    }
+                detectTapGestures { offset ->
+                    latestOnValueChange(snapValue(offset.x, size.width))
+                    latestOnValueChangeFinished()
                 }
+            }
+            .pointerInput(valueRange, steps, enabled, thumbRadiusPx) {
+                if (!enabled) return@pointerInput
                 detectHorizontalDragGestures(
-                    onDragStart = { offset -> latestOnValueChange(snap(offset.x, size.width)) },
+                    onDragStart = { offset -> latestOnValueChange(snapValue(offset.x, size.width)) },
                     onHorizontalDrag = { change, _ ->
-                        latestOnValueChange(snap(change.position.x, size.width))
+                        latestOnValueChange(snapValue(change.position.x, size.width))
                     },
                     onDragEnd = { latestOnValueChangeFinished() },
                     onDragCancel = { latestOnValueChangeCancelled() }
@@ -12291,23 +12553,38 @@ fun ThinClimateSlider(
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(24.dp)
+                .height(26.dp)
                 .align(Alignment.Center)
         ) {
             val trackY = size.height / 2f
-            val trackHeightPx = 3.5.dp.toPx()
+            val trackHeightPx = 4.dp.toPx()
             val trackTop = trackY - trackHeightPx / 2f
-            val thumbRadius = 10.dp.toPx()
+            val thumbRadius = 9.5.dp.toPx()
             val trackStart = thumbRadius
             val trackEnd = size.width - thumbRadius
-            val thumbX = trackStart + fraction * (trackEnd - trackStart)
+            val trackSpan = (trackEnd - trackStart).coerceAtLeast(1f)
+            val thumbX = trackStart + fraction * trackSpan
             val corner = CornerRadius(trackHeightPx / 2f)
             drawRoundRect(
                 color = trackBackground,
                 topLeft = Offset(trackStart, trackTop),
-                size = Size(trackEnd - trackStart, trackHeightPx),
+                size = Size(trackSpan, trackHeightPx),
                 cornerRadius = corner
             )
+            if (steps > 0) {
+                val count = steps + 2
+                val dotRadius = 1.5.dp.toPx()
+                for (i in 1 until count - 1) {
+                    val tickX = trackStart + (i.toFloat() / (count - 1)) * trackSpan
+                    if (tickX > thumbX + thumbRadius * 0.6f) {
+                        drawCircle(
+                            color = tickColor,
+                            radius = dotRadius,
+                            center = Offset(tickX, trackY)
+                        )
+                    }
+                }
+            }
             if (thumbX > trackStart) {
                 drawRoundRect(
                     color = trackColor,
@@ -12316,9 +12593,15 @@ fun ThinClimateSlider(
                     cornerRadius = corner
                 )
             }
+            // 双环微晶拨块：外圈主题语义色 + 内圈高对比核心
             drawCircle(
                 color = trackColor,
                 radius = thumbRadius,
+                center = Offset(thumbX, trackY)
+            )
+            drawCircle(
+                color = thumbCoreColor,
+                radius = thumbRadius * 0.45f,
                 center = Offset(thumbX, trackY)
             )
         }
