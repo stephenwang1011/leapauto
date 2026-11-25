@@ -71,6 +71,12 @@ class BleKeyBootReceiver : BroadcastReceiver() {
             return
         }
 
+        val settings = PresenceSettings(appContext)
+        if (settings.paused || !sessions.loadBluetoothKeyFeatureEnabled()) return
+        if (settings.address != null) {
+            runCatching { settings.observe(true) }
+            return
+        }
         runCatching {
             val serviceIntent = Intent(appContext, BleKeyService::class.java)
             appContext.startForegroundService(serviceIntent)

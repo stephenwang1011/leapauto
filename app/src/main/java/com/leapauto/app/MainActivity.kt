@@ -1,5 +1,6 @@
 package com.leapauto.app
 
+import androidx.compose.runtime.collectAsState
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -299,6 +300,56 @@ class MainActivity : ComponentActivity() {
     private lateinit var bluetoothCloud: BleCloudCoordinator
     private var bluetoothCloudState by mutableStateOf(BleCloudUiState())
     private var bluetoothManagedKey by mutableStateOf<BleManagedKey?>(null)
+    private var chooserAddress: String? = null
+    private var chooserIdentity: com.leapauto.app.bluetooth.BleSessionIdentity? = null
+    private val presenceChooser = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val address = chooserAddress
+        if (result.resultCode == RESULT_OK && address != null && Build.VERSION.SDK_INT >= 31 &&
+            chooserIdentity == currentBluetoothIdentity() && bluetoothKeyFeatureEnabled &&
+            bluetoothManagedKey?.device?.address.equals(address, true)
+        ) {
+            runCatching {
+                val manager = requireNotNull(getSystemService(android.companion.CompanionDeviceManager::class.java))
+                require(manager.associations.any { it.equals(address, true) })
+                bluetoothRuntime.changeMode(address)
+            }.onFailure { toast("系统监听启用失败，请重试") }
+        }
+        chooserAddress = null
+        chooserIdentity = null
+    }
+
+    private fun togglePresenceMode() {
+        if (Build.VERSION.SDK_INT < 31) return
+        runCatching {
+            if (bluetoothRuntime.presenceMode.value) {
+                bluetoothRuntime.changeMode(null)
+                return
+            }
+            val address = requireNotNull(bluetoothManagedKey?.device?.address)
+            val manager = requireNotNull(getSystemService(android.companion.CompanionDeviceManager::class.java))
+            if (manager.associations.any { it.equals(address, true) }) {
+                bluetoothRuntime.changeMode(address)
+                return
+            }
+            val filter = android.bluetooth.le.ScanFilter.Builder().setDeviceAddress(address).build()
+            val request = android.companion.AssociationRequest.Builder()
+                .addDeviceFilter(android.companion.BluetoothLeDeviceFilter.Builder().setScanFilter(filter).build())
+                .setSingleDevice(true).build()
+            chooserAddress = address
+            chooserIdentity = currentBluetoothIdentity()
+            manager.associate(request, object : android.companion.CompanionDeviceManager.Callback() {
+                override fun onDeviceFound(chooserLauncher: android.content.IntentSender) {
+                    if (!isFinishing && !isDestroyed && chooserIdentity == currentBluetoothIdentity()) {
+                        presenceChooser.launch(androidx.activity.result.IntentSenderRequest.Builder(chooserLauncher).build())
+                    }
+                }
+                override fun onFailure(error: CharSequence?) { toast("未发现绑定车辆，请靠近车辆后重试") }
+            }, mainHandler)
+        }.onFailure { toast("无法启用系统监听，请检查系统设备关联支持和蓝牙权限") }
+    }
+
     private var bluetoothBackgroundRunning by mutableStateOf(false)
     private var bluetoothConfigurationIdentity: BleSessionIdentity? = null
     private var bluetoothSettingsRequestId by mutableStateOf(0L)
@@ -584,7 +635,11 @@ class MainActivity : ComponentActivity() {
                         appliedConfiguration = bluetoothManagedKey?.applied,
                         configurationRequested = bluetoothManagedKey?.requested == true,
                         configurationPending = bluetoothManagedKey?.pending == true,
-                        backgroundRunning = bluetoothBackgroundRunning,
+                        backgroundRunning = bluetoothBackgroundRunning ||
+                            (bluetoothRuntime.presenceMode.collectAsState().value && !bluetoothRuntime.paused.collectAsState().value),
+                        presenceMode = bluetoothRuntime.presenceMode.collectAsState().value,
+                        canUsePresence = Build.VERSION.SDK_INT >= 31 && packageManager.hasSystemFeature("android.software.companion_device_setup"),
+                        onChangePresence = ::togglePresenceMode,
                         bound = bluetoothManagedKey != null,
                         protocolMinor = bluetoothManagedKey?.device?.protocolMinor,
                         onApplyConfiguration = ::requestBluetoothConfiguration,
@@ -592,7 +647,7 @@ class MainActivity : ComponentActivity() {
                         onSyncCertificate = ::syncBluetoothCertificate,
                         onScan = ::startBluetoothScan,
                         onConnect = ::connectBluetoothDevice,
-                        onDisconnect = { bluetoothRuntime.stopBackground() },
+                        onDisconnect = { if (bluetoothBackgroundRunning || bluetoothRuntime.presenceMode.value) bluetoothRuntime.pauseByUser() else bluetoothRuntime.stopBackground() },
                         onControl = ::requestBluetoothLockControl,
                         onOpenSettings = ::openBluetoothSettings,
                         onCopyDiagnostics = ::copyBluetoothDiagnostics,
@@ -756,6 +811,7 @@ class MainActivity : ComponentActivity() {
     private fun openBluetoothKey() {
         if (!isBluetoothForegroundContext(requireManagement = false)) return
         bluetoothRuntime.attachSession(session)
+        bluetoothRuntime.foregroundProbe()
         bluetoothPermissionsGranted = bluetoothKeyController.hasPermissions()
         val identity = currentBluetoothIdentity() ?: return
         if (bluetoothSessionIdentity != null && bluetoothSessionIdentity != identity) {
@@ -1125,7 +1181,7 @@ class MainActivity : ComponentActivity() {
 
     private fun resumeBluetoothBackground() {
         if (!isBluetoothForegroundContext()) return
-        runCatching { bluetoothRuntime.startBackground() }
+        runCatching { bluetoothRuntime.resumeByUser() }
             .onFailure { toast("无法恢复后台连接，请检查蓝牙权限和操控密码") }
     }
 

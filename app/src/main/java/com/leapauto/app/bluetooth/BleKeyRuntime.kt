@@ -21,6 +21,84 @@ import kotlinx.coroutines.flow.asStateFlow
 /** A single process owner prevents the activity and foreground service from opening competing GATTs. */
 class BleKeyRuntime private constructor(context: Context) {
     private val appContext = context.applicationContext
+    private val settings = PresenceSettings(appContext)
+    val presenceMode = MutableStateFlow(settings.address != null)
+    val paused = MutableStateFlow(settings.paused)
+    private var nearby = false
+    private var legacyService = false
+    private val foregroundTimeout = Runnable {
+        if (!nearby && presenceMode.value && controller.state.phase != BleConnectionPhase.READY) stopBackground()
+    }
+
+    fun foregroundProbe() {
+        if (!foreground || !presenceMode.value || paused.value || nearby || runningValue.value) return
+        val address = settings.address ?: return
+        presenceEvent(address, true)
+        nearby = false
+        handler.postDelayed(foregroundTimeout, 10_000L)
+    }
+
+    fun changeMode(address: String?) {
+        if (address != null) require(validSession() && keyValue.value?.device?.address.equals(address, true))
+        val previous = settings.address
+        runCatching { settings.observe(false) }
+        settings.address = address
+        try {
+            if (!paused.value) settings.observe(true)
+        } catch (error: Exception) {
+            settings.address = previous
+            if (!paused.value) runCatching { settings.observe(true) }
+            throw error
+        }
+        presenceMode.value = address != null
+        nearby = false
+        stopBackground()
+        if (foreground && !paused.value) {
+            if (address == null) startBackground() else foregroundProbe()
+        }
+    }
+
+    fun pauseByUser() {
+        settings.paused = true
+        paused.value = true
+        nearby = false
+        runCatching { settings.observe(false) }
+        stopBackground()
+    }
+
+    fun resumeByUser() {
+        checkBackgroundStartAllowed()
+        settings.paused = false
+        paused.value = false
+        startBackground()
+        foregroundProbe()
+    }
+
+    private fun clearObservation() {
+        runCatching { settings.observe(false) }
+        settings.address = null
+        presenceMode.value = false
+        nearby = false
+    }
+
+    fun presenceEvent(address: String, arrived: Boolean) {
+        if (!sessions.loadBluetoothKeyFeatureEnabled()) return
+        attachSession(sessions.load())
+        val key = keyValue.value ?: return
+        if (!acceptsPresence(settings.address, address, key.device.address, paused.value)) return
+        handler.removeCallbacks(foregroundTimeout)
+        nearby = arrived
+        if (!arrived) {
+            if (controller.state.phase != BleConnectionPhase.READY) stopBackground()
+            return
+        }
+        if (!key.needsBackground || !controller.hasPermissions() || !validSession() ||
+            sessions.loadOpPassword().isNullOrBlank()) return
+        if (!runningValue.value) retryAttempt = 0
+        runningValue.value = true
+        reconnectManaged()
+    }
+
     private val sessions = SessionStore(appContext)
     private val keys = BleManagedKeyStore(appContext)
     private val reconnectCredentials = BleReconnectCredentialStore(appContext)
@@ -67,6 +145,7 @@ class BleKeyRuntime private constructor(context: Context) {
         val next = if (account.isNotBlank() && session.selectedVin.isNotBlank())
             BleSessionIdentity(account, session.selectedVin, session.generation, session.deviceId) else null
         if (identity == next) return
+        if (identity != null) clearObservation()
         if (identity != null || runningValue.value) stopBackground() else controller.disconnect()
         identity = next
         candidate = null
@@ -140,12 +219,20 @@ class BleKeyRuntime private constructor(context: Context) {
         }
     }
 
-    fun startBackground() {
-        cancelDisableFeature()
+    private fun checkBackgroundStartAllowed() {
         check(foreground && validSession())
         check(controller.hasPermissions()) { "请先开启附近设备权限" }
         check(!sessions.loadOpPassword().isNullOrBlank()) { "请先设置操控密码" }
-        if (keyValue.value?.needsBackground != true) return
+    }
+
+    fun startBackground() {
+        cancelDisableFeature()
+        checkBackgroundStartAllowed()
+        if (keyValue.value?.needsBackground != true || paused.value) return
+        if (presenceMode.value) {
+            settings.observe(true)
+            return
+        }
         if (runningValue.value) {
             if (!controller.state.isBusy) reconnectManaged()
             return
@@ -161,9 +248,11 @@ class BleKeyRuntime private constructor(context: Context) {
     }
 
     internal fun serviceStarted(): Boolean {
+        if (paused.value || presenceMode.value || !sessions.loadBluetoothKeyFeatureEnabled()) return false
         if (identity == null) attachSession(sessions.load())
         if (!validSession() || keyValue.value?.needsBackground != true || !controller.hasPermissions() ||
             sessions.loadOpPassword().isNullOrBlank()) return false
+        legacyService = true
         if (runningValue.value) return true
         runningValue.value = true
         retryAttempt = 0
@@ -172,6 +261,8 @@ class BleKeyRuntime private constructor(context: Context) {
     }
 
     internal fun serviceStopped() {
+        if (!legacyService) return
+        legacyService = false
         val wasRunning = runningValue.value
         runningValue.value = false
         cancelRetry()
@@ -180,6 +271,8 @@ class BleKeyRuntime private constructor(context: Context) {
     }
 
     fun stopBackground() {
+        handler.removeCallbacks(foregroundTimeout)
+        legacyService = false
         stopping = true
         runningValue.value = false
         cancelRetry()
@@ -206,6 +299,7 @@ class BleKeyRuntime private constructor(context: Context) {
     }
 
     fun disableFeature(onComplete: () -> Unit = {}) {
+        clearObservation()
         cancelDisableFeature()
         val bound = keyValue.value
         val current = identity
@@ -259,6 +353,7 @@ class BleKeyRuntime private constructor(context: Context) {
     }
 
     fun endSession() {
+        clearObservation()
         stopBackground()
         val suspended = keys.suspendAll()
         val credentialsCleared = reconnectCredentials.clearAll()
@@ -468,7 +563,10 @@ class BleKeyRuntime private constructor(context: Context) {
         } else if (state.phase == BleConnectionPhase.IDLE || state.phase == BleConnectionPhase.FAILED) {
             if (state.phase == BleConnectionPhase.FAILED) candidate = null
             syncing = false
-            if (runningValue.value && !stopping && !controller.isMaintainingAutoConnect) scheduleReconnect()
+            if (runningValue.value && !stopping) {
+                if (presenceMode.value && !nearby) stopBackground()
+                else if (!controller.isMaintainingAutoConnect) scheduleReconnect()
+            }
         }
     }
 
@@ -539,6 +637,10 @@ class BleKeyRuntime private constructor(context: Context) {
     }
 
     private fun scheduleReconnect() {
+        if (presenceMode.value && (!nearby || retryAttempt >= 3)) {
+            stopBackground()
+            return
+        }
         if (retry != null) return
         val delay = BleReconnectPolicy.delayMillis(retryAttempt++)
         retry = Runnable {
