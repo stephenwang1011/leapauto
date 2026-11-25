@@ -1,0 +1,78 @@
+name: Debug APK
+
+# 手动触发：构建 debug 变体并上传 artifact（不发布 Release、不推 PGYER）。
+# debug 包含真 Chucker（NetworkDebugController 在 BuildConfig.DEBUG 下默认启用），
+# 用于在手机端直接查看 check_login_with_phone 请求里的 smDeviceId。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: debug-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-debug:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Ensure Android SDK packages
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $sdkRoot = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { $env:ANDROID_SDK_ROOT }
+          $sdkmanager = Join-Path $sdkRoot 'cmdline-tools\latest\bin\sdkmanager.bat'
+          if (Test-Path $sdkmanager) {
+            & $sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+          } else {
+            Write-Warning "sdkmanager not found under $sdkRoot; relying on preinstalled SDK components."
+          }
+
+      - name: Neutralize machine-specific Gradle settings
+        shell: pwsh
+        run: |
+          $path = 'gradle.properties'
+          $lines = Get-Content -LiteralPath $path
+          $lines = $lines | Where-Object {
+            $_ -notmatch '^\s*org\.gradle\.java\.home\s*='
+          } | ForEach-Object {
+            if ($_ -match '^\s*org\.gradle\.jvmargs\s*=') {
+              'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8'
+            } else {
+              $_
+            }
+          }
+          Set-Content -LiteralPath $path -Value $lines -Encoding utf8
+          Write-Host "gradle.properties after CI fixup:"
+          Get-Content -LiteralPath $path
+
+      - name: Assemble debug APK (default Android debug keystore)
+        shell: pwsh
+        run: .\gradlew.bat :app:assembleDebug
+
+      - name: Read version name
+        id: meta
+        shell: pwsh
+        run: |
+          $build = Get-Content -LiteralPath app/build.gradle.kts -Raw
+          $version = [regex]::Match($build, 'val\s+apkVersionName\s*=\s*"([^"]+)"').Groups[1].Value
+          if (-not $version) { throw "Could not read apkVersionName." }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: leapauto-debug-${{ steps.meta.outputs.version }}
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
