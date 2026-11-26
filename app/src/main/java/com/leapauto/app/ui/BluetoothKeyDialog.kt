@@ -80,6 +80,9 @@ fun BluetoothKeyDialog(
     backgroundRunning: Boolean,
     bound: Boolean,
     protocolMinor: Int?,
+    presenceMode: Boolean,
+    canUsePresence: Boolean,
+    onChangePresence: () -> Unit,
     onApplyConfiguration: (BlePassiveConfiguration) -> Unit,
     onResumeBackground: () -> Unit,
     onSyncCertificate: () -> Unit,
@@ -182,6 +185,11 @@ fun BluetoothKeyDialog(
                             shadowElevation = 0.dp
                         ) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                if (canUsePresence && bound && configuration.enabled) {
+                                    OutlinedButton(onClick = onChangePresence) {
+                                        Text(if (presenceMode) "系统靠近监听 · 切回兼容模式" else "兼容模式 · 试用系统靠近监听")
+                                    }
+                                }
                                 BluetoothPassiveSettings(
                                     configuration = configuration,
                                     appliedConfiguration = appliedConfiguration,
